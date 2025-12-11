@@ -1,0 +1,49 @@
+# Binaries
+nightmare
+nightmare.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+/dist/
+/build/
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Go workspace file
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+debug
+*.log
+
+# Local config
+.env
+.env.local
+config.local.yaml
+
+# Save files (game data)
+saves/
+*.save
+
+# Audio cache
+.claude/audio/

@@ -1,0 +1,138 @@
+# Sprint Status - Nightmare Assault
+# generated: 2025-12-11
+# project: nightmare-assault
+# tracking_system: file-system
+# story_location: docs/sprint-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - drafted: Story file created in stories folder
+#   - ready-for-dev: Draft approved, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - completed: Retrospective has been done
+#
+# WORKFLOW NOTES:
+# ===============
+# - Mark epic as 'in-progress' when starting work on its first story
+# - Stories can be worked in parallel based on dependency graph
+# - Dev moves story to 'review', then runs code-review
+#
+# PARALLEL DEVELOPMENT STRATEGY:
+# ==============================
+# Phase 1: Epic 1 (基礎) - 必須先完成
+# Phase 2: Epic 2 + Epic 5 (可平行)
+# Phase 3: Epic 3 + Epic 4 + Epic 6 (可平行)
+# Phase 4: Epic 7 (收尾)
+
+generated: 2025-12-11
+project: nightmare-assault
+tracking_system: file-system
+story_location: docs/sprint-artifacts
+
+development_status:
+  # ============================================
+  # Epic 1: 遊戲基礎與啟動體驗
+  # Dependencies: None (基礎層)
+  # Parallel: No (其他 Epic 依賴此 Epic)
+  # ============================================
+  epic-1: done
+  1-1-cli-application-framework: done
+  1-2-multi-api-provider-support: done
+  1-3-main-menu-interface: done
+  1-4-color-theme-system: done
+  1-5-cross-platform-build: done
+  epic-1-retrospective: optional
+
+  # ============================================
+  # Epic 2: 核心遊戲循環
+  # Dependencies: Epic 1
+  # Parallel: With Epic 5
+  # ============================================
+  epic-2: in-progress
+  2-1-new-game-setup-flow: review
+  2-2-story-generation-engine: review
+  2-3-player-input-handling: review
+  2-4-hp-san-value-system: review
+  2-5-game-main-screen-layout: review
+  2-6-basic-slash-commands: review
+  epic-2-retrospective: optional
+
+  # ============================================
+  # Epic 3: 潛規則與死亡系統
+  # Dependencies: Epic 2
+  # Parallel: With Epic 4, Epic 6
+  # ============================================
+  epic-3: done
+  3-1-hidden-rule-generation: done
+  3-2-rule-trigger-detection: done
+  3-3-death-flow: done
+  3-4-death-debrief-system: done
+  3-5-hint-system: done
+  epic-3-retrospective: optional
+
+  # ============================================
+  # Epic 4: NPC 與隊友系統
+  # Dependencies: Epic 2
+  # Parallel: With Epic 3, Epic 6
+  # ============================================
+  epic-4: in-progress
+  4-1-teammate-generation: review
+  4-2-teammate-dialogue-interaction: in-progress
+  4-3-teammate-death-mechanism: review
+  4-4-teammate-status-tracking: review
+  epic-4-retrospective: optional
+
+  # ============================================
+  # Epic 5: 存檔與遊戲進度
+  # Dependencies: Epic 1
+  # Parallel: With Epic 2
+  # ============================================
+  epic-5: in-progress
+  5-1-save-data-structure: done
+  5-2-save-load-operations: done
+  5-3-chapter-compression: in-progress
+  5-4-game-log-feature: done
+  epic-5-retrospective: optional
+
+  # ============================================
+  # Epic 6: 沉浸式恐怖體驗
+  # Dependencies: Epic 2
+  # Parallel: With Epic 3, Epic 4
+  # ============================================
+  epic-6: in-progress
+  6-1-san-visual-effects: done
+  6-2-hallucination-options: done
+  6-3-typewriter-effect: review
+  6-4a-audio-system-foundation: ready-for-dev
+  6-4b-bgm-player: ready-for-dev
+  6-4c-bgm-auto-switching: ready-for-dev
+  6-5a-sfx-player: ready-for-dev
+  6-5b-heartbeat-system: ready-for-dev
+  6-6a-opening-dream: ready-for-dev
+  6-6b-chapter-dreams: ready-for-dev
+  6-6c-dream-review: ready-for-dev
+  6-7-custom-bgm-support: ready-for-dev
+  epic-6-retrospective: optional
+
+  # ============================================
+  # Epic 7: 增強功能與維護
+  # Dependencies: Epic 1-6
+  # Parallel: No (收尾階段)
+  # ============================================
+  epic-7: backlog
+  7-1-auto-update-check: ready-for-dev
+  7-2-multi-language-switch: ready-for-dev
+  7-3-complete-slash-commands: ready-for-dev
+  epic-7-retrospective: optional
