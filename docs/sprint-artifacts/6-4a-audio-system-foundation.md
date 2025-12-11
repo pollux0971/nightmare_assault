@@ -1,6 +1,6 @@
 # Story 6.4a: 音訊系統基礎架構
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -242,3 +242,31 @@ Claude Sonnet 4.5
 - Focused on audio system foundation (initialization, config, error handling)
 - Provides base for 6.4b (BGM), 6.4c (auto-switching), and 6.5a (SFX)
 - Ready for development - all acceptance criteria defined
+
+### Implementation Completion (2025-12-11)
+
+**Files Created:**
+- `internal/audio/manager.go` - AudioManager with oto v3 integration
+- `internal/audio/validator.go` - Audio file format validation and structure checking
+- `internal/audio/manager_test.go` - Unit tests for AudioManager (9 tests)
+- `internal/audio/validator_test.go` - Unit tests for validator (9 tests)
+- `internal/audio/integration_test.go` - Integration tests with config system (5 tests)
+
+**Test Coverage:** 76.9% (23 tests, all passing)
+
+**Key Features Implemented:**
+1. ✅ AudioManager with oto v3 context initialization (48kHz, 2 channels)
+2. ✅ Audio file detection (~/.nightmare/audio/bgm + sfx)
+3. ✅ Format validation (OGG/MP3/WAV, < 10MB per file)
+4. ✅ Platform detection and graceful degradation (silent mode on failure)
+5. ✅ Error logging to ~/.nightmare/debug.log
+6. ✅ One-time error messages (non-intrusive)
+7. ✅ Config integration (AudioConfig in config.go)
+8. ✅ Async initialization (non-blocking with goroutine)
+9. ✅ Graceful shutdown
+
+**Dependencies Added:**
+- `github.com/ebitengine/oto/v3 v3.4.0`
+- `github.com/ebitengine/purego v0.9.0`
+
+**Status:** Ready for review. All ACs met, comprehensive tests passing.

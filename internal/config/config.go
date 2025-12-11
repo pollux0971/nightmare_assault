@@ -51,9 +51,11 @@ type ProviderSettings struct {
 
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
+	// Note: Language will be set by caller using i18n.DetectSystemLanguage()
+	// to avoid circular dependency between config and i18n packages
 	return &Config{
 		Version:  "1.0",
-		Language: "zh-TW",
+		Language: "en-US", // Will be overridden by system detection
 		Theme:    "midnight", // Default theme
 		Audio: AudioConfig{
 			BGMEnabled: true,

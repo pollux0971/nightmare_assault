@@ -1,0 +1,113 @@
+{
+  "menu": {
+    "new_game": "New Game",
+    "continue_game": "Continue",
+    "settings": "Settings",
+    "quit": "Quit",
+    "title": "Nightmare Assault",
+    "version": "Version",
+    "confirm_quit": "Are you sure you want to quit?",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "Theme",
+    "api": "API Settings",
+    "audio": "Audio Settings",
+    "language": "Language / 語言",
+    "back": "Back"
+  },
+  "game": {
+    "hp_label": "HP",
+    "san_label": "Sanity",
+    "location_label": "Location",
+    "chapter_label": "Chapter",
+    "status": "Status",
+    "inventory": "Inventory",
+    "objectives": "Objectives"
+  },
+  "commands": {
+    "status": "Status",
+    "status_desc": "View character status",
+    "help": "Help",
+    "help_desc": "Show help message",
+    "save": "Save",
+    "save_desc": "Save game progress",
+    "load": "Load",
+    "load_desc": "Load game progress",
+    "lang": "Language",
+    "lang_desc": "Switch language (/lang zh-TW or /lang en-US)",
+    "bgm": "BGM",
+    "bgm_desc": "Switch background music",
+    "sfx": "SFX",
+    "sfx_desc": "Play sound effect",
+    "quit": "Quit",
+    "quit_desc": "Quit game"
+  },
+  "errors": {
+    "api_failed": "API request failed: {0}",
+    "save_failed": "Save failed: {0}",
+    "load_failed": "Load failed: {0}",
+    "invalid_command": "Invalid command: {0}",
+    "invalid_locale": "Unsupported language: {0}",
+    "config_load_failed": "Failed to load config: {0}",
+    "config_save_failed": "Failed to save config: {0}",
+    "file_not_found": "File not found: {0}",
+    "permission_denied": "Permission denied: {0}"
+  },
+  "messages": {
+    "game_saved": "Game saved",
+    "game_loaded": "Game loaded",
+    "language_changed": "Language changed to {0}",
+    "language_will_apply": "New content will use {0}",
+    "update_available": "Update available: {0} → {1}",
+    "update_check_failed": "Update check failed",
+    "welcome": "Welcome to Nightmare Assault",
+    "loading": "Loading...",
+    "press_any_key": "Press any key to continue",
+    "terminal_too_small": "Terminal too small"
+  },
+  "setup": {
+    "api_key_prompt": "Enter OpenAI API Key",
+    "api_key_description": "Your API key will be stored securely on your device",
+    "api_model_prompt": "Select AI Model",
+    "api_model_description": "GPT-4 is recommended for the best experience",
+    "setup_complete": "Setup complete",
+    "validating": "Validating..."
+  },
+  "game_setup": {
+    "theme_prompt": "Choose Horror Theme",
+    "theme_classic": "Classic Horror",
+    "theme_psychological": "Psychological Horror",
+    "theme_cosmic": "Cosmic Horror",
+    "theme_survival": "Survival Horror",
+    "difficulty_prompt": "Choose Difficulty",
+    "difficulty_easy": "Easy",
+    "difficulty_normal": "Normal",
+    "difficulty_hard": "Hard",
+    "difficulty_nightmare": "Nightmare",
+    "name_prompt": "Enter Character Name",
+    "starting": "Starting game..."
+  },
+  "death": {
+    "title": "You Died",
+    "cause": "Cause of Death",
+    "stats": "Final Stats",
+    "chapters_completed": "Chapters Completed",
+    "time_played": "Time Played",
+    "retry": "Retry",
+    "main_menu": "Main Menu"
+  },
+  "hints": {
+    "navigation": "↑/↓ or j/k: Move  |  Enter: Select",
+    "direct_select": "1-4: Direct select  |  q: Quit",
+    "command_help": "Type /help to see all commands",
+    "san_low": "Sanity is low, be careful",
+    "hp_critical": "HP critical!"
+  },
+  "languages": {
+    "zh-TW": "繁體中文",
+    "en-US": "English"
+  }
+}

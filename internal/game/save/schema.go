@@ -65,6 +65,27 @@ type GameState struct {
 	TriggeredRules  []string     `json:"triggered_rules"`
 	DiscoveredRules []string     `json:"discovered_rules"`
 	HiddenRules     *RuleStorage `json:"hidden_rules,omitempty"` // AC3: Rules stored in game state
+	DreamLog        []DreamRecord `json:"dream_log,omitempty"`     // AC5: Dream tracking
+}
+
+// DreamRecord represents a dream in save data (Story 6.6a)
+type DreamRecord struct {
+	ID            string       `json:"id"`
+	Type          string       `json:"type"` // "opening" or "chapter"
+	Timestamp     time.Time    `json:"timestamp"`
+	Content       string       `json:"content"`
+	RelatedRuleID string       `json:"related_rule_id,omitempty"`
+	Context       DreamContext `json:"context"`
+}
+
+// DreamContext stores game context when dream was generated
+type DreamContext struct {
+	PlayerHP     int      `json:"player_hp"`
+	PlayerSAN    int      `json:"player_san"`
+	ChapterNum   int      `json:"chapter_num"`
+	KnownClues   []string `json:"known_clues"`
+	StoryTheme   string   `json:"story_theme"`
+	RulesSummary string   `json:"rules_summary"`
 }
 
 // RuleStorage contains rule data for save/load (hidden from player).

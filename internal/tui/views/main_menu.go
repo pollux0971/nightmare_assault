@@ -42,6 +42,8 @@ type MainMenuModel struct {
 	exitConfirm   bool
 	selectedIndex int
 	version       string
+	updateAvailable bool
+	newVersion    string
 }
 
 // getMenuStyles returns styles based on current theme
@@ -106,9 +108,11 @@ func NewMainMenuModel(version string, hasSaveFiles bool) MainMenuModel {
 	l.SetShowHelp(false)
 
 	return MainMenuModel{
-		list:         l,
-		hasSaveFiles: hasSaveFiles,
-		version:      version,
+		list:            l,
+		hasSaveFiles:    hasSaveFiles,
+		version:         version,
+		updateAvailable: false,
+		newVersion:      "",
 	}
 }
 
@@ -127,9 +131,19 @@ type ExitConfirmMsg struct {
 	Confirmed bool
 }
 
+// UpdateAvailableMsg is sent when an update is available.
+type UpdateAvailableMsg struct {
+	NewVersion string
+}
+
 // Update handles messages.
 func (m MainMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case UpdateAvailableMsg:
+		m.updateAvailable = true
+		m.newVersion = msg.NewVersion
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -270,6 +284,23 @@ func (m MainMenuModel) View() string {
 	b.WriteString("\n")
 	b.WriteString(menuHintStyle.Render(fmt.Sprintf("                            v%s", m.version)))
 	b.WriteString("\n\n")
+
+	// Update notification banner
+	if m.updateAvailable {
+		tm := themes.GetManager()
+		theme := tm.GetCurrentTheme()
+		updateBannerStyle := lipgloss.NewStyle().
+			Background(theme.Colors.Accent).
+			Foreground(lipgloss.Color("#000000")).
+			Bold(true).
+			Padding(0, 2).
+			MarginBottom(1).
+			Align(lipgloss.Center)
+
+		updateText := fmt.Sprintf("🚀 新版本可用: %s → %s | 使用 --update 更新", m.version, m.newVersion)
+		b.WriteString(updateBannerStyle.Render(updateText))
+		b.WriteString("\n\n")
+	}
 
 	// Exit confirmation dialog
 	if m.exitConfirm {

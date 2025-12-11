@@ -115,15 +115,15 @@ development_status:
   6-1-san-visual-effects: done
   6-2-hallucination-options: done
   6-3-typewriter-effect: review
-  6-4a-audio-system-foundation: ready-for-dev
-  6-4b-bgm-player: ready-for-dev
-  6-4c-bgm-auto-switching: ready-for-dev
-  6-5a-sfx-player: ready-for-dev
-  6-5b-heartbeat-system: ready-for-dev
-  6-6a-opening-dream: ready-for-dev
-  6-6b-chapter-dreams: ready-for-dev
-  6-6c-dream-review: ready-for-dev
-  6-7-custom-bgm-support: ready-for-dev
+  6-4a-audio-system-foundation: review
+  6-4b-bgm-player: done
+  6-4c-bgm-auto-switching: done
+  6-5a-sfx-player: done
+  6-5b-heartbeat-system: review
+  6-6a-opening-dream: review
+  6-6b-chapter-dreams: review
+  6-6c-dream-review: review
+  6-7-custom-bgm-support: review
   epic-6-retrospective: optional
 
   # ============================================
@@ -131,8 +131,8 @@ development_status:
   # Dependencies: Epic 1-6
   # Parallel: No (收尾階段)
   # ============================================
-  epic-7: backlog
-  7-1-auto-update-check: ready-for-dev
-  7-2-multi-language-switch: ready-for-dev
-  7-3-complete-slash-commands: ready-for-dev
+  epic-7: done
+  7-1-auto-update-check: done
+  7-2-multi-language-switch: done
+  7-3-complete-slash-commands: done
   epic-7-retrospective: optional

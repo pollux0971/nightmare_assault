@@ -1,0 +1,113 @@
+{
+  "menu": {
+    "new_game": "新遊戲",
+    "continue_game": "繼續遊戲",
+    "settings": "設定",
+    "quit": "離開",
+    "title": "惡夢突襲",
+    "version": "版本",
+    "confirm_quit": "確定要離開嗎？",
+    "yes": "是",
+    "no": "否"
+  },
+  "settings": {
+    "title": "設定",
+    "theme": "主題",
+    "api": "API 設定",
+    "audio": "音訊設定",
+    "language": "語言 / Language",
+    "back": "返回"
+  },
+  "game": {
+    "hp_label": "生命值",
+    "san_label": "理智值",
+    "location_label": "位置",
+    "chapter_label": "章節",
+    "status": "狀態",
+    "inventory": "物品欄",
+    "objectives": "目標"
+  },
+  "commands": {
+    "status": "狀態",
+    "status_desc": "查看角色狀態",
+    "help": "幫助",
+    "help_desc": "顯示幫助訊息",
+    "save": "存檔",
+    "save_desc": "儲存遊戲進度",
+    "load": "讀檔",
+    "load_desc": "載入遊戲進度",
+    "lang": "語言",
+    "lang_desc": "切換語言 (/lang zh-TW 或 /lang en-US)",
+    "bgm": "背景音樂",
+    "bgm_desc": "切換背景音樂",
+    "sfx": "音效",
+    "sfx_desc": "播放音效",
+    "quit": "離開",
+    "quit_desc": "離開遊戲"
+  },
+  "errors": {
+    "api_failed": "API 請求失敗: {0}",
+    "save_failed": "存檔失敗: {0}",
+    "load_failed": "讀檔失敗: {0}",
+    "invalid_command": "無效的命令: {0}",
+    "invalid_locale": "不支援的語言: {0}",
+    "config_load_failed": "載入設定失敗: {0}",
+    "config_save_failed": "儲存設定失敗: {0}",
+    "file_not_found": "找不到檔案: {0}",
+    "permission_denied": "權限不足: {0}"
+  },
+  "messages": {
+    "game_saved": "遊戲已儲存",
+    "game_loaded": "遊戲已載入",
+    "language_changed": "語言已切換為 {0}",
+    "language_will_apply": "新內容將使用 {0}",
+    "update_available": "有新版本可用: {0} → {1}",
+    "update_check_failed": "檢查更新失敗",
+    "welcome": "歡迎來到惡夢突襲",
+    "loading": "載入中...",
+    "press_any_key": "按任意鍵繼續",
+    "terminal_too_small": "終端機太小"
+  },
+  "setup": {
+    "api_key_prompt": "請輸入 OpenAI API 金鑰",
+    "api_key_description": "您的 API 金鑰將安全儲存在本地",
+    "api_model_prompt": "選擇 AI 模型",
+    "api_model_description": "推薦使用 GPT-4 以獲得最佳體驗",
+    "setup_complete": "設定完成",
+    "validating": "驗證中..."
+  },
+  "game_setup": {
+    "theme_prompt": "選擇恐怖主題",
+    "theme_classic": "經典恐怖",
+    "theme_psychological": "心理恐怖",
+    "theme_cosmic": "宇宙恐怖",
+    "theme_survival": "生存恐怖",
+    "difficulty_prompt": "選擇難度",
+    "difficulty_easy": "簡單",
+    "difficulty_normal": "普通",
+    "difficulty_hard": "困難",
+    "difficulty_nightmare": "惡夢",
+    "name_prompt": "輸入角色名稱",
+    "starting": "開始遊戲..."
+  },
+  "death": {
+    "title": "你死了",
+    "cause": "死因",
+    "stats": "最終數據",
+    "chapters_completed": "完成章節",
+    "time_played": "遊玩時間",
+    "retry": "重試",
+    "main_menu": "主選單"
+  },
+  "hints": {
+    "navigation": "↑/↓ 或 j/k: 移動  |  Enter: 確認",
+    "direct_select": "1-4: 直接選擇  |  q: 離開",
+    "command_help": "輸入 /help 查看所有命令",
+    "san_low": "理智值偏低，請小心",
+    "hp_critical": "生命值危險！"
+  },
+  "languages": {
+    "zh-TW": "繁體中文",
+    "en-US": "English"
+  }
+}

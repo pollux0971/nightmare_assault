@@ -3,12 +3,15 @@ package app
 
 import (
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/nightmare-assault/nightmare-assault/internal/config"
 	"github.com/nightmare-assault/nightmare-assault/internal/game"
+	"github.com/nightmare-assault/nightmare-assault/internal/i18n"
 	"github.com/nightmare-assault/nightmare-assault/internal/tui/styles"
 	"github.com/nightmare-assault/nightmare-assault/internal/tui/views"
+	"github.com/nightmare-assault/nightmare-assault/internal/update"
 )
 
 // MinWidth is the minimum terminal width required
@@ -32,27 +35,42 @@ const (
 
 // Model represents the main application state.
 type Model struct {
-	version       string
-	width         int
-	height        int
-	ready         bool
-	state         AppState
-	prevState     AppState
-	config        *config.Config
-	gameConfig    *game.GameConfig // Game configuration from setup flow
-	apiSetup      views.APISetupModel
-	mainMenu      views.MainMenuModel
-	settingsMenu  views.SettingsMenuModel
-	themeSelector views.ThemeSelectorModel
-	gameSetup     views.GameSetupModel
-	hasSaveFiles  bool
+	version        string
+	width          int
+	height         int
+	ready          bool
+	state          AppState
+	prevState      AppState
+	config         *config.Config
+	gameConfig     *game.GameConfig // Game configuration from setup flow
+	apiSetup       views.APISetupModel
+	mainMenu       views.MainMenuModel
+	settingsMenu   views.SettingsMenuModel
+	themeSelector  views.ThemeSelectorModel
+	gameSetup      views.GameSetupModel
+	hasSaveFiles   bool
+	updateManager  *update.Manager
+	updateChecked  bool
 }
 
 // New creates a new application Model.
 func New(version string) Model {
+	// 初始化更新管理器
+	updateConfig := update.UpdateConfig{
+		Owner:          "nightmare-assault",
+		Repo:           "nightmare-assault",
+		CurrentVersion: version,
+		CheckInterval:  24 * time.Hour,
+		CacheDir:       "",
+	}
+
+	updateMgr, _ := update.NewManager(updateConfig)
+
 	return Model{
-		version: version,
-		state:   StateLoading,
+		version:       version,
+		state:         StateLoading,
+		updateManager: updateMgr,
+		updateChecked: false,
 	}
 }
 
@@ -90,8 +108,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Config load failed - use defaults (this is normal on first run)
 				// Error is typically "file not found" which is expected
 				cfg = config.DefaultConfig()
+				// Detect system language for first run
+				cfg.Language = i18n.DetectSystemLanguage()
 			}
 			m.config = cfg
+
+			// Initialize i18n with configured language
+			if err := i18n.InitGlobal(cfg.Language); err != nil {
+				// Fallback to English if init fails
+				i18n.InitGlobal("en-US")
+			}
 
 			// Check for save files (placeholder - returns false for now)
 			m.hasSaveFiles = false
@@ -103,6 +129,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.state = StateMainMenu
 				m.mainMenu = views.NewMainMenuModel(m.version, m.hasSaveFiles)
+				// 啟動背景更新檢查
+				return m, checkForUpdates(m.updateManager)
 			}
 		}
 
@@ -124,6 +152,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case views.ThemeBackMsg:
 		m.state = StateSettings
+		return m, nil
+
+	case updateCheckResultMsg:
+		// 更新檢查結果
+		if msg.result != nil && msg.result.Status == update.UpdateStatusAvailable {
+			// 發送更新可用消息到主選單
+			return m, func() tea.Msg {
+				return views.UpdateAvailableMsg{NewVersion: msg.result.NewVersion}
+			}
+		}
 		return m, nil
 
 	case views.GameSetupDoneMsg:
@@ -323,4 +361,32 @@ func (m Model) Height() int {
 // State returns the current application state.
 func (m Model) State() AppState {
 	return m.state
+}
+
+// updateCheckResultMsg 更新檢查結果消息
+type updateCheckResultMsg struct {
+	result *update.UpdateResult
+	err    error
+}
+
+// checkForUpdates 背景檢查更新
+func checkForUpdates(manager *update.Manager) tea.Cmd {
+	return func() tea.Msg {
+		if manager == nil {
+			return updateCheckResultMsg{err: fmt.Errorf("update manager not initialized")}
+		}
+
+		// 檢查是否應該檢查更新（基於時間間隔）
+		if !manager.ShouldCheckForUpdates() {
+			return updateCheckResultMsg{result: nil, err: nil}
+		}
+
+		// 執行更新檢查
+		result, err := manager.CheckForUpdates()
+
+		// 記錄檢查時間
+		manager.RecordUpdateCheck()
+
+		return updateCheckResultMsg{result: result, err: err}
+	}
 }

@@ -1,6 +1,6 @@
 # Story 6.5a: SFX 播放器
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
