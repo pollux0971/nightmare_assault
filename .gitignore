@@ -59,6 +59,12 @@ bmad-custom-src/
 # Gemini AI configurations
 .gemini/
 
+# Project Documentation (working copies)
+PRD.md
+ARCHITECTURE.md
+.~lock.*.md#
+*.~lock.*.md#
+
 # Note: .github/workflows/ is kept for CI/CD
 # If you want to ignore it too, uncomment:
 # .github/workflows/
