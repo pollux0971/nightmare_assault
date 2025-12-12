@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/nightmare-assault/nightmare-assault/internal/tui/components"
 	"github.com/nightmare-assault/nightmare-assault/internal/tui/themes"
 )
 
@@ -29,10 +30,12 @@ const (
 type StoryLoadingModel struct {
 	state         LoadingState
 	spinner       spinner.Model
+	progressBar   components.ProgressBar
 	progress      int
 	startTime     time.Time
 	elapsed       time.Duration
 	flavorIndex   int
+	blinkTick     int  // For blinking animations
 	width         int
 	height        int
 	errorMessage  string
@@ -63,28 +66,62 @@ type StoryLoadingErrorMsg struct {
 	Error error
 }
 
-// Flavor text that rotates during loading.
-var flavorTexts = []string{
-	"正在進入惡夢...",
+// Flavor text that rotates during loading (categorized by state).
+var flavorTextsConnecting = []string{
+	"與未知建立連線...",
+	"召喚黑暗力量...",
+	"打開被遺忘的大門...",
+	"穿越現實的裂縫...",
+}
+
+var flavorTextsGenerating = []string{
+	"編織噩夢...",
+	"深淵正在凝視著你...",
 	"黑暗正在聚集...",
 	"命運的齒輪開始轉動...",
-	"深淵正在回望你...",
-	"恐懼在等待著...",
 	"古老的低語傳來...",
+	"扭曲現實的邊界...",
+}
+
+var flavorTextsStreaming = []string{
 	"陰影正在逼近...",
 	"真相即將揭露...",
+	"恐懼在等待著...",
+	"記憶正在扭曲...",
+	"虛實之間的迷霧...",
+	"時間失去了意義...",
 }
+
+var flavorTextsWarning = []string{
+	"不祥的預感湧上心頭...",
+	"某種東西醒來了...",
+	"你感覺到被監視著...",
+	"空氣中瀰漫著恐懼...",
+	"血月高懸...",
+	"寂靜中傳來心跳聲...",
+}
+
+// Combined flavor texts for random selection
+var flavorTexts = append(append(append(
+	flavorTextsConnecting,
+	flavorTextsGenerating...),
+	flavorTextsStreaming...),
+	flavorTextsWarning...)
 
 // NewStoryLoadingModel creates a new story loading model.
 func NewStoryLoadingModel() StoryLoadingModel {
 	s := spinner.New()
-	s.Spinner = spinner.Dot
+	s.Spinner = spinner.Pulse
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#9D4EDD"))
 
+	// Create horror-themed progress bar
+	progressBar := components.NewProgressBar(components.HorrorProgressBarStyle())
+
 	return StoryLoadingModel{
-		state:     LoadingInit,
-		spinner:   s,
-		startTime: time.Now(),
+		state:       LoadingInit,
+		spinner:     s,
+		progressBar: progressBar,
+		startTime:   time.Now(),
 	}
 }
 
@@ -127,6 +164,7 @@ func (m StoryLoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StoryLoadingTickMsg:
 		m.elapsed = time.Since(m.startTime)
+		m.blinkTick++
 
 		// Rotate flavor text every 3 seconds
 		if int(m.elapsed.Seconds())%3 == 0 {
@@ -143,10 +181,15 @@ func (m StoryLoadingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StoryLoadingProgressMsg:
 		m.state = msg.State
 		m.progress = msg.Progress
+		m.progressBar.SetPercent(msg.Progress)
 		if msg.Content != "" {
 			m.content = msg.Content
 		}
-		return m, nil
+
+		// Update progress bar
+		var cmd tea.Cmd
+		m.progressBar, cmd = m.progressBar.Update(msg)
+		return m, cmd
 
 	case StoryLoadingErrorMsg:
 		m.state = LoadingError
@@ -174,31 +217,48 @@ func (m StoryLoadingModel) View() string {
 	theme := tm.GetCurrentTheme()
 	colors := theme.Colors
 
+	// Enhanced title style with glow effect
 	titleStyle := lipgloss.NewStyle().
 		Foreground(colors.Accent).
-		Bold(true)
+		Bold(true).
+		Underline(true)
 
 	textStyle := lipgloss.NewStyle().
-		Foreground(colors.Primary)
+		Foreground(colors.Primary).
+		Bold(true)
 
 	subtextStyle := lipgloss.NewStyle().
-		Foreground(colors.Secondary)
+		Foreground(colors.Secondary).
+		Italic(true)
 
 	errorStyle := lipgloss.NewStyle().
-		Foreground(colors.Error)
+		Foreground(colors.Error).
+		Bold(true)
 
 	warningStyle := lipgloss.NewStyle().
-		Foreground(colors.Warning)
+		Foreground(colors.Warning).
+		Bold(true)
 
-	borderStyle := lipgloss.NewStyle().
+	// Double border with shadow effect
+	innerBorderStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colors.Border).
+		Padding(1, 3)
+
+	outerBorderStyle := lipgloss.NewStyle().
+		Border(lipgloss.ThickBorder()).
+		BorderForeground(colors.Accent).
 		Padding(2, 4)
 
 	var b strings.Builder
 
-	// Title
-	b.WriteString(titleStyle.Render("🌙 Nightmare Assault"))
+	// Decorative header with moon phases
+	moonPhases := []string{"🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"}
+	moonIcon := moonPhases[m.blinkTick%len(moonPhases)]
+
+	b.WriteString(titleStyle.Render(moonIcon + " Nightmare Assault " + moonIcon))
+	b.WriteString("\n")
+	b.WriteString(lipgloss.NewStyle().Foreground(colors.Border).Render("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"))
 	b.WriteString("\n\n")
 
 	// Loading content based on state
@@ -208,62 +268,134 @@ func (m StoryLoadingModel) View() string {
 		b.WriteString(" ")
 		b.WriteString(textStyle.Render("連接中..."))
 		b.WriteString("\n\n")
-		b.WriteString(subtextStyle.Render(flavorTexts[m.flavorIndex]))
+		// Progress bar with decorative brackets
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Border).Render("╭─"))
+		b.WriteString(m.progressBar.View())
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Border).Render("─╮"))
+		b.WriteString("\n\n")
+		// Flavor text with icon
+		flavorIdx := m.flavorIndex % len(flavorTextsConnecting)
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Accent).Render("▸ "))
+		b.WriteString(subtextStyle.Render(flavorTextsConnecting[flavorIdx]))
 
 	case LoadingGenerating:
 		b.WriteString(m.spinner.View())
 		b.WriteString(" ")
 		b.WriteString(textStyle.Render("生成故事中..."))
 		b.WriteString("\n\n")
-		b.WriteString(subtextStyle.Render(flavorTexts[m.flavorIndex]))
+		// Progress bar with decorative brackets
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Border).Render("╭─"))
+		b.WriteString(m.progressBar.View())
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Border).Render("─╮"))
+		b.WriteString("\n\n")
+		// Flavor text with icon
+		flavorIdx := m.flavorIndex % len(flavorTextsGenerating)
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Accent).Render("▸ "))
+		b.WriteString(subtextStyle.Render(flavorTextsGenerating[flavorIdx]))
 
 	case LoadingStreaming:
 		b.WriteString(m.spinner.View())
 		b.WriteString(" ")
-		b.WriteString(textStyle.Render(fmt.Sprintf("接收故事中... %d%%", m.progress)))
+		b.WriteString(textStyle.Render("接收故事中..."))
 		b.WriteString("\n\n")
-		// Show preview of streamed content
-		if m.content != "" {
-			preview := m.content
-			if len(preview) > 200 {
-				preview = preview[:200] + "..."
-			}
-			b.WriteString(subtextStyle.Render(preview))
-		}
+		// Progress bar with decorative brackets
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Border).Render("╭─"))
+		b.WriteString(m.progressBar.View())
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Border).Render("─╮"))
+		b.WriteString("\n\n")
+		// Flavor text with icon
+		flavorIdx := m.flavorIndex % len(flavorTextsStreaming)
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Accent).Render("▸ "))
+		b.WriteString(subtextStyle.Render(flavorTextsStreaming[flavorIdx]))
 
 	case LoadingComplete:
-		b.WriteString(textStyle.Render("✓ 故事準備就緒"))
+		// Success animation with expanding effect
+		successIcon := "✓"
+		if m.blinkTick%4 == 0 {
+			successIcon = "✓"
+		} else if m.blinkTick%4 == 1 {
+			successIcon = "✔"
+		} else if m.blinkTick%4 == 2 {
+			successIcon = "✓"
+		} else {
+			successIcon = "✔"
+		}
+		b.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#00FF00")).
+			Bold(true).
+			Render(successIcon + " 故事準備就緒 " + successIcon))
+		b.WriteString("\n\n")
+		// Full progress bar with glow
+		m.progressBar.SetPercent(100)
+		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")).Render("╭─"))
+		b.WriteString(m.progressBar.View())
+		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")).Render("─╮"))
+		b.WriteString("\n\n")
+		b.WriteString(subtextStyle.Render("深淵的故事已經開始..."))
 
 	case LoadingTimeout:
 		b.WriteString(m.spinner.View())
 		b.WriteString(" ")
 		b.WriteString(textStyle.Render("生成中..."))
 		b.WriteString("\n\n")
-		b.WriteString(warningStyle.Render("⚠ 連接較慢，請稍候..."))
+		// Progress bar
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Warning).Render("╭─"))
+		b.WriteString(m.progressBar.View())
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Warning).Render("─╮"))
+		b.WriteString("\n\n")
+		// Blinking warning with alternating colors
+		warningIcon := "⚠"
+		warningText := "生成時間較長，請耐心等待..."
+		if m.blinkTick%2 == 0 {
+			b.WriteString(warningStyle.Render(warningIcon + " " + warningText))
+		} else {
+			b.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FF6B00")).
+				Bold(true).
+				Render(warningIcon + " " + warningText))
+		}
 		b.WriteString("\n")
-		b.WriteString(subtextStyle.Render(fmt.Sprintf("已等待 %.0f 秒", m.elapsed.Seconds())))
+		// Flavor text with pulsing effect
+		flavorIdx := m.flavorIndex % len(flavorTextsWarning)
+		if m.blinkTick%2 == 0 {
+			b.WriteString(lipgloss.NewStyle().Foreground(colors.Warning).Render("▸ "))
+		} else {
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B00")).Render("▸ "))
+		}
+		b.WriteString(subtextStyle.Render(flavorTextsWarning[flavorIdx]))
 
 	case LoadingError:
-		b.WriteString(errorStyle.Render("✗ 發生錯誤"))
+		// Error with cross mark
+		b.WriteString(errorStyle.Render("✗ 發生錯誤 ✗"))
+		b.WriteString("\n")
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Error).Render("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"))
 		b.WriteString("\n\n")
 		b.WriteString(errorStyle.Render(m.errorMessage))
+		b.WriteString("\n\n")
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Error).Render("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"))
 		b.WriteString("\n\n")
 		b.WriteString(subtextStyle.Render("按 Enter 重試，按 Esc 返回主選單"))
 	}
 
-	// Elapsed time
+	// Elapsed time with clock icon
 	if m.state != LoadingComplete && m.state != LoadingError {
 		b.WriteString("\n\n")
-		b.WriteString(subtextStyle.Render(fmt.Sprintf("%.1f 秒", m.elapsed.Seconds())))
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Border).Render("─────────────────────────────────────────"))
+		b.WriteString("\n")
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Secondary).Render("⏱ "))
+		b.WriteString(subtextStyle.Render(fmt.Sprintf("已經過 %.1f 秒", m.elapsed.Seconds())))
 	}
 
-	// Hint
+	// Hint with key icon
 	if m.state != LoadingComplete {
 		b.WriteString("\n\n")
+		b.WriteString(lipgloss.NewStyle().Foreground(colors.Secondary).Render("⌨ "))
 		b.WriteString(subtextStyle.Render("Esc: 取消"))
 	}
 
-	return borderStyle.Render(b.String())
+	// Apply double border for depth effect
+	innerContent := innerBorderStyle.Render(b.String())
+	return outerBorderStyle.Render(innerContent)
 }
 
 // IsDone returns true if loading is complete or cancelled.

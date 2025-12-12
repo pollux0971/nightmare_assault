@@ -9,6 +9,7 @@ import (
 
 	"github.com/nightmare-assault/nightmare-assault/internal/api"
 	"github.com/nightmare-assault/nightmare-assault/internal/engine/prompts"
+	"github.com/nightmare-assault/nightmare-assault/internal/engine/prompts/builder"
 	"github.com/nightmare-assault/nightmare-assault/internal/game"
 )
 
@@ -130,8 +131,8 @@ type StoryEngineConfig struct {
 // DefaultEngineConfig returns default engine configuration.
 func DefaultEngineConfig() StoryEngineConfig {
 	return StoryEngineConfig{
-		TimeoutFirstToken: 5 * time.Second,
-		TimeoutTotal:      30 * time.Second,
+		TimeoutFirstToken: 0, // No timeout - let slow models complete
+		TimeoutTotal:      0, // No timeout - let slow models complete
 		MaxRetries:        3,
 		RetryBaseDelay:    1 * time.Second,
 	}
@@ -155,18 +156,21 @@ func NewStoryEngine(config StoryEngineConfig) *StoryEngine {
 // StreamCallback is called for each chunk of streamed content.
 type StreamCallback func(chunk string)
 
+// ProgressCallback is called with progress updates (0-100).
+type ProgressCallback func(percent int, state EstimationState)
+
 // GenerationResult represents the result of story generation.
 type GenerationResult struct {
 	Content     string
 	Choices     []string
-	Seeds       []prompts.SeedInfo
+	Seeds       []builder.SeedInfo
 	Error       error
 	TimeTaken   time.Duration
 	RetryCount  int
 }
 
 // GenerateOpening generates the opening story segment.
-func (e *StoryEngine) GenerateOpening(ctx context.Context, callback StreamCallback) (*GenerationResult, error) {
+func (e *StoryEngine) GenerateOpening(ctx context.Context, streamCallback StreamCallback, progressCallback ProgressCallback) (*GenerationResult, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -177,11 +181,15 @@ func (e *StoryEngine) GenerateOpening(ctx context.Context, callback StreamCallba
 	systemPrompt := prompts.BuildSystemPrompt(e.config.GameConfig)
 	userPrompt := prompts.BuildOpeningPrompt(e.config.GameConfig)
 
-	return e.generateWithRetry(ctx, systemPrompt, userPrompt, callback)
+	// Estimate duration based on prompt length
+	promptLen := len(systemPrompt) + len(userPrompt)
+	expectedDuration := EstimateDurationFromLength(EstimateFromPromptLength(promptLen))
+
+	return e.generateWithRetry(ctx, systemPrompt, userPrompt, expectedDuration, streamCallback, progressCallback)
 }
 
 // GenerateContinuation generates the next story segment based on player choice.
-func (e *StoryEngine) GenerateContinuation(ctx context.Context, choice string, callback StreamCallback) (*GenerationResult, error) {
+func (e *StoryEngine) GenerateContinuation(ctx context.Context, choice string, streamCallback StreamCallback, progressCallback ProgressCallback) (*GenerationResult, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -193,12 +201,25 @@ func (e *StoryEngine) GenerateContinuation(ctx context.Context, choice string, c
 	context := e.storyState.GetContextSummary(3) // Last 3 segments for context
 	userPrompt := prompts.BuildContinuationPrompt(choice, context)
 
-	return e.generateWithRetry(ctx, systemPrompt, userPrompt, callback)
+	// Estimate duration based on prompt length
+	promptLen := len(systemPrompt) + len(userPrompt)
+	expectedDuration := EstimateDurationFromLength(EstimateFromPromptLength(promptLen))
+
+	return e.generateWithRetry(ctx, systemPrompt, userPrompt, expectedDuration, streamCallback, progressCallback)
 }
 
-func (e *StoryEngine) generateWithRetry(ctx context.Context, systemPrompt, userPrompt string, callback StreamCallback) (*GenerationResult, error) {
+func (e *StoryEngine) generateWithRetry(ctx context.Context, systemPrompt, userPrompt string, expectedDuration time.Duration, streamCallback StreamCallback, progressCallback ProgressCallback) (*GenerationResult, error) {
 	var lastErr error
 	startTime := time.Now()
+
+	// Create progress estimator
+	estimator := NewProgressEstimator(expectedDuration)
+
+	// Send initial progress
+	if progressCallback != nil {
+		estimator.SetState(StateConnecting)
+		progressCallback(estimator.GetProgress(), StateConnecting)
+	}
 
 	for attempt := 0; attempt < e.config.MaxRetries; attempt++ {
 		if attempt > 0 {
@@ -209,12 +230,19 @@ func (e *StoryEngine) generateWithRetry(ctx context.Context, systemPrompt, userP
 				return nil, ctx.Err()
 			case <-time.After(delay):
 			}
+			// Reset estimator for retry
+			estimator.Reset()
 		}
 
-		result, err := e.generate(ctx, systemPrompt, userPrompt, callback)
+		result, err := e.generate(ctx, systemPrompt, userPrompt, estimator, streamCallback, progressCallback)
 		if err == nil {
 			result.RetryCount = attempt
 			result.TimeTaken = time.Since(startTime)
+			// Send completion progress
+			if progressCallback != nil {
+				estimator.ForceComplete()
+				progressCallback(100, StateCompleting)
+			}
 			return result, nil
 		}
 
@@ -229,9 +257,9 @@ func (e *StoryEngine) generateWithRetry(ctx context.Context, systemPrompt, userP
 	return nil, errors.Join(ErrMaxRetries, lastErr)
 }
 
-func (e *StoryEngine) generate(ctx context.Context, systemPrompt, userPrompt string, callback StreamCallback) (*GenerationResult, error) {
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(ctx, e.config.TimeoutTotal)
+func (e *StoryEngine) generate(ctx context.Context, systemPrompt, userPrompt string, estimator *ProgressEstimator, streamCallback StreamCallback, progressCallback ProgressCallback) (*GenerationResult, error) {
+	// Use context directly without timeout - let slow models complete
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	messages := []api.Message{
@@ -241,49 +269,98 @@ func (e *StoryEngine) generate(ctx context.Context, systemPrompt, userPrompt str
 
 	var content string
 	var firstTokenReceived bool
-	firstTokenTimer := time.NewTimer(e.config.TimeoutFirstToken)
-	defer firstTokenTimer.Stop()
+	// No first token timeout - disabled for slow models
+	var firstTokenTimer *time.Timer
+	if e.config.TimeoutFirstToken > 0 {
+		firstTokenTimer = time.NewTimer(e.config.TimeoutFirstToken)
+		defer firstTokenTimer.Stop()
+	}
 
 	// Channel to collect streamed content
 	contentChan := make(chan string, 100)
 	errChan := make(chan error, 1)
 
+	// Progress update ticker
+	progressTicker := time.NewTicker(200 * time.Millisecond)
+	defer progressTicker.Stop()
+
+	// Start in generating state
+	estimator.SetState(StateGenerating)
+	if progressCallback != nil {
+		progressCallback(estimator.GetProgress(), StateGenerating)
+	}
+
 	go func() {
 		err := e.config.Provider.Stream(ctx, messages, func(chunk string) {
 			if !firstTokenReceived {
 				firstTokenReceived = true
-				firstTokenTimer.Stop()
+				if firstTokenTimer != nil {
+					firstTokenTimer.Stop()
+				}
+				// Switch to streaming state on first token
+				estimator.SetState(StateStreaming)
 			}
 			contentChan <- chunk
-			if callback != nil {
-				callback(chunk)
+			// Update stream bytes for progress estimation
+			estimator.UpdateStreamBytes(len(content) + len(chunk))
+			if streamCallback != nil {
+				streamCallback(chunk)
 			}
 		})
 		errChan <- err
 		close(contentChan)
 	}()
 
-	// Wait for first token or timeout
-	select {
-	case <-firstTokenTimer.C:
-		if !firstTokenReceived {
-			cancel()
-			return nil, ErrTimeout
+	// Wait for first token (no timeout for slow models)
+	if firstTokenTimer != nil {
+		// With timeout enabled
+		select {
+		case <-firstTokenTimer.C:
+			if !firstTokenReceived {
+				cancel()
+				return nil, ErrTimeout
+			}
+		case chunk := <-contentChan:
+			content += chunk
+			firstTokenReceived = true
+		case err := <-errChan:
+			if err != nil {
+				return nil, err
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
-	case chunk := <-contentChan:
-		content += chunk
-		firstTokenReceived = true
-	case err := <-errChan:
-		if err != nil {
-			return nil, err
+	} else {
+		// No timeout - wait indefinitely for first token
+		select {
+		case chunk := <-contentChan:
+			content += chunk
+			firstTokenReceived = true
+		case err := <-errChan:
+			if err != nil {
+				return nil, err
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
-	case <-ctx.Done():
-		return nil, ctx.Err()
 	}
 
-	// Collect remaining content
-	for chunk := range contentChan {
-		content += chunk
+	// Collect remaining content with progress updates
+	collecting := true
+	for collecting {
+		select {
+		case chunk, ok := <-contentChan:
+			if !ok {
+				collecting = false
+				break
+			}
+			content += chunk
+		case <-progressTicker.C:
+			// Send progress update
+			if progressCallback != nil {
+				progressCallback(estimator.GetProgress(), estimator.state)
+			}
+		}
 	}
 
 	// Check for streaming error
@@ -291,21 +368,25 @@ func (e *StoryEngine) generate(ctx context.Context, systemPrompt, userPrompt str
 		return nil, err
 	}
 
-	// Extract seeds from content
-	seeds := prompts.ExtractSeeds(content)
-	cleanContent := prompts.CleanContent(content)
-
-	// Parse choices from content
-	choices := parseChoices(cleanContent)
+	// Parse structured output (JSON or legacy format)
+	output, err := builder.ParseStructuredOutput(content)
+	if err != nil {
+		// If parsing fails, fall back to basic content
+		output = &builder.StoryOutput{
+			Story:   content,
+			Choices: []string{},
+			Seeds:   []builder.SeedInfo{},
+		}
+	}
 
 	result := &GenerationResult{
-		Content: cleanContent,
-		Choices: choices,
-		Seeds:   seeds,
+		Content: output.Story,
+		Choices: output.Choices,
+		Seeds:   output.Seeds,
 	}
 
 	// Add seeds to story state
-	for i, seed := range seeds {
+	for i, seed := range output.Seeds {
 		e.storyState.AddSeed(HiddenSeed{
 			ID:          generateSeedID(e.storyState.CurrentBeat, i),
 			Type:        SeedType(seed.Type),
@@ -317,8 +398,8 @@ func (e *StoryEngine) generate(ctx context.Context, systemPrompt, userPrompt str
 
 	// Add segment to story state
 	e.storyState.AddSegment(StorySegment{
-		Content:   cleanContent,
-		Choices:   choices,
+		Content:   output.Story,
+		Choices:   output.Choices,
 		Timestamp: time.Now(),
 	})
 
@@ -351,171 +432,7 @@ func (e *StoryEngine) Reset() {
 	e.storyState = NewStoryState()
 }
 
-// parseChoices extracts choices from story content.
-func parseChoices(content string) []string {
-	var choices []string
-	lines := splitLines(content)
-
-	inChoices := false
-	for _, line := range lines {
-		line = trimSpace(line)
-
-		if inChoices {
-			// Match numbered choices: 1. or 1) or 1、
-			if isNumberedChoice(line) {
-				choice := extractChoiceText(line)
-				if choice != "" {
-					choices = append(choices, choice)
-				}
-				continue
-			} else if line == "" {
-				// Empty line might end choices
-				if len(choices) > 0 {
-					break
-				}
-			}
-		}
-
-		// Detect choice section start (check after numbered choices)
-		if containsChoiceHeader(line) {
-			inChoices = true
-		}
-	}
-
-	return choices
-}
-
-func containsChoiceHeader(line string) bool {
-	// Chinese headers
-	chineseHeaders := []string{"選擇", "選項"}
-	for _, h := range chineseHeaders {
-		if containsRunes(line, h) {
-			return true
-		}
-	}
-	// English headers (case insensitive)
-	englishHeaders := []string{"choices", "options"}
-	lower := toLower(line)
-	for _, h := range englishHeaders {
-		if contains(lower, h) {
-			return true
-		}
-	}
-	return false
-}
-
-func containsRunes(s, substr string) bool {
-	sRunes := []rune(s)
-	subRunes := []rune(substr)
-	if len(sRunes) < len(subRunes) {
-		return false
-	}
-	for i := 0; i <= len(sRunes)-len(subRunes); i++ {
-		match := true
-		for j := 0; j < len(subRunes); j++ {
-			if sRunes[i+j] != subRunes[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-	return false
-}
-
-func isNumberedChoice(line string) bool {
-	if len(line) < 2 {
-		return false
-	}
-	// Check for digit followed by separator
-	if line[0] >= '1' && line[0] <= '9' {
-		if line[1] == '.' || line[1] == ')' {
-			return true
-		}
-		// Check for Chinese separator (、is multi-byte)
-		runes := []rune(line)
-		if len(runes) >= 2 && runes[1] == '、' {
-			return true
-		}
-	}
-	return false
-}
-
-func extractChoiceText(line string) string {
-	runes := []rune(line)
-	if len(runes) < 2 {
-		return ""
-	}
-	// Skip "1. " or "1) " or "1、"
-	text := string(runes[2:])
-	if len(text) > 0 && text[0] == ' ' {
-		text = text[1:]
-	}
-	return trimSpace(text)
-}
-
+// generateSeedID creates a unique ID for a seed based on beat and index.
 func generateSeedID(beat, index int) string {
 	return string(rune('S')) + string(rune('0'+beat%10)) + string(rune('0'+index%10))
-}
-
-// Helper functions to avoid strings package dependency in hot path
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
-}
-
-func trimSpace(s string) string {
-	start := 0
-	end := len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\r') {
-		start++
-	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\r') {
-		end--
-	}
-	return s[start:end]
-}
-
-func toLower(s string) string {
-	b := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		b[i] = c
-	}
-	return string(b)
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && findSubstring(s, substr) >= 0
-}
-
-func findSubstring(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		match := true
-		for j := 0; j < len(substr); j++ {
-			if s[i+j] != substr[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return i
-		}
-	}
-	return -1
 }
