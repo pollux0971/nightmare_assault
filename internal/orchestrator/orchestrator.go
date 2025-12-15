@@ -65,8 +65,9 @@ type GenesisResult struct {
 
 // TurnResult contains the result of a single game loop turn.
 type TurnResult struct {
-	Story   string
-	Choices []string
+	Story        string
+	Choices      []string
+	PruneResults []PruneResult // Pruned LocalSeeds during this turn (for future Narration integration)
 }
 
 // EndingResult contains the result of Phase 3: Convergence.
@@ -92,11 +93,26 @@ type TensionDirective struct {
 }
 
 // SeedManager manages global and local seeds.
-// Note: This is a minimal interface for Story 2.2 - will be expanded in later stories.
+// Extended in Story 2.5 to support pruning operations.
 type SeedManager interface {
 	CheckHarvest(currentBeat int) []*seed.HarvestInstruction
 	MarkSeedRevealed(seedID string, currentBeat int) error
 	GetGlobalSeedsProgress() float64
+
+	// Pruning methods (Story 2.5 - Integration)
+	// Real implementation exists in internal/engine/seed/seed_manager.go (Story 2.3)
+	PruneLocalSeedsByScene(sceneID string) []PruneResult
+	PruneExpiredLocalSeeds(currentBeat int) []PruneResult
+}
+
+// PruneResult represents the result of pruning a LocalSeed.
+// This mirrors the structure from internal/engine/seed/local_seed.go (Story 2.3).
+type PruneResult struct {
+	SeedID         string
+	SceneID        string
+	Content        string
+	PruneReason    string // "scene_change" or "expired"
+	TransitionText string // Optional narrative transition
 }
 
 // Placeholder interfaces for future implementation
@@ -134,15 +150,30 @@ type RuleViolation struct {
 	SANDamage int
 }
 
-// StateManager manages HP/SAN calculations.
+// StateManager manages HP/SAN calculations and scene transitions.
 type StateManager interface {
-	ApplyChanges(changes StateChanges)
+	ApplyChanges(changes StateChanges) (*ChangeResult, error)
 }
 
 type StateChanges struct {
 	HPDelta      int
 	SANDelta     int
 	TensionDelta int
+	SceneChange  *string // Optional: new scene ID if scene changes
+}
+
+// SceneChangeEvent represents a scene transition event.
+// Generated when the player moves from one scene to another.
+type SceneChangeEvent struct {
+	OldScene string // Previous scene ID
+	NewScene string // New scene ID
+	Beat     int    // Beat number when the change occurred
+}
+
+// ChangeResult contains the results of applying state changes.
+// Used to track what actually changed during a turn (e.g., scene transitions).
+type ChangeResult struct {
+	SceneChanged *SceneChangeEvent // Non-nil if a scene change occurred
 }
 
 // ============================================================================
@@ -425,8 +456,14 @@ func (o *Orchestrator) RunGameLoopTurn(ctx context.Context, playerChoice string)
 		return nil, fmt.Errorf("context cancelled after judge: %w", err)
 	}
 
-	// Step 2: Apply state changes
-	o.stateMgr.ApplyChanges(judgeResult.StateChanges)
+	// Step 2: Apply state changes and detect scene transitions
+	changeResult, err := o.stateMgr.ApplyChanges(judgeResult.StateChanges)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply state changes: %w", err)
+	}
+	if changeResult == nil {
+		return nil, fmt.Errorf("ApplyChanges returned nil result without error")
+	}
 
 	// Step 3: Update tension
 	tensionDelta := o.tensionEngine.CalculateDelta(
@@ -434,12 +471,60 @@ func (o *Orchestrator) RunGameLoopTurn(ctx context.Context, playerChoice string)
 		"normal",
 		o.gameState.Tension.Value,
 	)
-	o.stateMgr.ApplyChanges(StateChanges{
+	_, err = o.stateMgr.ApplyChanges(StateChanges{
 		TensionDelta: tensionDelta,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply tension changes: %w", err)
+	}
 
 	// Step 4: Get tension directive
 	directive := o.tensionEngine.GetDirective(o.gameState.Tension.Value)
+
+	// Step 4.5: Pruning - Scene change (Story 2.5)
+	// If scene changed, prune all LocalSeeds from the old scene
+	var scenePruneResults []PruneResult
+	if changeResult.SceneChanged != nil {
+		scenePruneResults = o.seedManager.PruneLocalSeedsByScene(changeResult.SceneChanged.OldScene)
+
+		log.Printf("[Orchestrator] Scene changed: %s → %s (beat %d), pruned %d LocalSeeds",
+			changeResult.SceneChanged.OldScene,
+			changeResult.SceneChanged.NewScene,
+			changeResult.SceneChanged.Beat,
+			len(scenePruneResults))
+
+		// Log details of pruned seeds
+		for _, pr := range scenePruneResults {
+			log.Printf("[Pruning] Scene change: seedID=%s, sceneID=%s, content=%s",
+				pr.SeedID, pr.SceneID, pr.Content)
+		}
+	}
+
+	// Step 4.6: Pruning - Expired seeds (Story 2.5)
+	// Check for expired LocalSeeds at the end of each turn
+	expiredPruneResults := o.seedManager.PruneExpiredLocalSeeds(o.gameState.GetCurrentBeat())
+
+	if len(expiredPruneResults) > 0 {
+		log.Printf("[Orchestrator] Pruned %d expired LocalSeeds at beat %d",
+			len(expiredPruneResults), o.gameState.GetCurrentBeat())
+
+		// Log details of expired seeds
+		for _, pr := range expiredPruneResults {
+			log.Printf("[Pruning] Expired: seedID=%s, sceneID=%s, content=%s, transitionText=%s",
+				pr.SeedID, pr.SceneID, pr.Content, pr.TransitionText)
+		}
+	}
+
+	// Combine all pruning results for return and future Narration integration
+	pruneResults := append(scenePruneResults, expiredPruneResults...)
+
+	// Total pruning summary (using direct references for clarity)
+	if len(pruneResults) > 0 {
+		log.Printf("[Orchestrator] Total pruned: %d LocalSeeds (scene change: %d, expired: %d)",
+			len(pruneResults),
+			len(scenePruneResults),
+			len(expiredPruneResults))
+	}
 
 	// Step 5: Seed management
 	harvestInstructions := o.seedManager.CheckHarvest(o.gameState.GetCurrentBeat())
@@ -506,8 +591,9 @@ func (o *Orchestrator) RunGameLoopTurn(ctx context.Context, playerChoice string)
 		o.gameState.Tension.Value)
 
 	return &TurnResult{
-		Story:   narration.Story,
-		Choices: choices.Choices,
+		Story:        narration.Story,
+		Choices:      choices.Choices,
+		PruneResults: pruneResults, // Include for future Narration Agent integration (Epic 6)
 	}, nil
 }
 

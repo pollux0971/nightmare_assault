@@ -1,138 +1,283 @@
-# Sprint Status - Nightmare Assault
-# generated: 2025-12-11
+# Sprint Status - Nightmare Assault v2.0
+# generated: 2025-12-14
 # project: nightmare-assault
+# version: 2.0.0
 # tracking_system: file-system
-# story_location: docs/sprint-artifacts
+# story_location: docs/epics-and-stories.md
 
-# STATUS DEFINITIONS:
-# ==================
+# ============================================================================
+# STATUS DEFINITIONS
+# ============================================================================
 # Epic Status:
-#   - backlog: Epic not yet started
-#   - in-progress: Epic actively being worked on
-#   - done: All stories in epic completed
+#   - backlog: Epic not yet started (待辦)
+#   - in-progress: Epic actively being worked on (進行中)
+#   - done: All stories in epic completed (已完成)
 #
 # Story Status:
-#   - backlog: Story only exists in epic file
-#   - drafted: Story file created in stories folder
-#   - ready-for-dev: Draft approved, ready for development
-#   - in-progress: Developer actively working on implementation
-#   - review: Implementation complete, ready for review
-#   - done: Story completed
+#   - backlog: Story only exists in epic file (待辦)
+#   - drafted: Story file created, AC defined (已起草)
+#   - ready-for-dev: Draft approved, ready for implementation (準備開發)
+#   - in-progress: Developer actively working (開發中)
+#   - review: Implementation complete, ready for code review (審查中)
+#   - done: Story completed and merged (已完成)
 #
 # Retrospective Status:
-#   - optional: Can be completed but not required
-#   - completed: Retrospective has been done
+#   - optional: Can be completed but not required (可選)
+#   - completed: Retrospective has been done (已完成)
 #
-# WORKFLOW NOTES:
-# ===============
-# - Mark epic as 'in-progress' when starting work on its first story
-# - Stories can be worked in parallel based on dependency graph
-# - Dev moves story to 'review', then runs code-review
+# ============================================================================
+# v2.0 ARCHITECTURE OVERVIEW
+# ============================================================================
+# Phase 1: Core Architecture Foundation (Epic 1)
+# Phase 2: Logic Engine Layer (Epic 2, 3, 4, 5 - Parallel)
+# Phase 3: Agent Layer (Epic 6)
+# Phase 4: Game Mechanics & Persistence (Epic 7, 8)
+# Phase 5: Enhanced Features (Epic 9)
+# Phase 6: Quality & Polish (Epic 10)
 #
-# PARALLEL DEVELOPMENT STRATEGY:
-# ==============================
-# Phase 1: Epic 1 (基礎) - 必須先完成
-# Phase 2: Epic 2 + Epic 5 (可平行)
-# Phase 3: Epic 3 + Epic 4 + Epic 6 (可平行)
-# Phase 4: Epic 7 (收尾)
+# Total: 10 Epics, 58 Stories
+#
+# ============================================================================
+# DEPENDENCY GRAPH
+# ============================================================================
+# Epic 1 (Core) -> Epic 2, 3, 4, 5 (Logic Layer)
+# Epic 2, 3, 4, 5 -> Epic 6 (Agent Layer)
+# Epic 6 -> Epic 7 (Game Mechanics)
+# Epic 1, 2 -> Epic 8 (Persistence)
+# Epic 7 -> Epic 9 (Enhanced Features)
+# Epic 10 (Quality) - Can run in parallel with other epics
+#
+# ============================================================================
+# PARALLEL DEVELOPMENT STRATEGY
+# ============================================================================
+# Sprint 1: Epic 1 (Foundation) - MUST complete first
+# Sprint 2: Epic 2, 3, 4, 5 (Logic Layer) - Can parallelize
+# Sprint 3: Epic 6 (Agent Layer) - Sequential after Sprint 2
+# Sprint 4: Epic 7, 8 (Mechanics & Persistence) - Can parallelize
+# Sprint 5: Epic 9 (Enhanced Features) - Sequential after Sprint 4
+# Sprint 6: Epic 10 (Quality & Polish) - Final polish
 
-generated: 2025-12-11
+generated: 2025-12-14
 project: nightmare-assault
+version: 2.0.0
 tracking_system: file-system
-story_location: docs/sprint-artifacts
+story_location: docs/epics-and-stories.md
 
 development_status:
-  # ============================================
-  # Epic 1: 遊戲基礎與啟動體驗
-  # Dependencies: None (基礎層)
-  # Parallel: No (其他 Epic 依賴此 Epic)
-  # ============================================
+  # ============================================================================
+  # SPRINT 1: Core Architecture Foundation
+  # Timeline: Week 1-2
+  # Dependencies: None (Foundation layer)
+  # Parallel: No (All other epics depend on this)
+  # ============================================================================
+
+  # Epic 1: v2.0 Core Architecture Foundation
+  # Goal: 建立 Orchestrator、GameStateV2、三階段流程
+  # Priority: P0 (Must Have)
+  # Stories: 5
   epic-1: done
-  1-1-cli-application-framework: done
-  1-2-multi-api-provider-support: done
-  1-3-main-menu-interface: done
-  1-4-color-theme-system: done
-  1-5-cross-platform-build: done
+  1-1-orchestrator-layer: done
+  1-2-gamestatev2-data-model: done
+  1-3-phase1-genesis-flow: done
+  1-4-phase2-gameloop-flow: done
+  1-5-phase3-convergence-flow: done
   epic-1-retrospective: optional
 
-  # ============================================
-  # Epic 2: 核心遊戲循環
-  # Dependencies: Epic 1
-  # Parallel: With Epic 5
-  # ============================================
+  # ============================================================================
+  # SPRINT 2: Logic Engine Layer (4 Epics in Parallel)
+  # Timeline: Week 3-5
+  # Dependencies: Epic 1 completed
+  # Parallel: Yes (Epic 2, 3, 4, 5 can be developed simultaneously)
+  # ============================================================================
+
+  # Epic 2: Dual-Layer Seed System
+  # Goal: 實作 Global/Local Seeds 與生命週期管理
+  # Priority: P0 (Must Have)
+  # Stories: 5
   epic-2: in-progress
-  2-1-new-game-setup-flow: review
-  2-2-story-generation-engine: review
-  2-3-player-input-handling: review
-  2-4-hp-san-value-system: review
-  2-5-game-main-screen-layout: review
-  2-6-basic-slash-commands: review
+  2-1-global-seed-model-generation: review
+  2-2-global-seed-clue-planting: review
+  2-3-local-seed-model-management: done
+  2-4-local-seed-urgency-harvest: done
+  2-5-seed-pruner-mechanism: review
   epic-2-retrospective: optional
 
-  # ============================================
-  # Epic 3: 潛規則與死亡系統
-  # Dependencies: Epic 2
-  # Parallel: With Epic 4, Epic 6
-  # ============================================
+  # Epic 3: Tension Control System
+  # Goal: 實作張力計量與動態敘事調節
+  # Priority: P0 (Must Have)
+  # Stories: 4
   epic-3: done
-  3-1-hidden-rule-generation: done
-  3-2-rule-trigger-detection: done
-  3-3-death-flow: done
-  3-4-death-debrief-system: done
-  3-5-hint-system: done
+  3-1-tension-state-model: done
+  3-2-tension-delta-calculation: done
+  3-3-tension-directive-generation: done
+  3-4-tension-history-tracking: done
   epic-3-retrospective: optional
 
-  # ============================================
-  # Epic 4: NPC 與隊友系統
-  # Dependencies: Epic 2
-  # Parallel: With Epic 3, Epic 6
-  # ============================================
-  epic-4: in-progress
-  4-1-teammate-generation: review
-  4-2-teammate-dialogue-interaction: in-progress
-  4-3-teammate-death-mechanism: review
-  4-4-teammate-status-tracking: review
-  epic-4-retrospective: optional
+  # Epic 4: Template Library System
+  # Goal: 建立 YAML 模板驅動的規則/場景/NPC 系統
+  # Priority: P0 (Must Have)
+  # Stories: 5
+  epic-4: done
+  4-1-yaml-template-loader: done
+  4-2-rule-template-structure: done
+  4-3-scene-template-structure: done
+  4-4-npc-archetype-template: done
+  4-5-template-library-management: done
+  epic-4-retrospective: completed
 
-  # ============================================
-  # Epic 5: 存檔與遊戲進度
-  # Dependencies: Epic 1
-  # Parallel: With Epic 2
-  # ============================================
+  # Epic 5: Context Management & Optimization
+  # Goal: 實作滑動窗口與 Token 優化
+  # Priority: P0 (Must Have)
+  # Stories: 5
   epic-5: in-progress
-  5-1-save-data-structure: done
-  5-2-save-load-operations: done
-  5-3-chapter-compression: in-progress
-  5-4-game-log-feature: done
+  5-1-context-window-structure: done
+  5-2-sliding-window-mechanism: done
+  5-3-smart-summary-generation: review
+  5-4-token-counting-optimization: ready-for-dev
+  5-5-context-assembly-interface: ready-for-dev
   epic-5-retrospective: optional
 
-  # ============================================
-  # Epic 6: 沉浸式恐怖體驗
-  # Dependencies: Epic 2
-  # Parallel: With Epic 3, Epic 4
-  # ============================================
-  epic-6: in-progress
-  6-1-san-visual-effects: done
-  6-2-hallucination-options: done
-  6-3-typewriter-effect: review
-  6-4a-audio-system-foundation: review
-  6-4b-bgm-player: done
-  6-4c-bgm-auto-switching: done
-  6-5a-sfx-player: done
-  6-5b-heartbeat-system: review
-  6-6a-opening-dream: review
-  6-6b-chapter-dreams: review
-  6-6c-dream-review: review
-  6-7-custom-bgm-support: review
+  # ============================================================================
+  # SPRINT 3: Agent Layer
+  # Timeline: Week 6-8
+  # Dependencies: Epic 1, 2, 3, 4, 5 completed
+  # Parallel: No (Sequential, requires all logic components)
+  # ============================================================================
+
+  # Epic 6: Multi-Agent System
+  # Goal: 實作 Narration/Seed/Choice/Judge/NPC Agent
+  # Priority: P0 (Must Have)
+  # Stories: 8
+  epic-6: backlog
+  6-1-base-agent-abstraction: backlog
+  6-2-narration-agent-skeleton-mode: backlog
+  6-3-narration-agent-content-mode: backlog
+  6-4-narration-agent-opening-ending: backlog
+  6-5-seed-agent-dual-mode: backlog
+  6-6-choice-agent-generation-risk: backlog
+  6-7-judge-agent-ruling-routing: backlog
+  6-8-npc-agent-generation-dialogue: backlog
   epic-6-retrospective: optional
 
-  # ============================================
-  # Epic 7: 增強功能與維護
-  # Dependencies: Epic 1-6
-  # Parallel: No (收尾階段)
-  # ============================================
-  epic-7: done
-  7-1-auto-update-check: done
-  7-2-multi-language-switch: done
-  7-3-complete-slash-commands: done
+  # ============================================================================
+  # SPRINT 4: Game Mechanics & Persistence (2 Epics in Parallel)
+  # Timeline: Week 9-11
+  # Dependencies: Epic 1, 6 for Epic 7; Epic 1, 2 for Epic 8
+  # Parallel: Yes (Epic 7 and 8 can be developed simultaneously)
+  # ============================================================================
+
+  # Epic 7: Enhanced Game Mechanics
+  # Goal: 增強核心遊戲機制 (故事生成、規則、互動、HP/SAN、NPC)
+  # Priority: P0 (Must Have)
+  # Stories: 8
+  epic-7: backlog
+  7-1-theme-selection-story-init: backlog
+  7-2-hidden-rule-generation-tracking: backlog
+  7-3-dialogue-interaction-system: backlog
+  7-4-hp-san-dual-value-system: backlog
+  7-5-san-buffer-control-deprivation: backlog
+  7-6-npc-generation-personality: backlog
+  7-7-npc-dialogue-behavior: backlog
+  7-8-npc-death-emotion-design: backlog
   epic-7-retrospective: optional
+
+  # Epic 8: Persistence & Integration
+  # Goal: 存檔、API、指令、覆盤、跨平台編譯
+  # Priority: P0 (Must Have)
+  # Stories: 6
+  epic-8: backlog
+  8-1-save-system: backlog
+  8-2-load-system: backlog
+  8-3-multi-api-support: backlog
+  8-4-slash-command-system: backlog
+  8-5-death-debrief-system: backlog
+  8-6-cross-platform-compilation: backlog
+  epic-8-retrospective: optional
+
+  # ============================================================================
+  # SPRINT 5: Enhanced Features
+  # Timeline: Week 12-14
+  # Dependencies: Epic 7 completed
+  # Parallel: No (Requires game mechanics foundation)
+  # ============================================================================
+
+  # Epic 9: Enhanced Features
+  # Goal: 夢境、BGM/SFX、理智幻覺、主題、打字機效果
+  # Priority: P1 (Should Have)
+  # Stories: 8
+  epic-9: backlog
+  9-1-dream-system-opening: backlog
+  9-2-dream-system-interspersed-review: backlog
+  9-3-bgm-background-music: backlog
+  9-4-sfx-sound-effects: backlog
+  9-5-sanity-hallucination-text-distortion: backlog
+  9-6-sanity-hallucination-fake-options: backlog
+  9-7-theme-switching: backlog
+  9-8-typewriter-effect: backlog
+  epic-9-retrospective: optional
+
+  # ============================================================================
+  # SPRINT 6: Quality & Polish
+  # Timeline: Week 15-16
+  # Dependencies: Epic 9 completed (recommended), but can run in parallel
+  # Parallel: Yes (Can work on quality improvements anytime)
+  # ============================================================================
+
+  # Epic 10: Quality & Polish
+  # Goal: 更新、多語言、日誌、提示、錯誤處理、配置、Debug
+  # Priority: P2 (Nice to Have)
+  # Stories: 8
+  epic-10: backlog
+  10-1-auto-update-check: backlog
+  10-2-custom-bgm: backlog
+  10-3-multi-language-switching: backlog
+  10-4-detailed-log-system: backlog
+  10-5-hint-system: backlog
+  10-6-error-handling-friendly-messages: backlog
+  10-7-config-hot-reload: backlog
+  10-8-debug-logging-system: backlog
+  epic-10-retrospective: optional
+
+# ============================================================================
+# SPRINT SUMMARY
+# ============================================================================
+# Sprint 1 (Week 1-2):  Epic 1 (5 stories)
+# Sprint 2 (Week 3-5):  Epic 2, 3, 4, 5 (19 stories total, parallelizable)
+# Sprint 3 (Week 6-8):  Epic 6 (8 stories)
+# Sprint 4 (Week 9-11): Epic 7, 8 (14 stories total, parallelizable)
+# Sprint 5 (Week 12-14): Epic 9 (8 stories)
+# Sprint 6 (Week 15-16): Epic 10 (8 stories)
+#
+# Total Stories: 58
+# Estimated Timeline: 16 weeks (4 months)
+#
+# ============================================================================
+# NEXT STEPS
+# ============================================================================
+# 1. Start Epic 1: Core Architecture Foundation
+# 2. Create story files in docs/sprint-artifacts/stories/epic-1/
+# 3. Begin implementation with Story 1.1: Orchestrator Layer
+# 4. Use /bmad:bmm:workflows:dev-story to implement each story
+# 5. Use /bmad:bmm:workflows:code-review after each story completion
+# 6. Update this file as stories progress through statuses
+#
+# ============================================================================
+# STORY POINT ESTIMATES (Recommended)
+# ============================================================================
+# Small Story (1-2 points): Simple data models, basic YAML parsing
+# Medium Story (3-5 points): Agent implementation, complex logic
+# Large Story (8-13 points): Multi-component integration, Phase flows
+#
+# Epic 1: ~25 points (Large epic, foundation)
+# Epic 2: ~20 points (Medium-Large, dual system)
+# Epic 3: ~15 points (Medium, calculation logic)
+# Epic 4: ~15 points (Medium, YAML templates)
+# Epic 5: ~18 points (Medium-Large, optimization)
+# Epic 6: ~35 points (Very Large, 8 agents)
+# Epic 7: ~30 points (Large, game mechanics)
+# Epic 8: ~20 points (Medium-Large, integration)
+# Epic 9: ~25 points (Large, audio/visual)
+# Epic 10: ~15 points (Medium, polish)
+#
+# Total Estimated: ~218 story points
+# ============================================================================

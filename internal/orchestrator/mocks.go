@@ -71,6 +71,22 @@ func (m *MockSeedManager) GetGlobalSeedsProgress() float64 {
 	return m.globalProgress
 }
 
+// PruneLocalSeedsByScene is a mock implementation for testing.
+// Real implementation exists in internal/engine/seed/seed_manager.go (Story 2.3).
+func (m *MockSeedManager) PruneLocalSeedsByScene(sceneID string) []PruneResult {
+	// Mock: return empty results (no seeds to prune)
+	// Real implementation would prune all Active LocalSeeds matching sceneID
+	return []PruneResult{}
+}
+
+// PruneExpiredLocalSeeds is a mock implementation for testing.
+// Real implementation exists in internal/engine/seed/seed_manager.go (Story 2.3).
+func (m *MockSeedManager) PruneExpiredLocalSeeds(currentBeat int) []PruneResult {
+	// Mock: return empty results (no expired seeds)
+	// Real implementation would prune all Active LocalSeeds where IsExpired(currentBeat) == true
+	return []PruneResult{}
+}
+
 // MockContextManager is a placeholder implementation.
 type MockContextManager struct{}
 
@@ -110,20 +126,27 @@ func clamp(value, min, max int) int {
 
 // MockStateManager is a placeholder implementation with HP/SAN clamping.
 // Enforces 0-100 range for HP, SAN, and Tension values.
+// Also tracks scene changes for Story 2.5 (Seed Pruning Integration).
 type MockStateManager struct {
-	gameState *engine.GameStateV2
+	gameState     *engine.GameStateV2
+	previousScene string // Track previous scene for change detection
 }
 
 func NewMockStateManager(gameState *engine.GameStateV2) *MockStateManager {
 	return &MockStateManager{
-		gameState: gameState,
+		gameState:     gameState,
+		previousScene: "", // Initially empty
 	}
 }
 
-func (m *MockStateManager) ApplyChanges(changes StateChanges) {
+// ApplyChanges applies state changes and detects scene transitions.
+// Returns ChangeResult with SceneChangeEvent if a scene change occurred.
+func (m *MockStateManager) ApplyChanges(changes StateChanges) (*ChangeResult, error) {
 	if m.gameState == nil {
-		return
+		return nil, fmt.Errorf("gameState is nil")
 	}
+
+	result := &ChangeResult{}
 
 	// Apply HP changes with clamping to [0, 100]
 	if changes.HPDelta != 0 {
@@ -142,6 +165,27 @@ func (m *MockStateManager) ApplyChanges(changes StateChanges) {
 		newTension := m.gameState.Tension.Value + changes.TensionDelta
 		m.gameState.Tension.Value = clamp(newTension, 0, 100)
 	}
+
+	// Detect scene changes (Story 2.5)
+	if changes.SceneChange != nil {
+		newScene := *changes.SceneChange
+		oldScene := m.gameState.CurrentScene
+
+		// Only trigger event if scene actually changed
+		if newScene != oldScene && oldScene != "" {
+			result.SceneChanged = &SceneChangeEvent{
+				OldScene: oldScene,
+				NewScene: newScene,
+				Beat:     m.gameState.GetCurrentBeat(),
+			}
+		}
+
+		// Update game state and track previous scene
+		m.previousScene = oldScene
+		m.gameState.CurrentScene = newScene
+	}
+
+	return result, nil
 }
 
 // ============================================================================
@@ -195,14 +239,24 @@ func (m *MockChoiceAgent) GenerateChoices(ctx context.Context, req ChoiceRequest
 	}, nil
 }
 
-// MockJudgeAgent is a placeholder implementation.
-type MockJudgeAgent struct{}
+// MockJudgeAgent is a placeholder implementation with configurable results for testing.
+type MockJudgeAgent struct {
+	nextResult *JudgeResult // Optional: override default result for next Judge call
+}
 
 func NewMockJudgeAgent() *MockJudgeAgent {
 	return &MockJudgeAgent{}
 }
 
 func (m *MockJudgeAgent) Judge(ctx context.Context, req JudgeRequest) (*JudgeResult, error) {
+	// If a custom result is set, return it and clear
+	if m.nextResult != nil {
+		result := m.nextResult
+		m.nextResult = nil // Clear after use
+		return result, nil
+	}
+
+	// Default behavior
 	return &JudgeResult{
 		StateChanges: StateChanges{
 			HPDelta:  0,
