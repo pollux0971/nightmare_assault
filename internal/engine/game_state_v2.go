@@ -2,33 +2,42 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/nightmare-assault/nightmare-assault/internal/engine/seed"
 )
 
-// GlobalSeed represents a main storyline foreshadowing element.
-// This is a placeholder type - full implementation in Epic 2.
-type GlobalSeed struct {
-	ID      string `json:"id"`
-	Content string `json:"content"`
-	// TODO: Add more fields in Epic 2 (LinkedTruth, LinkedEnding, etc.)
-}
+// GlobalSeed is now fully implemented in internal/engine/seed package (Epic 2, Story 2.1).
+// Use seed.GlobalSeed instead of the old placeholder type.
 
 // LocalSeed represents a scene-specific foreshadowing element.
-// This is a placeholder type - full implementation in Epic 2.
+// This is a placeholder type - full implementation in Epic 2, Story 2.3.
 type LocalSeed struct {
-	ID      string `json:"id"`
-	Content string `json:"content"`
-	// TODO: Add more fields in Epic 2 (SceneID, PlantedAt, etc.)
+	ID          string `json:"id"`
+	Content     string `json:"content"`
+	PlantedBeat int    `json:"planted_beat"`
+	Urgency     int    `json:"urgency"`
+	IsHarvested bool   `json:"is_harvested"`
+	// TODO: Add more fields in Epic 2, Story 2.3 (SceneID, PlantedAt, etc.)
 }
 
-// TensionState represents the tension/suspense state of the game.
-// This is a placeholder type - full implementation in Epic 3.
-type TensionState struct {
-	Value int `json:"value"` // 0-100
-	// TODO: Add more fields in Epic 3 (Level, History, etc.)
+// DeepCopy creates a deep copy of the LocalSeed.
+func (s *LocalSeed) DeepCopy() *LocalSeed {
+	if s == nil {
+		return nil
+	}
+	return &LocalSeed{
+		ID:          s.ID,
+		Content:     s.Content,
+		PlantedBeat: s.PlantedBeat,
+		Urgency:     s.Urgency,
+		IsHarvested: s.IsHarvested,
+	}
 }
+
+// TensionState is now fully implemented in tension.go (Epic 3)
 
 // ContextWindow represents the context management window.
 // This is a placeholder type - full implementation in Epic 5.
@@ -63,6 +72,14 @@ type UsedTemplates struct {
 
 // GameStateV2 is the unified game state for v2.0 architecture.
 // It centralizes all game data including HP, SAN, seeds, tension, context, etc.
+//
+// HP/SAN Design:
+//   - Range: 0-100 (inclusive, enforced by StateManager in Epic 5)
+//   - Initial values: HP=100, SAN=100
+//   - Clamping: Values should be clamped to [0, 100] by StateManager when applying changes
+//   - Thread-safety: All modifications are protected by sync.RWMutex
+//   - State changes should flow through StateManager for centralized validation
+//   - GameStateV2 itself does NOT enforce clamping - this is StateManager's responsibility
 type GameStateV2 struct {
 	// 基礎欄位
 	GameID      string   `json:"game_id"`
@@ -72,15 +89,18 @@ type GameStateV2 struct {
 	Inventory   []string `json:"inventory"`
 
 	// v2.0 系統欄位
-	GlobalSeeds []*GlobalSeed  `json:"global_seeds"`
-	LocalSeeds  []*LocalSeed   `json:"local_seeds"`
-	Tension     *TensionState  `json:"tension"`
-	Context     *ContextWindow `json:"context"`
+	GlobalSeeds []*seed.GlobalSeed `json:"global_seeds"`
+	LocalSeeds  []*LocalSeed       `json:"local_seeds"`
+	Tension     *TensionState      `json:"tension"`
+	Context     *ContextWindow     `json:"context"`
 
 	// 場景與規則欄位
 	CurrentScene string               `json:"current_scene"`
 	ActiveRules  []*ActiveRule        `json:"active_rules"`
 	NPCStates    map[string]*NPCState `json:"npc_states"`
+
+	// Rule Warnings tracking (for Rule Hints system)
+	RuleWarnings map[string]int `json:"rule_warnings"` // ruleID -> warning count
 
 	// 模板記錄
 	UsedTemplates *UsedTemplates `json:"used_templates"`
@@ -101,11 +121,9 @@ func NewGameStateV2() *GameStateV2 {
 		SAN:         100,
 		Inventory:   make([]string, 0),
 
-		GlobalSeeds: make([]*GlobalSeed, 0),
+		GlobalSeeds: make([]*seed.GlobalSeed, 0),
 		LocalSeeds:  make([]*LocalSeed, 0),
-		Tension: &TensionState{
-			Value: 0,
-		},
+		Tension:     NewTensionState(),
 		Context: &ContextWindow{
 			Summary: "",
 		},
@@ -113,6 +131,8 @@ func NewGameStateV2() *GameStateV2 {
 		CurrentScene: "",
 		ActiveRules:  make([]*ActiveRule, 0),
 		NPCStates:    make(map[string]*NPCState),
+
+		RuleWarnings: make(map[string]int),
 
 		UsedTemplates: &UsedTemplates{
 			Rules:  make([]string, 0),
@@ -171,37 +191,43 @@ func (g *GameStateV2) IncrementBeat() {
 }
 
 // GetGlobalSeeds returns all global seeds (thread-safe).
-func (g *GameStateV2) GetGlobalSeeds() []*GlobalSeed {
+// Returns a deep copy to prevent external modification of internal state.
+func (g *GameStateV2) GetGlobalSeeds() []*seed.GlobalSeed {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	// 返回副本以避免外部修改
-	seeds := make([]*GlobalSeed, len(g.GlobalSeeds))
-	copy(seeds, g.GlobalSeeds)
+	// Deep copy to prevent external modification
+	seeds := make([]*seed.GlobalSeed, len(g.GlobalSeeds))
+	for i, s := range g.GlobalSeeds {
+		seeds[i] = s.DeepCopy()
+	}
 	return seeds
 }
 
 // AddGlobalSeed adds a global seed (thread-safe).
-func (g *GameStateV2) AddGlobalSeed(seed *GlobalSeed) {
+func (g *GameStateV2) AddGlobalSeed(s *seed.GlobalSeed) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.GlobalSeeds = append(g.GlobalSeeds, seed)
+	g.GlobalSeeds = append(g.GlobalSeeds, s)
 }
 
 // GetLocalSeeds returns all local seeds (thread-safe).
+// Returns a deep copy to prevent external modification of internal state.
 func (g *GameStateV2) GetLocalSeeds() []*LocalSeed {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	// 返回副本以避免外部修改
+	// Deep copy to prevent external modification
 	seeds := make([]*LocalSeed, len(g.LocalSeeds))
-	copy(seeds, g.LocalSeeds)
+	for i, s := range g.LocalSeeds {
+		seeds[i] = s.DeepCopy()
+	}
 	return seeds
 }
 
 // AddLocalSeed adds a local seed (thread-safe).
-func (g *GameStateV2) AddLocalSeed(seed *LocalSeed) {
+func (g *GameStateV2) AddLocalSeed(s *LocalSeed) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.LocalSeeds = append(g.LocalSeeds, seed)
+	g.LocalSeeds = append(g.LocalSeeds, s)
 }
 
 // MarshalJSON implements custom JSON marshaling.
@@ -227,6 +253,14 @@ func (g *GameStateV2) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON implements custom JSON unmarshaling.
 // Syncs public fields to internal state after unmarshaling.
 func (g *GameStateV2) UnmarshalJSON(data []byte) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	// Validate input
+	if len(data) == 0 {
+		return fmt.Errorf("empty JSON data")
+	}
+
 	// 創建臨時結構避免遞歸調用
 	type Alias GameStateV2
 	aux := &struct {
@@ -246,7 +280,7 @@ func (g *GameStateV2) UnmarshalJSON(data []byte) error {
 
 	// 確保切片和映射已初始化
 	if g.GlobalSeeds == nil {
-		g.GlobalSeeds = make([]*GlobalSeed, 0)
+		g.GlobalSeeds = make([]*seed.GlobalSeed, 0)
 	}
 	if g.LocalSeeds == nil {
 		g.LocalSeeds = make([]*LocalSeed, 0)

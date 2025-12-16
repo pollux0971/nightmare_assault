@@ -17,6 +17,7 @@ type ContentRequest struct {
 	GameState        *engine.GameStateV2 // Complete game state
 	LastPlayerChoice string              // Player's last choice text
 	JudgeResult      *JudgeResult        // Result from Judge Agent (may be nil)
+	Difficulty       string              // Difficulty level: "easy", "normal", "hard", "hell"
 }
 
 // ContentResponse represents the generated narrative content for a beat
@@ -97,12 +98,15 @@ func (a *NarrationAgent) InvokeContent(ctx context.Context, req *ContentRequest)
 	// TODO: Replace with actual LLM call when LLMClient is available
 	narrative := a.generateNarrative(req, directive)
 
-	// 4. Process HP/SAN changes from JudgeResult
+	// 4. Generate Rule Hints if rules were violated (AC #5)
+	ruleHints := a.generateRuleHints(req)
+
+	// 5. Process HP/SAN changes from JudgeResult
 	response := &ContentResponse{
 		MainNarrative:   narrative,
 		PlantedSeeds:    make([]string, 0),   // TODO: Integrate Seed Agent (Story 6.5)
 		HarvestedSeeds:  make([]string, 0),   // TODO: Integrate Seed Agent (Story 6.5)
-		RuleHints:       make([]string, 0),   // TODO: Implement Rule Hints generation
+		RuleHints:       ruleHints,
 		HPChange:        0,
 		SANChange:       0,
 		DeathTriggered:  false,
@@ -234,4 +238,67 @@ Beat %d 的故事繼續展開。`, req.Beat)
 	}
 
 	return narrative
+}
+
+// generateRuleHints generates rule hints based on violated rules
+//
+// AC #5: Rule Hints 生成整合
+//   - 從 JudgeResult 獲取違反的規則
+//   - 從 GameState.ActiveRules 獲取規則描述
+//   - 從 GameState.RuleWarnings 獲取當前警告次數
+//   - 調用 GenerateRuleHint() 生成提示文本
+//   - 更新 GameState.RuleWarnings 警告次數
+//
+// Returns:
+//   - []string: List of generated rule hint texts (may be empty)
+func (a *NarrationAgent) generateRuleHints(req *ContentRequest) []string {
+	hints := make([]string, 0)
+
+	// Check if JudgeResult exists and has violated rules
+	if req.JudgeResult == nil || len(req.JudgeResult.ViolatedRules) == 0 {
+		return hints
+	}
+
+	// Get max warnings for this difficulty
+	maxWarnings := GetMaxWarnings(req.Difficulty)
+
+	// Generate hints for each violated rule
+	for _, ruleID := range req.JudgeResult.ViolatedRules {
+		// Find the rule description from ActiveRules
+		ruleDesc := a.getRuleDescription(req.GameState, ruleID)
+		if ruleDesc == "" {
+			// If rule not found in ActiveRules, use a generic description
+			ruleDesc = "未知規則"
+			log.Printf("[%s] Warning: Rule %s not found in ActiveRules", a.config.Name, ruleID)
+		}
+
+		// Get current warning count for this rule
+		warningCount := req.GameState.RuleWarnings[ruleID]
+
+		// Generate hint
+		hint := GenerateRuleHint(ruleID, ruleDesc, req.Difficulty, warningCount, maxWarnings)
+
+		// If hint was generated, add it and increment warning count
+		if hint != "" {
+			hints = append(hints, hint)
+
+			// Update warning count in GameState
+			req.GameState.RuleWarnings[ruleID] = warningCount + 1
+
+			log.Printf("[%s] Generated rule hint for %s (warning %d/%d): %s",
+				a.config.Name, ruleID, warningCount+1, maxWarnings, hint)
+		}
+	}
+
+	return hints
+}
+
+// getRuleDescription gets the description of a rule from ActiveRules
+func (a *NarrationAgent) getRuleDescription(gameState *engine.GameStateV2, ruleID string) string {
+	for _, rule := range gameState.ActiveRules {
+		if rule.ID == ruleID {
+			return rule.Name // Using Name field as description
+		}
+	}
+	return ""
 }
