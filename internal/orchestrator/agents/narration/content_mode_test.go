@@ -186,6 +186,296 @@ func createTestNarrationAgent(t *testing.T) *NarrationAgent {
 	return NewNarrationAgent(config)
 }
 
+// TestBuildContentPrompt tests comprehensive prompt building
+func TestBuildContentPrompt(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	// Setup game state with various elements
+	gameState := engine.NewGameStateV2()
+	gameState.SetHP(85)
+	gameState.SetSAN(70)
+	gameState.CurrentScene = "醫院走廊"
+	gameState.ActiveRules = []*engine.ActiveRule{
+		{ID: "rule-001", Name: "不要在夜晚開燈"},
+		{ID: "rule-002", Name: "不要直視鏡子"},
+	}
+	gameState.RuleWarnings = map[string]int{
+		"rule-001": 1,
+	}
+	gameState.NPCStates = map[string]*engine.NPCState{
+		"npc-001": {ID: "npc-001", Name: "護士"},
+	}
+
+	req := &ContentRequest{
+		Beat:             5,
+		GameState:        gameState,
+		LastPlayerChoice: "探索房間",
+		Difficulty:       "normal",
+		JudgeResult: &JudgeResult{
+			ViolatedRules: []string{"rule-001"},
+			ImpactLevel:   "minor",
+			HPDelta:       -5,
+			SANDelta:      -3,
+			Reason:        "你在夜晚開燈",
+		},
+	}
+
+	directive := engine.GenerateDirective(engine.TensionLevelMedium)
+
+	prompt, err := agent.buildContentPrompt(req, directive)
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, prompt)
+
+	// Verify prompt contains all sections
+	assert.Contains(t, prompt, "系統角色", "Should contain system section")
+	assert.Contains(t, prompt, "當前狀態", "Should contain state section")
+	assert.Contains(t, prompt, "張力指令", "Should contain tension section")
+	assert.Contains(t, prompt, "活躍規則", "Should contain rules section")
+	assert.Contains(t, prompt, "活躍 NPCs", "Should contain NPCs section")
+	assert.Contains(t, prompt, "玩家上下文", "Should contain context section")
+	assert.Contains(t, prompt, "輸出要求", "Should contain constraints section")
+
+	// Verify specific content
+	assert.Contains(t, prompt, "Beat: 5")
+	assert.Contains(t, prompt, "HP: 85 / 100")
+	assert.Contains(t, prompt, "SAN: 70 / 100")
+	assert.Contains(t, prompt, "場景: 醫院走廊")
+	assert.Contains(t, prompt, "難度: normal")
+	assert.Contains(t, prompt, "不要在夜晚開燈")
+	assert.Contains(t, prompt, "護士")
+	assert.Contains(t, prompt, "探索房間")
+	assert.Contains(t, prompt, "HP 變化: -5")
+	assert.Contains(t, prompt, "SAN 變化: -3")
+}
+
+// TestBuildSystemSection tests system section building
+func TestBuildSystemSection(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+	section := agent.buildSystemSection()
+
+	assert.Contains(t, section, "系統角色")
+	assert.Contains(t, section, "規則怪談")
+	assert.Contains(t, section, "500-1200 字")
+	assert.Contains(t, section, "張力指令")
+}
+
+// TestBuildStateSection tests state section building
+func TestBuildStateSection(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	gameState := engine.NewGameStateV2()
+	gameState.SetHP(75)
+	gameState.SetSAN(60)
+	gameState.CurrentScene = "地下室"
+
+	req := &ContentRequest{
+		Beat:       3,
+		GameState:  gameState,
+		Difficulty: "hard",
+	}
+
+	section := agent.buildStateSection(req)
+
+	assert.Contains(t, section, "Beat: 3")
+	assert.Contains(t, section, "HP: 75 / 100")
+	assert.Contains(t, section, "SAN: 60 / 100")
+	assert.Contains(t, section, "場景: 地下室")
+	assert.Contains(t, section, "難度: hard")
+}
+
+// TestBuildTensionSection tests tension section building
+func TestBuildTensionSection(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	directive := engine.GenerateDirective(engine.TensionLevelHigh)
+	section := agent.buildTensionSection(directive)
+
+	assert.Contains(t, section, "張力指令")
+	assert.Contains(t, section, directive.Instruction)
+	assert.Contains(t, section, "等級")
+	assert.Contains(t, section, "指令")
+	assert.Contains(t, section, "字數範圍")
+}
+
+// TestBuildRulesSection tests rules section building
+func TestBuildRulesSection(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	tests := []struct {
+		name          string
+		rules         []*engine.ActiveRule
+		warnings      map[string]int
+		expectContain []string
+	}{
+		{
+			name:          "no rules",
+			rules:         []*engine.ActiveRule{},
+			warnings:      map[string]int{},
+			expectContain: []string{"活躍規則", "無活躍規則"},
+		},
+		{
+			name: "with rules and warnings",
+			rules: []*engine.ActiveRule{
+				{ID: "rule-001", Name: "不要在夜晚開燈"},
+				{ID: "rule-002", Name: "不要直視鏡子"},
+			},
+			warnings: map[string]int{
+				"rule-001": 1,
+				"rule-002": 0,
+			},
+			expectContain: []string{
+				"活躍規則",
+				"不要在夜晚開燈",
+				"rule-001",
+				"警告次數: 1",
+				"不要直視鏡子",
+				"rule-002",
+				"警告次數: 0",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gameState := engine.NewGameStateV2()
+			gameState.ActiveRules = tt.rules
+			gameState.RuleWarnings = tt.warnings
+
+			section := agent.buildRulesSection(gameState)
+
+			for _, expect := range tt.expectContain {
+				assert.Contains(t, section, expect)
+			}
+		})
+	}
+}
+
+// TestBuildNPCsSection tests NPCs section building
+func TestBuildNPCsSection(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	tests := []struct {
+		name          string
+		npcs          map[string]*engine.NPCState
+		expectContain []string
+	}{
+		{
+			name:          "no NPCs",
+			npcs:          map[string]*engine.NPCState{},
+			expectContain: []string{"活躍 NPCs", "無活躍 NPCs"},
+		},
+		{
+			name: "with NPCs",
+			npcs: map[string]*engine.NPCState{
+				"npc-001": {ID: "npc-001", Name: "護士"},
+				"npc-002": {ID: "npc-002", Name: "醫生"},
+			},
+			expectContain: []string{
+				"活躍 NPCs",
+				"護士",
+				"npc-001",
+				"醫生",
+				"npc-002",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gameState := engine.NewGameStateV2()
+			gameState.NPCStates = tt.npcs
+
+			section := agent.buildNPCsSection(gameState)
+
+			for _, expect := range tt.expectContain {
+				assert.Contains(t, section, expect)
+			}
+		})
+	}
+}
+
+// TestBuildContextSection tests context section building
+func TestBuildContextSection(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	tests := []struct {
+		name          string
+		lastChoice    string
+		judgeResult   *JudgeResult
+		expectContain []string
+	}{
+		{
+			name:       "game start - no choice",
+			lastChoice: "",
+			judgeResult: nil,
+			expectContain: []string{
+				"玩家上下文",
+				"遊戲開始",
+			},
+		},
+		{
+			name:       "with choice - no judge result",
+			lastChoice: "探索房間",
+			judgeResult: nil,
+			expectContain: []string{
+				"玩家上下文",
+				"探索房間",
+			},
+		},
+		{
+			name:       "with choice and judge result",
+			lastChoice: "開燈",
+			judgeResult: &JudgeResult{
+				ViolatedRules: []string{"rule-001"},
+				ImpactLevel:   "moderate",
+				HPDelta:       -10,
+				SANDelta:      -5,
+				Reason:        "違反了夜晚開燈規則",
+			},
+			expectContain: []string{
+				"玩家上下文",
+				"開燈",
+				"判定結果",
+				"rule-001",
+				"moderate",
+				"HP 變化: -10",
+				"SAN 變化: -5",
+				"違反了夜晚開燈規則",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &ContentRequest{
+				Beat:             1,
+				GameState:        engine.NewGameStateV2(),
+				LastPlayerChoice: tt.lastChoice,
+				JudgeResult:      tt.judgeResult,
+			}
+
+			section := agent.buildContextSection(req)
+
+			for _, expect := range tt.expectContain {
+				assert.Contains(t, section, expect)
+			}
+		})
+	}
+}
+
+// TestBuildConstraintsSection tests constraints section building
+func TestBuildConstraintsSection(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+	section := agent.buildConstraintsSection()
+
+	assert.Contains(t, section, "輸出要求")
+	assert.Contains(t, section, "500-1200 字")
+	assert.Contains(t, section, "恐怖")
+	assert.Contains(t, section, "繁體中文")
+	assert.Contains(t, section, "純文本敘事")
+}
+
 // TestInvokeContent_RuleHintsGeneration tests Rule Hints integration
 // AC #5: Rule Hints 生成整合
 func TestInvokeContent_RuleHintsGeneration(t *testing.T) {

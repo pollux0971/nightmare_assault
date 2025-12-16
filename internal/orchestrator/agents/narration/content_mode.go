@@ -186,29 +186,188 @@ func (a *NarrationAgent) getTensionDirective(gameState *engine.GameStateV2) *eng
 // buildContentPrompt builds the prompt for content generation
 //
 // AC #4: 整合 Tension Directive 到 Prompt
+// Task 12: 完整 Prompt 模板系統
+//
+// This method constructs a comprehensive prompt that includes:
+//   - System role and output format instructions
+//   - Current game state (Beat, HP, SAN, Scene)
+//   - Tension directive for atmosphere and pacing
+//   - Active rules and NPCs
+//   - Player's last choice and judge result
+//   - Narrative constraints (500-1200 words)
 func (a *NarrationAgent) buildContentPrompt(req *ContentRequest, directive *engine.TensionDirective) (string, error) {
-	// Simplified prompt for now
-	// TODO: Use template system when available (Task 12)
+	// Build prompt sections
+	systemSection := a.buildSystemSection()
+	stateSection := a.buildStateSection(req)
+	tensionSection := a.buildTensionSection(directive)
+	rulesSection := a.buildRulesSection(req.GameState)
+	npcsSection := a.buildNPCsSection(req.GameState)
+	contextSection := a.buildContextSection(req)
+	constraintsSection := a.buildConstraintsSection()
 
-	prompt := fmt.Sprintf(`你是「規則怪談」類型恐怖遊戲的敘事引擎。
+	// Assemble complete prompt
+	prompt := fmt.Sprintf(`%s
 
-當前 Beat: %d
-玩家上一個選擇：%s
-
-【張力指令】
 %s
 
-請生成 500-1200 字的敘事內容，遵循以上張力指令的要求。
+%s
 
-輸出格式（純文本）：
-[敘事內容]
-`,
-		req.Beat,
-		req.LastPlayerChoice,
-		directive.FormatForPrompt(),
+%s
+
+%s
+
+%s
+
+%s`,
+		systemSection,
+		stateSection,
+		tensionSection,
+		rulesSection,
+		npcsSection,
+		contextSection,
+		constraintsSection,
 	)
 
 	return prompt, nil
+}
+
+// buildSystemSection builds the system role and instructions
+func (a *NarrationAgent) buildSystemSection() string {
+	return `# 系統角色
+
+你是「規則怪談」類型恐怖遊戲的敘事引擎。你的職責是：
+1. 生成 500-1200 字的連貫敘事內容
+2. 遵循張力指令控制氛圍與節奏
+3. 自然融入規則提示（如果有）
+4. 描述 HP/SAN 變化的原因
+5. 整合 NPC 互動與對話
+6. 保持敘事風格一致性`
+}
+
+// buildStateSection builds current game state information
+func (a *NarrationAgent) buildStateSection(req *ContentRequest) string {
+	hp := req.GameState.GetHP()
+	san := req.GameState.GetSAN()
+	scene := req.GameState.CurrentScene
+	if scene == "" {
+		scene = "未知場景"
+	}
+
+	return fmt.Sprintf(`# 當前狀態
+
+- Beat: %d
+- 場景: %s
+- HP: %d / 100
+- SAN: %d / 100
+- 難度: %s`,
+		req.Beat,
+		scene,
+		hp,
+		san,
+		req.Difficulty,
+	)
+}
+
+// buildTensionSection builds tension directive information
+func (a *NarrationAgent) buildTensionSection(directive *engine.TensionDirective) string {
+	section := fmt.Sprintf(`# 張力指令
+
+**等級**: %s
+**指令**: %s
+**字數範圍**: %d - %d 字`,
+		directive.Level,
+		directive.Instruction,
+		directive.LengthRange.Min,
+		directive.LengthRange.Max,
+	)
+
+	if len(directive.AllowedElements) > 0 {
+		section += fmt.Sprintf("\n**允許元素**: %v", directive.AllowedElements)
+	}
+
+	if len(directive.ForbiddenElements) > 0 {
+		section += fmt.Sprintf("\n**禁止元素**: %v", directive.ForbiddenElements)
+	}
+
+	return section
+}
+
+// buildRulesSection builds active rules information
+func (a *NarrationAgent) buildRulesSection(gameState *engine.GameStateV2) string {
+	if len(gameState.ActiveRules) == 0 {
+		return "# 活躍規則\n\n（無活躍規則）"
+	}
+
+	rulesText := "# 活躍規則\n\n"
+	for i, rule := range gameState.ActiveRules {
+		warningCount := gameState.RuleWarnings[rule.ID]
+		rulesText += fmt.Sprintf("%d. %s (ID: %s, 警告次數: %d)\n",
+			i+1, rule.Name, rule.ID, warningCount)
+	}
+
+	return rulesText
+}
+
+// buildNPCsSection builds active NPCs information
+func (a *NarrationAgent) buildNPCsSection(gameState *engine.GameStateV2) string {
+	if len(gameState.NPCStates) == 0 {
+		return "# 活躍 NPCs\n\n（無活躍 NPCs）"
+	}
+
+	npcsText := "# 活躍 NPCs\n\n"
+	for id, npc := range gameState.NPCStates {
+		npcsText += fmt.Sprintf("- %s (ID: %s)\n", npc.Name, id)
+	}
+
+	return npcsText
+}
+
+// buildContextSection builds player context and judge result
+func (a *NarrationAgent) buildContextSection(req *ContentRequest) string {
+	contextText := "# 玩家上下文\n\n"
+
+	if req.LastPlayerChoice != "" {
+		contextText += fmt.Sprintf("**玩家上一個選擇**: %s\n\n", req.LastPlayerChoice)
+	} else {
+		contextText += "**玩家上一個選擇**: （遊戲開始）\n\n"
+	}
+
+	// Add judge result if present
+	if req.JudgeResult != nil {
+		contextText += "**判定結果**:\n"
+		if len(req.JudgeResult.ViolatedRules) > 0 {
+			contextText += fmt.Sprintf("- 違反規則: %v\n", req.JudgeResult.ViolatedRules)
+		}
+		contextText += fmt.Sprintf("- 影響等級: %s\n", req.JudgeResult.ImpactLevel)
+		if req.JudgeResult.HPDelta != 0 {
+			contextText += fmt.Sprintf("- HP 變化: %+d\n", req.JudgeResult.HPDelta)
+		}
+		if req.JudgeResult.SANDelta != 0 {
+			contextText += fmt.Sprintf("- SAN 變化: %+d\n", req.JudgeResult.SANDelta)
+		}
+		if req.JudgeResult.Reason != "" {
+			contextText += fmt.Sprintf("- 原因: %s\n", req.JudgeResult.Reason)
+		}
+	}
+
+	return contextText
+}
+
+// buildConstraintsSection builds output constraints and format requirements
+func (a *NarrationAgent) buildConstraintsSection() string {
+	return `# 輸出要求
+
+**字數**: 500-1200 字
+**風格**: 恐怖、懸疑、規則怪談
+**語言**: 繁體中文
+**格式**: 純文本敘事
+
+請生成當前 Beat 的敘事內容。確保：
+1. 敘事連貫流暢
+2. 遵循張力指令的氛圍與節奏
+3. 如有規則違反，自然融入後果描述
+4. 描寫具體生動，營造恐怖氛圍
+5. 字數控制在 500-1200 字之間`
 }
 
 // generateNarrative generates narrative content
