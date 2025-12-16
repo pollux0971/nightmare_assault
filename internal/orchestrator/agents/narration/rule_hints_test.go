@@ -320,3 +320,286 @@ func TestBuildHintText(t *testing.T) {
 		})
 	}
 }
+
+// TestHintLevel_String tests the String() method for HintLevel enum
+func TestHintLevel_String(t *testing.T) {
+	tests := []struct {
+		level    HintLevel
+		expected string
+	}{
+		{HintLevelNone, "none"},
+		{HintLevelSubtle, "subtle"},
+		{HintLevelVague, "vague"},
+		{HintLevelDirect, "direct"},
+		{HintLevel(99), "unknown"}, // Unknown/invalid level
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			result := tt.level.String()
+			assert.Equal(t, tt.expected, result,
+				"HintLevel %d should return '%s'", tt.level, tt.expected)
+		})
+	}
+}
+
+// TestGetHintLevel tests the getHintLevel function with various difficulties
+func TestGetHintLevel(t *testing.T) {
+	tests := []struct {
+		name         string
+		difficulty   string
+		warningCount int
+		expected     HintLevel
+	}{
+		{
+			name:         "easy difficulty",
+			difficulty:   "easy",
+			warningCount: 0,
+			expected:     HintLevelDirect,
+		},
+		{
+			name:         "Easy (uppercase)",
+			difficulty:   "Easy",
+			warningCount: 0,
+			expected:     HintLevelDirect,
+		},
+		{
+			name:         "EASY (all caps)",
+			difficulty:   "EASY",
+			warningCount: 0,
+			expected:     HintLevelDirect,
+		},
+		{
+			name:         "normal difficulty",
+			difficulty:   "normal",
+			warningCount: 0,
+			expected:     HintLevelVague,
+		},
+		{
+			name:         "hard difficulty",
+			difficulty:   "hard",
+			warningCount: 0,
+			expected:     HintLevelSubtle,
+		},
+		{
+			name:         "hell difficulty",
+			difficulty:   "hell",
+			warningCount: 0,
+			expected:     HintLevelNone,
+		},
+		{
+			name:         "unknown difficulty",
+			difficulty:   "unknown",
+			warningCount: 0,
+			expected:     HintLevelNone,
+		},
+		{
+			name:         "empty difficulty",
+			difficulty:   "",
+			warningCount: 0,
+			expected:     HintLevelNone,
+		},
+		{
+			name:         "invalid difficulty",
+			difficulty:   "invalid-123",
+			warningCount: 0,
+			expected:     HintLevelNone,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getHintLevel(tt.difficulty, tt.warningCount)
+			assert.Equal(t, tt.expected, result,
+				"Difficulty '%s' should return hint level %v", tt.difficulty, tt.expected)
+		})
+	}
+}
+
+// TestExtractRuleKeywords_EdgeCases tests edge cases for keyword extraction
+// Note: Chinese text keyword extraction is simplified and doesn't use NLP
+// The function splits by whitespace, so Chinese text without spaces may return
+// the full cleaned string as a single "keyword"
+func TestExtractRuleKeywords_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name           string
+		ruleDesc       string
+		minKeywords    int
+		maxKeywords    int
+		expectNonEmpty bool
+	}{
+		{
+			name:           "empty string",
+			ruleDesc:       "",
+			minKeywords:    0,
+			maxKeywords:    0,
+			expectNonEmpty: false,
+		},
+		{
+			name:           "only stop words",
+			ruleDesc:       "不要的了在與和",
+			minKeywords:    0,
+			maxKeywords:    3,
+			expectNonEmpty: true, // May extract cleaned version
+		},
+		{
+			name:           "only punctuation",
+			ruleDesc:       "「」『』，。、；：",
+			minKeywords:    0,
+			maxKeywords:    0,
+			expectNonEmpty: false,
+		},
+		{
+			name:           "single character words with spaces",
+			ruleDesc:       "一 二 三 四 五",
+			minKeywords:    0,
+			maxKeywords:    0,
+			expectNonEmpty: false, // All filtered out (less than 2 chars)
+		},
+		{
+			name:           "mixed Chinese text (no spaces)",
+			ruleDesc:       "不要在夜晚的時候開燈",
+			minKeywords:    1,
+			maxKeywords:    3,
+			expectNonEmpty: true, // Will extract cleaned text
+		},
+		{
+			name:           "rule with many keywords",
+			ruleDesc:       "不要在深夜獨自打開地下室的門進入黑暗房間",
+			minKeywords:    1,
+			maxKeywords:    3, // Limited to 3 keywords
+			expectNonEmpty: true,
+		},
+		{
+			name:           "keywords with punctuation",
+			ruleDesc:       "不要「直視」鏡子，也別「碰觸」牆壁。",
+			minKeywords:    1,
+			maxKeywords:    3,
+			expectNonEmpty: true, // Should extract despite punctuation
+		},
+		{
+			name:           "very short rule",
+			ruleDesc:       "別回頭",
+			minKeywords:    1,
+			maxKeywords:    2,
+			expectNonEmpty: true,
+		},
+		{
+			name:           "rule with spaces and keywords",
+			ruleDesc:       "不要 在 夜晚 開燈",
+			minKeywords:    1,
+			maxKeywords:    3,
+			expectNonEmpty: true,
+		},
+		{
+			name:           "complex nested text",
+			ruleDesc:       "在黑暗中不可以開燈但是也不能不動",
+			minKeywords:    1,
+			maxKeywords:    3,
+			expectNonEmpty: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ExtractRuleKeywords(tt.ruleDesc)
+
+			// Check keyword count range
+			assert.GreaterOrEqual(t, len(result), tt.minKeywords,
+				"Should have at least %d keywords", tt.minKeywords)
+			assert.LessOrEqual(t, len(result), tt.maxKeywords,
+				"Should have at most %d keywords", tt.maxKeywords)
+
+			// Check if result is non-empty when expected
+			if tt.expectNonEmpty {
+				assert.NotEmpty(t, result,
+					"Should extract some keywords")
+				// All extracted keywords should be non-empty strings
+				for _, kw := range result {
+					assert.NotEmpty(t, kw,
+						"Each keyword should be non-empty")
+					assert.GreaterOrEqual(t, len([]rune(kw)), 2,
+						"Each keyword should have at least 2 characters")
+				}
+			} else {
+				assert.Empty(t, result,
+					"Should not extract any keywords")
+			}
+		})
+	}
+}
+
+// TestGenerateRuleHint_EdgeCases tests edge cases for rule hint generation
+func TestGenerateRuleHint_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		ruleID        string
+		ruleDesc      string
+		difficulty    string
+		warningCount  int
+		maxWarnings   int
+		expectEmpty   bool
+	}{
+		{
+			name:         "exceeded max warnings",
+			ruleID:       "rule-001",
+			ruleDesc:     "不要開燈",
+			difficulty:   "easy",
+			warningCount: 2,
+			maxWarnings:  2,
+			expectEmpty:  true,
+		},
+		{
+			name:         "exactly at max warnings",
+			ruleID:       "rule-002",
+			ruleDesc:     "不要回頭",
+			difficulty:   "normal",
+			warningCount: 1,
+			maxWarnings:  1,
+			expectEmpty:  true,
+		},
+		{
+			name:         "hell difficulty (no hints)",
+			ruleID:       "rule-003",
+			ruleDesc:     "不要說話",
+			difficulty:   "hell",
+			warningCount: 0,
+			maxWarnings:  0,
+			expectEmpty:  true,
+		},
+		{
+			name:         "empty rule description",
+			ruleID:       "rule-004",
+			ruleDesc:     "",
+			difficulty:   "easy",
+			warningCount: 0,
+			maxWarnings:  2,
+			expectEmpty:  false, // Should still generate hint
+		},
+		{
+			name:         "unknown difficulty defaults to no hint",
+			ruleID:       "rule-005",
+			ruleDesc:     "不要移動",
+			difficulty:   "unknown",
+			warningCount: 0,
+			maxWarnings:  0,
+			expectEmpty:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GenerateRuleHint(tt.ruleID, tt.ruleDesc, tt.difficulty,
+				tt.warningCount, tt.maxWarnings)
+
+			if tt.expectEmpty {
+				assert.Empty(t, result,
+					"Should return empty hint for test case: %s", tt.name)
+			} else {
+				assert.NotEmpty(t, result,
+					"Should return non-empty hint for test case: %s", tt.name)
+			}
+		})
+	}
+}
+

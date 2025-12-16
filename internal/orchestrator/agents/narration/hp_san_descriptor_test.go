@@ -266,3 +266,185 @@ func TestGetSANSeverity(t *testing.T) {
 		})
 	}
 }
+
+// TestHPRecovery_EmptyReason tests HP recovery descriptions with empty reason
+func TestHPRecovery_EmptyReason(t *testing.T) {
+	tests := []struct {
+		name           string
+		delta          int
+		reason         string
+		expectContains []string
+	}{
+		{
+			name:           "small recovery with empty reason",
+			delta:          5,
+			reason:         "",
+			expectContains: []string{"感覺好了一些", "HP +5"},
+		},
+		{
+			name:           "medium recovery with empty reason",
+			delta:          20,
+			reason:         "",
+			expectContains: []string{"感覺好多了", "HP +20"},
+		},
+		{
+			name:           "large recovery with empty reason",
+			delta:          40,
+			reason:         "",
+			expectContains: []string{"煥然一新", "HP +40"},
+		},
+		{
+			name:           "small recovery with reason",
+			delta:          5,
+			reason:         "你喝了藥水",
+			expectContains: []string{"感覺好了一些", "你喝了藥水", "HP +5"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DescribeHPChange(tt.delta, tt.reason)
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, result, expected,
+					"Description should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestSANRecovery_EmptyReason tests SAN recovery descriptions with empty reason
+func TestSANRecovery_EmptyReason(t *testing.T) {
+	tests := []struct {
+		name           string
+		delta          int
+		reason         string
+		expectContains []string
+	}{
+		{
+			name:           "small recovery with empty reason",
+			delta:          5,
+			reason:         "",
+			expectContains: []string{"心情稍微平靜下來", "SAN +5"},
+		},
+		{
+			name:           "medium recovery with empty reason",
+			delta:          20,
+			reason:         "",
+			expectContains: []string{"心情平靜下來", "理智逐漸恢復", "SAN +20"},
+		},
+		{
+			name:           "large recovery with empty reason",
+			delta:          40,
+			reason:         "",
+			expectContains: []string{"前所未有的平靜", "理智完全恢復", "SAN +40"},
+		},
+		{
+			name:           "small recovery with reason",
+			delta:          5,
+			reason:         "你感到安心",
+			expectContains: []string{"心情稍微平靜下來", "你感到安心", "SAN +5"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DescribeSANChange(tt.delta, tt.reason)
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, result, expected,
+					"Description should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestHPDamage_AllSeverities tests all HP damage severity levels
+func TestHPDamage_AllSeverities(t *testing.T) {
+	tests := []struct {
+		name           string
+		delta          int
+		expectedLevel  string
+		expectContains []string
+	}{
+		{
+			name:           "minor damage",
+			delta:          -5,
+			expectedLevel:  "minor",
+			expectContains: []string{"一陣疼痛", "HP -5"},
+		},
+		{
+			name:           "moderate damage",
+			delta:          -20,
+			expectedLevel:  "moderate",
+			expectContains: []string{"劇痛", "HP -20"},
+		},
+		{
+			name:           "major damage",
+			delta:          -40,
+			expectedLevel:  "major",
+			expectContains: []string{"重創", "HP -40"},
+		},
+		{
+			name:           "lethal damage",
+			delta:          -60,
+			expectedLevel:  "lethal",
+			expectContains: []string{"致命", "HP -60"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DescribeHPChange(tt.delta, "")
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, result, expected,
+					"Description should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestSANLoss_AllSeverities tests all SAN loss severity levels
+func TestSANLoss_AllSeverities(t *testing.T) {
+	tests := []struct {
+		name           string
+		delta          int
+		expectedLevel  string
+		expectContains []string
+	}{
+		{
+			name:           "minor sanity loss",
+			delta:          -5,
+			expectedLevel:  "minor",
+			expectContains: []string{"不安", "SAN -5"},
+		},
+		{
+			name:           "moderate sanity loss",
+			delta:          -20,
+			expectedLevel:  "moderate",
+			expectContains: []string{"理智開始動搖", "SAN -20"},
+		},
+		{
+			name:           "major sanity loss",
+			delta:          -40,
+			expectedLevel:  "major",
+			expectContains: []string{"理智搖搖欲墜", "SAN -40"},
+		},
+		{
+			name:           "lethal sanity loss",
+			delta:          -60,
+			expectedLevel:  "lethal",
+			expectContains: []string{"意識崩潰", "SAN -60"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DescribeSANChange(tt.delta, "")
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, result, expected,
+					"Description should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+

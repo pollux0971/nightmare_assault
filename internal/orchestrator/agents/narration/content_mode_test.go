@@ -1126,3 +1126,180 @@ func TestInvokeContent_HallucinationWithDeath(t *testing.T) {
 		"Should contain severe hallucination description")
 }
 
+// TestGetTensionDirective tests getTensionDirective with various game states
+func TestGetTensionDirective(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	tests := []struct {
+		name            string
+		tensionState    *engine.TensionState
+		expectedLevel   engine.TensionLevel
+	}{
+		{
+			name:            "nil tension state (default to LOW)",
+			tensionState:    nil,
+			expectedLevel:   engine.TensionLevelLow,
+		},
+		{
+			name:            "low tension state",
+			tensionState:    engine.NewTensionState(),
+			expectedLevel:   engine.TensionLevelLow,
+		},
+		{
+			name: "medium tension state",
+			tensionState: &engine.TensionState{
+				Level: engine.TensionLevelMedium,
+			},
+			expectedLevel: engine.TensionLevelMedium,
+		},
+		{
+			name: "high tension state",
+			tensionState: &engine.TensionState{
+				Level: engine.TensionLevelHigh,
+			},
+			expectedLevel: engine.TensionLevelHigh,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gameState := engine.NewGameStateV2()
+			gameState.Tension = tt.tensionState
+
+			directive := agent.getTensionDirective(gameState)
+
+			require.NotNil(t, directive, "Directive should not be nil")
+			assert.Equal(t, tt.expectedLevel, directive.Level,
+				"Directive level should match expected")
+			assert.NotEmpty(t, directive.Instruction,
+				"Directive should have instruction")
+		})
+	}
+}
+
+// TestGenerateNarrative tests generateNarrative with all tension levels
+func TestGenerateNarrative(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	tests := []struct {
+		name           string
+		beat           int
+		lastChoice     string
+		tensionLevel   engine.TensionLevel
+		expectContains []string
+		minLength      int
+	}{
+		{
+			name:           "LOW tension narrative",
+			beat:           1,
+			lastChoice:     "探索房間",
+			tensionLevel:   engine.TensionLevelLow,
+			expectContains: []string{"你站在陰暗的走廊中", "環境細節逐漸浮現"},
+			minLength:      50,
+		},
+		{
+			name:           "MEDIUM tension narrative",
+			beat:           5,
+			lastChoice:     "打開門",
+			tensionLevel:   engine.TensionLevelMedium,
+			expectContains: []string{"你站在陰暗的走廊中", "不安的感覺襲來"},
+			minLength:      50,
+		},
+		{
+			name:           "HIGH tension narrative",
+			beat:           10,
+			lastChoice:     "逃跑",
+			tensionLevel:   engine.TensionLevelHigh,
+			expectContains: []string{"你站在陰暗的走廊中", "危機迫在眉睫"},
+			minLength:      50,
+		},
+		{
+			name:           "first beat with no choice",
+			beat:           0,
+			lastChoice:     "",
+			tensionLevel:   engine.TensionLevelLow,
+			expectContains: []string{"你站在陰暗的走廊中", "Beat 0"},
+			minLength:      50,
+		},
+		{
+			name:           "with player choice",
+			beat:           3,
+			lastChoice:     "檢查櫃子",
+			tensionLevel:   engine.TensionLevelMedium,
+			expectContains: []string{"你剛才選擇了「檢查櫃子」"},
+			minLength:      50,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &ContentRequest{
+				Beat:             tt.beat,
+				GameState:        engine.NewGameStateV2(),
+				LastPlayerChoice: tt.lastChoice,
+				Difficulty:       "normal",
+			}
+
+			directive := engine.GenerateDirective(tt.tensionLevel)
+			narrative := agent.generateNarrative(req, directive)
+
+			// Check narrative is not empty
+			assert.NotEmpty(t, narrative, "Narrative should not be empty")
+
+			// Check minimum length
+			runeCount := len([]rune(narrative))
+			assert.GreaterOrEqual(t, runeCount, tt.minLength,
+				"Narrative should be at least %d characters", tt.minLength)
+
+			// Check expected content
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, narrative, expected,
+					"Narrative should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestGenerateNarrative_AllTensionLevels tests all possible tension levels
+func TestGenerateNarrative_AllTensionLevels(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	tensionLevels := []engine.TensionLevel{
+		engine.TensionLevelLow,
+		engine.TensionLevelMedium,
+		engine.TensionLevelHigh,
+	}
+
+	req := &ContentRequest{
+		Beat:             5,
+		GameState:        engine.NewGameStateV2(),
+		LastPlayerChoice: "探索",
+		Difficulty:       "normal",
+	}
+
+	for _, level := range tensionLevels {
+		t.Run(string(level), func(t *testing.T) {
+			directive := engine.GenerateDirective(level)
+			narrative := agent.generateNarrative(req, directive)
+
+			// Each tension level should produce different content
+			assert.NotEmpty(t, narrative, "Should generate narrative for level %s", level)
+			assert.Contains(t, narrative, "你站在陰暗的走廊中",
+				"Should contain base narrative")
+
+			// Check tension-specific content
+			switch level {
+			case engine.TensionLevelLow:
+				assert.Contains(t, narrative, "環境細節",
+					"LOW tension should mention environment details")
+			case engine.TensionLevelMedium:
+				assert.Contains(t, narrative, "不安",
+					"MEDIUM tension should mention uneasiness")
+			case engine.TensionLevelHigh:
+				assert.Contains(t, narrative, "危機",
+					"HIGH tension should mention crisis")
+			}
+		})
+	}
+}
+
