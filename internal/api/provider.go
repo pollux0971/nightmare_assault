@@ -88,3 +88,79 @@ func GetProvidersByCategory(category string) []ProviderInfo {
 	}
 	return result
 }
+
+// defaultModels maps provider IDs to their default model names.
+var defaultModels = map[string]string{
+	"openai":      "gpt-4o",
+	"anthropic":   "claude-3-5-sonnet-20241022",
+	"google":      "gemini-1.5-pro",
+	"mistral":     "mistral-large-latest",
+	"cohere":      "command-r-plus",
+	"xai":         "grok-2",
+	"deepseek":    "deepseek-chat",
+	"openrouter":  "anthropic/claude-3.5-sonnet",
+	"together":    "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+	"groq":        "llama-3.1-70b-versatile",
+	"fireworks":   "accounts/fireworks/models/llama-v3p1-70b-instruct",
+	"perplexity":  "llama-3.1-sonar-large-128k-online",
+	"ollama":      "llama3.1",
+	"lmstudio":    "local-model",
+}
+
+// modelHints provides suggested models for each provider.
+var modelHints = map[string][]string{
+	"openai": {
+		"gpt-4o",
+		"gpt-4-turbo",
+		"gpt-4o-mini",
+		"o1-preview",
+	},
+	"anthropic": {
+		"claude-3-5-sonnet-20241022",
+		"claude-3-opus-20240229",
+		"claude-3-haiku-20240307",
+	},
+	"google": {
+		"gemini-1.5-pro",
+		"gemini-1.5-flash",
+		"gemini-2.0-flash-exp",
+	},
+	"openrouter": {
+		"anthropic/claude-3.5-sonnet",
+		"openai/gpt-4-turbo",
+		"google/gemini-pro-1.5",
+		"meta-llama/llama-3.1-70b-instruct",
+	},
+	"together": {
+		"meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+		"mistralai/Mixtral-8x22B-Instruct-v0.1",
+	},
+	"groq": {
+		"llama-3.1-70b-versatile",
+		"llama-3.1-8b-instant",
+		"mixtral-8x7b-32768",
+	},
+	"ollama": {
+		"llama3.1",
+		"mistral",
+		"codellama",
+	},
+}
+
+// GetDefaultModel returns the default model for a provider.
+// Returns empty string if no default is defined.
+func GetDefaultModel(providerID string) string {
+	if model, ok := defaultModels[providerID]; ok {
+		return model
+	}
+	return ""
+}
+
+// GetModelHints returns a list of suggested models for a provider.
+// Returns empty slice if no hints are defined.
+func GetModelHints(providerID string) []string {
+	if hints, ok := modelHints[providerID]; ok {
+		return hints
+	}
+	return nil
+}

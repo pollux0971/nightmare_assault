@@ -129,12 +129,12 @@ development_status:
   # Goal: 實作滑動窗口與 Token 優化
   # Priority: P0 (Must Have)
   # Stories: 5
-  epic-5: in-progress
+  epic-5: done
   5-1-context-window-structure: done
   5-2-sliding-window-mechanism: done
-  5-3-smart-summary-generation: review
-  5-4-token-counting-optimization: ready-for-dev
-  5-5-context-assembly-interface: ready-for-dev
+  5-3-smart-summary-generation: done
+  5-4-token-counting-optimization: done
+  5-5-context-assembly-interface: done
   epic-5-retrospective: optional
 
   # ============================================================================
@@ -148,15 +148,15 @@ development_status:
   # Goal: 實作 Narration/Seed/Choice/Judge/NPC Agent
   # Priority: P0 (Must Have)
   # Stories: 8
-  epic-6: backlog
-  6-1-base-agent-abstraction: backlog
-  6-2-narration-agent-skeleton-mode: backlog
-  6-3-narration-agent-content-mode: backlog
-  6-4-narration-agent-opening-ending: backlog
-  6-5-seed-agent-dual-mode: backlog
-  6-6-choice-agent-generation-risk: backlog
-  6-7-judge-agent-ruling-routing: backlog
-  6-8-npc-agent-generation-dialogue: backlog
+  epic-6: in-progress
+  6-1-base-agent-abstraction: completed
+  6-2-narration-agent-skeleton-mode: done
+  6-3-narration-agent-content-mode: in-progress
+  6-4-narration-agent-opening-ending: ready-for-dev
+  6-5-seed-agent-dual-mode: ready-for-dev
+  6-6-choice-agent-generation-risk: ready-for-dev
+  6-7-judge-agent-ruling-routing: ready-for-dev
+  6-8-npc-agent-generation-dialogue: ready-for-dev
   epic-6-retrospective: optional
 
   # ============================================================================

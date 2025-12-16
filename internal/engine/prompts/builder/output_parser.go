@@ -11,11 +11,29 @@ type SeedInfo struct {
 	Description string
 }
 
+// ChoiceContext represents the choice area context.
+type ChoiceContext struct {
+	Situation string   `json:"situation"`          // 1-2 sentences describing current situation
+	Question  string   `json:"question,omitempty"` // Optional guiding question
+	Options   []string `json:"options"`            // 2-3 choice options
+}
+
+// StateChanges represents HP/SAN changes.
+type StateChanges struct {
+	HP     int    `json:"hp,omitempty"`  // HP change (positive = gain, negative = loss)
+	SAN    int    `json:"san,omitempty"` // SAN change (positive = gain, negative = loss)
+	Reason string `json:"reason,omitempty"`
+}
+
 // StoryOutput represents the structured output from LLM.
 type StoryOutput struct {
-	Story   string     `json:"story"`
-	Choices []string   `json:"choices"`
-	Seeds   []SeedInfo `json:"seeds,omitempty"`
+	Story         string         `json:"story"`                    // Pure narrative content
+	ChoiceContext *ChoiceContext `json:"choice_context,omitempty"` // Choice context (situation + question + options)
+	Seeds         []SeedInfo     `json:"seeds,omitempty"`          // Hidden seeds for future plot
+	StateChanges  *StateChanges  `json:"state_changes,omitempty"`  // HP/SAN changes
+
+	// Legacy support - kept for backward compatibility with old format
+	Choices []string `json:"choices,omitempty"`
 }
 
 // DeathOutput represents the structured death narrative output from LLM.
@@ -45,6 +63,16 @@ func ParseStructuredOutput(content string) (*StoryOutput, error) {
 	err := json.Unmarshal([]byte(jsonContent), &output)
 	if err == nil && output.Story != "" {
 		// Successfully parsed JSON
+
+		// Backward compatibility: convert old format (choices array) to new format (choice_context)
+		if output.ChoiceContext == nil && len(output.Choices) > 0 {
+			output.ChoiceContext = &ChoiceContext{
+				Situation: "", // No situation in old format
+				Question:  "", // No question in old format
+				Options:   output.Choices,
+			}
+		}
+
 		return &output, nil
 	}
 
@@ -159,10 +187,21 @@ func parseLegacyFormat(content string) *StoryOutput {
 	// Parse choices
 	choices := parseChoicesFromText(content)
 
+	// Convert to new format with ChoiceContext
+	var choiceContext *ChoiceContext
+	if len(choices) > 0 {
+		choiceContext = &ChoiceContext{
+			Situation: "", // Legacy format doesn't have situation
+			Question:  "", // Legacy format doesn't have question
+			Options:   choices,
+		}
+	}
+
 	return &StoryOutput{
-		Story:   story,
-		Choices: choices,
-		Seeds:   seeds,
+		Story:         story,
+		ChoiceContext: choiceContext,
+		Seeds:         seeds,
+		Choices:       choices, // Keep for legacy compatibility
 	}
 }
 

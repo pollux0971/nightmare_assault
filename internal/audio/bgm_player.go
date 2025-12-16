@@ -70,10 +70,14 @@ type BGMScene string
 
 const (
 	BGMSceneExploration BGMScene = "exploration" // 探索場景（預設）
-	BGMSceneChase       BGMScene = "chase"       // 緊張/追逐場景
+	BGMSceneTension     BGMScene = "tension"     // 緊張場景
+	BGMSceneChase       BGMScene = "chase"       // 追逐/逃命場景
 	BGMSceneSafe        BGMScene = "safe"        // 安全區/休息場景
 	BGMSceneHorror      BGMScene = "horror"      // 恐怖揭露時刻
 	BGMSceneMystery     BGMScene = "mystery"     // 解謎場景
+	BGMSceneDream       BGMScene = "dream"       // 夢境/超現實場景
+	BGMSceneSanity      BGMScene = "sanity"      // 理智崩潰場景
+	BGMSceneRitual      BGMScene = "ritual"      // 儀式/邪教場景
 	BGMSceneDeath       BGMScene = "death"       // 死亡/結局場景
 )
 
@@ -101,8 +105,8 @@ type MoodType = engine.MoodType
 func NewBGMPlayer(ctx *oto.Context, cfg config.AudioConfig, audioDir string) *BGMPlayer {
 	return &BGMPlayer{
 		ctx:          ctx,
-		volume:       cfg.BGMVolume,
-		targetVolume: cfg.BGMVolume,
+		volume:       float64(cfg.BGMVolume),
+		targetVolume: float64(cfg.BGMVolume),
 		enabled:      cfg.BGMEnabled,
 		loopEnabled:  true, // Default to loop mode
 		currentMood:  engine.MoodExploration, // Default mood
@@ -527,14 +531,22 @@ func GetBGMFilename(scene BGMScene) string {
 	switch scene {
 	case BGMSceneExploration:
 		return "ambient_exploration.mp3"
+	case BGMSceneTension:
+		return "tension.mp3"
 	case BGMSceneChase:
-		return "tension_chase.mp3"
+		return "chase_escape.mp3"
 	case BGMSceneSafe:
 		return "safe_rest.mp3"
 	case BGMSceneHorror:
 		return "horror_reveal.mp3"
 	case BGMSceneMystery:
 		return "mystery_puzzle.mp3"
+	case BGMSceneDream:
+		return "dream_surreal.mp3"
+	case BGMSceneSanity:
+		return "sanity_collapse.mp3"
+	case BGMSceneRitual:
+		return "ritual_occult.mp3"
 	case BGMSceneDeath:
 		return "ending_death.mp3"
 	default:

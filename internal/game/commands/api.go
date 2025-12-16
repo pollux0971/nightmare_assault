@@ -53,32 +53,19 @@ func (c *APICommand) showStatus() CommandResult {
 
 	b.WriteString("📡 **API 狀態**\n\n")
 
-	// Smart Model
-	if c.config.API.Smart.ProviderID != "" {
-		info := api.GetProviderInfo(c.config.API.Smart.ProviderID)
+	// Current Provider
+	if c.config.API.Provider.ProviderID != "" {
+		info := api.GetProviderInfo(c.config.API.Provider.ProviderID)
 		if info != nil {
-			b.WriteString(fmt.Sprintf("**Smart Model**: ✓ %s", info.Name))
-			if c.config.API.Smart.Model != "" {
-				b.WriteString(fmt.Sprintf(" (%s)", c.config.API.Smart.Model))
+			b.WriteString(fmt.Sprintf("**當前供應商**: ✓ %s", info.Name))
+			if c.config.API.Provider.Model != "" {
+				b.WriteString(fmt.Sprintf(" (%s)", c.config.API.Provider.Model))
 			}
 			b.WriteString("\n")
+			b.WriteString(fmt.Sprintf("**Max Tokens**: %d\n", c.config.API.Provider.MaxTokens))
 		}
 	} else {
-		b.WriteString("**Smart Model**: ✗ 未設定\n")
-	}
-
-	// Fast Model
-	if c.config.API.Fast.ProviderID != "" {
-		info := api.GetProviderInfo(c.config.API.Fast.ProviderID)
-		if info != nil {
-			b.WriteString(fmt.Sprintf("**Fast Model**: ✓ %s", info.Name))
-			if c.config.API.Fast.Model != "" {
-				b.WriteString(fmt.Sprintf(" (%s)", c.config.API.Fast.Model))
-			}
-			b.WriteString("\n")
-		}
-	} else {
-		b.WriteString("**Fast Model**: ✗ 未設定\n")
+		b.WriteString("**當前供應商**: ✗ 未設定\n")
 	}
 
 	// Configured API keys
@@ -90,7 +77,11 @@ func (c *APICommand) showStatus() CommandResult {
 			if info != nil {
 				name = info.Name
 			}
-			b.WriteString(fmt.Sprintf("  • %s\n", name))
+			marker := "  "
+			if providerID == c.config.API.Provider.ProviderID {
+				marker = "✓ "
+			}
+			b.WriteString(fmt.Sprintf("%s• %s\n", marker, name))
 		}
 	}
 
@@ -123,7 +114,7 @@ func (c *APICommand) listProviders() CommandResult {
 		b.WriteString(fmt.Sprintf("**%s**\n", cat.title))
 		for _, p := range providers {
 			marker := "  "
-			if c.config.API.Smart.ProviderID == p.ID {
+			if c.config.API.Provider.ProviderID == p.ID {
 				marker = "✓ "
 			}
 			hasKey := ""
@@ -159,8 +150,12 @@ func (c *APICommand) switchProvider(providerID string) CommandResult {
 	}
 
 	// Update config
-	c.config.API.Smart.ProviderID = providerID
-	c.config.API.Smart.Model = "" // Reset to default
+	c.config.API.Provider.ProviderID = providerID
+	// Set default model if current model is empty
+	if c.config.API.Provider.Model == "" {
+		c.config.API.Provider.Model = api.GetDefaultModel(providerID)
+	}
+	// Keep existing MaxTokens (user can modify in settings)
 
 	if err := c.config.Save(); err != nil {
 		return CommandResult{
@@ -169,22 +164,27 @@ func (c *APICommand) switchProvider(providerID string) CommandResult {
 		}
 	}
 
+	modelInfo := ""
+	if c.config.API.Provider.Model != "" {
+		modelInfo = fmt.Sprintf("\n模型: %s", c.config.API.Provider.Model)
+	}
+
 	return CommandResult{
 		Success:     true,
-		Message:     fmt.Sprintf("✓ 已切換至 %s", info.Name),
+		Message:     fmt.Sprintf("✓ 已切換至 %s%s\nMax Tokens: %d", info.Name, modelInfo, c.config.API.Provider.MaxTokens),
 		NeedsRedraw: true,
 	}
 }
 
 func (c *APICommand) testConnection() CommandResult {
-	if c.config.API.Smart.ProviderID == "" {
+	if c.config.API.Provider.ProviderID == "" {
 		return CommandResult{
 			Success: false,
 			Message: "❌ 尚未設定 API 供應商",
 		}
 	}
 
-	apiKey, err := c.config.DecryptAPIKey(c.config.API.Smart.ProviderID)
+	apiKey, err := c.config.DecryptAPIKey(c.config.API.Provider.ProviderID)
 	if err != nil || apiKey == "" {
 		return CommandResult{
 			Success: false,

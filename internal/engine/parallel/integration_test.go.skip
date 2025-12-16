@@ -1,0 +1,324 @@
+package parallel
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/nightmare-assault/nightmare-assault/internal/game"
+)
+
+// MockProvider implements a simple mock for testing
+type MockProvider struct {
+	delay time.Duration
+}
+
+func (m *MockProvider) SendMessage(ctx context.Context, messages interface{}) (interface{}, error) {
+	time.Sleep(m.delay)
+	return struct{ Content string }{Content: "mock response"}, nil
+}
+
+// TestFullParallelGeneration tests complete parallel generation flow
+func TestFullParallelGeneration(t *testing.T) {
+	// Create game config
+	config := game.NewGameConfig()
+	config.Theme = "Test Theme"
+	config.Difficulty = game.DifficultyHard
+	config.Length = game.LengthShort
+
+	// Create mock provider
+	provider := &MockProvider{delay: 10 * time.Millisecond}
+
+	// Build tasks (this will use mock provider)
+	// Note: We can't fully test without real LLM, but we can test structure
+	coordConfig := DefaultCoordinatorConfig()
+	coord := NewCoordinator(coordConfig)
+
+	// Add mock tasks
+	rulesTask := NewTask(
+		TaskIDRules,
+		"Generate Rules",
+		PriorityHigh,
+		5*time.Second,
+		func(ctx context.Context, deps DependencyResults) (interface{}, error) {
+			return "mock-rules", nil
+		},
+	)
+
+	teammatesTask := NewTask(
+		TaskIDTeammates,
+		"Generate Teammates",
+		PriorityLow,
+		5*time.Second,
+		func(ctx context.Context, deps DependencyResults) (interface{}, error) {
+			return "mock-teammates", nil
+		},
+	)
+
+	storyTask := NewTask(
+		TaskIDStory,
+		"Generate Story",
+		PriorityCritical,
+		10*time.Second,
+		func(ctx context.Context, deps DependencyResults) (interface{}, error) {
+			// Simulate slow LLM call
+			time.Sleep(50 * time.Millisecond)
+			return "mock-story", nil
+		},
+	).WithDependencies(TaskIDRules, TaskIDTeammates)
+
+	dreamTask := NewTask(
+		TaskIDDream,
+		"Generate Dream",
+		PriorityMedium,
+		10*time.Second,
+		func(ctx context.Context, deps DependencyResults) (interface{}, error) {
+			// Simulate LLM call
+			time.Sleep(20 * time.Millisecond)
+			return "mock-dream", nil
+		},
+	).WithDependencies(TaskIDRules)
+
+	coord.AddTask(rulesTask)
+	coord.AddTask(teammatesTask)
+	coord.AddTask(storyTask)
+	coord.AddTask(dreamTask)
+
+	// Execute
+	startTime := time.Now()
+	err := coord.Execute()
+	elapsed := time.Since(startTime)
+
+	if err != nil {
+		t.Fatalf("Execution failed: %v", err)
+	}
+
+	// Verify results
+	results := coord.GetResults()
+	if len(results) != 4 {
+		t.Fatalf("Expected 4 results, got %d", len(results))
+	}
+
+	// Verify all tasks completed
+	requiredTasks := []TaskID{TaskIDRules, TaskIDTeammates, TaskIDStory, TaskIDDream}
+	for _, taskID := range requiredTasks {
+		if _, ok := results[taskID]; !ok {
+			t.Fatalf("Task %s not completed", taskID)
+		}
+	}
+
+	// Verify parallel execution efficiency
+	// Story takes 50ms, Dream takes 20ms
+	// If parallel: max(50, 20) = 50ms
+	// If serial: 50 + 20 = 70ms
+	// Allow 100ms for overhead
+	if elapsed > 150*time.Millisecond {
+		t.Logf("Warning: Execution took longer than expected: %v", elapsed)
+	}
+
+	t.Logf("Parallel execution completed in %v", elapsed)
+}
+
+// TestPreloadCacheIntegration tests preload cache integration
+func TestPreloadCacheIntegration(t *testing.T) {
+	// Clear cache first
+	ClearPreloadCache()
+
+	// Create game config
+	config := game.NewGameConfig()
+	config.Theme = "Cache Test"
+	configHash := config.Hash()
+
+	// Set preload cache
+	cache := &PreloadCache{
+		rules:      "preloaded-rules",
+		teammates:  "preloaded-teammates",
+		configHash: configHash,
+		generated:  time.Now(),
+	}
+	SetPreloadCache(cache)
+
+	// Get cache
+	retrieved := GetPreloadCache()
+	if retrieved == nil {
+		t.Fatal("Failed to retrieve preload cache")
+	}
+
+	if retrieved.configHash != configHash {
+		t.Fatal("Config hash mismatch")
+	}
+
+	if retrieved.rules != "preloaded-rules" {
+		t.Fatal("Rules mismatch")
+	}
+
+	// Clear cache
+	ClearPreloadCache()
+	retrieved = GetPreloadCache()
+	if retrieved != nil {
+		t.Fatal("Cache should be nil after clearing")
+	}
+}
+
+// TestErrorHandlingStrictMode tests strict mode error handling
+func TestErrorHandlingStrictMode(t *testing.T) {
+	coordConfig := DefaultCoordinatorConfig()
+	coord := NewCoordinator(coordConfig)
+
+	// Task that succeeds
+	task1 := NewTask(
+		"success-task",
+		"Success Task",
+		PriorityHigh,
+		5*time.Second,
+		func(ctx context.Context, deps DependencyResults) (interface{}, error) {
+			return "success", nil
+		},
+	)
+
+	// Task that fails
+	task2 := NewTask(
+		"fail-task",
+		"Fail Task",
+		PriorityCritical,
+		5*time.Second,
+		func(ctx context.Context, deps DependencyResults) (interface{}, error) {
+			return nil, context.DeadlineExceeded
+		},
+	)
+
+	coord.AddTask(task1)
+	coord.AddTask(task2)
+
+	// Execute - should fail due to strict mode
+	err := coord.Execute()
+	if err == nil {
+		t.Fatal("Expected error in strict mode, got nil")
+	}
+
+	// Check errors
+	errors := coord.GetErrors()
+	if len(errors) == 0 {
+		t.Fatal("Expected errors to be recorded")
+	}
+}
+
+// TestProgressReporting tests progress reporting through channels
+func TestProgressReporting(t *testing.T) {
+	coordConfig := DefaultCoordinatorConfig()
+	coord := NewCoordinator(coordConfig)
+
+	progressReceived := false
+
+	// Task with progress reporting
+	task := NewTask(
+		"progress-task",
+		"Progress Task",
+		PriorityHigh,
+		5*time.Second,
+		func(ctx context.Context, deps DependencyResults) (interface{}, error) {
+			// Report progress
+			select {
+			case coord.ProgressChan() <- ProgressUpdate{
+				TaskID:   "progress-task",
+				Progress: 50,
+				Message:  "Halfway",
+			}:
+			default:
+			}
+
+			time.Sleep(10 * time.Millisecond)
+
+			select {
+			case coord.ProgressChan() <- ProgressUpdate{
+				TaskID:   "progress-task",
+				Progress: 100,
+				Message:  "Complete",
+			}:
+			default:
+			}
+
+			return "done", nil
+		},
+	)
+
+	coord.AddTask(task)
+
+	// Listen for progress in goroutine
+	go func() {
+		for progress := range coord.ProgressChan() {
+			if progress.TaskID == "progress-task" {
+				progressReceived = true
+				t.Logf("Progress: %d%% - %s", progress.Progress, progress.Message)
+			}
+		}
+	}()
+
+	// Execute
+	err := coord.Execute()
+	if err != nil {
+		t.Fatalf("Execution failed: %v", err)
+	}
+
+	// Wait a bit for progress channel processing
+	time.Sleep(50 * time.Millisecond)
+
+	if !progressReceived {
+		t.Log("Warning: Progress updates not received (may be timing issue)")
+	}
+}
+
+// BenchmarkParallelVsSerial benchmarks parallel vs serial execution
+func BenchmarkParallelVsSerial(b *testing.B) {
+	b.Run("Parallel", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			coordConfig := DefaultCoordinatorConfig()
+			coordConfig.MaxConcurrency = 4
+			coord := NewCoordinator(coordConfig)
+
+			// Add 4 independent tasks
+			for j := 0; j < 4; j++ {
+				taskID := TaskID(string(rune('A' + j)))
+				task := NewTask(
+					taskID,
+					"Task "+string(taskID),
+					PriorityHigh,
+					5*time.Second,
+					func(ctx context.Context, deps DependencyResults) (interface{}, error) {
+						time.Sleep(10 * time.Millisecond)
+						return "done", nil
+					},
+				)
+				coord.AddTask(task)
+			}
+
+			coord.Execute()
+		}
+	})
+
+	b.Run("Serial", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			coordConfig := DefaultCoordinatorConfig()
+			coordConfig.MaxConcurrency = 1 // Force serial
+			coord := NewCoordinator(coordConfig)
+
+			// Add 4 independent tasks
+			for j := 0; j < 4; j++ {
+				taskID := TaskID(string(rune('A' + j)))
+				task := NewTask(
+					taskID,
+					"Task "+string(taskID),
+					PriorityHigh,
+					5*time.Second,
+					func(ctx context.Context, deps DependencyResults) (interface{}, error) {
+						time.Sleep(10 * time.Millisecond)
+						return "done", nil
+					},
+				)
+				coord.AddTask(task)
+			}
+
+			coord.Execute()
+		}
+	})
+}

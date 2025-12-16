@@ -14,6 +14,8 @@ func MoodToBGMScene(mood engine.MoodType) BGMScene {
 	case engine.MoodExploration:
 		return BGMSceneExploration
 	case engine.MoodTension:
+		return BGMSceneTension
+	case engine.MoodChase:
 		return BGMSceneChase
 	case engine.MoodSafe:
 		return BGMSceneSafe
@@ -21,6 +23,12 @@ func MoodToBGMScene(mood engine.MoodType) BGMScene {
 		return BGMSceneHorror
 	case engine.MoodMystery:
 		return BGMSceneMystery
+	case engine.MoodDream:
+		return BGMSceneDream
+	case engine.MoodSanity:
+		return BGMSceneSanity
+	case engine.MoodRitual:
+		return BGMSceneRitual
 	case engine.MoodEnding:
 		return BGMSceneDeath
 	default:

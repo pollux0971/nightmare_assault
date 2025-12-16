@@ -155,7 +155,7 @@ func (c *BGMCommand) setVolume(volumeStr string) (string, error) {
 	player.SetVolume(volume)
 
 	// Update config
-	c.config.Audio.BGMVolume = volume
+	c.config.Audio.BGMVolume = volumeInt
 	if err := c.config.Save(); err != nil {
 		return "", fmt.Errorf("failed to save config: %w", err)
 	}

@@ -2,8 +2,11 @@
 package game
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -153,6 +156,7 @@ func (l GameLength) EventCount() int {
 // GameConfig represents the configuration for a new game.
 type GameConfig struct {
 	Theme      string          `json:"theme"`
+	Model      string          `json:"model"`       // LLM model name
 	Difficulty DifficultyLevel `json:"difficulty"`
 	Length     GameLength      `json:"length"`
 	AdultMode  bool            `json:"adult_mode"`
@@ -195,6 +199,7 @@ var dangerousPatterns = []string{
 func NewGameConfig() *GameConfig {
 	return &GameConfig{
 		Theme:      "",
+		Model:      "openai/gpt-4-turbo", // Default OpenRouter model
 		Difficulty: DifficultyHard,
 		Length:     LengthMedium,
 		AdultMode:  false,
@@ -405,4 +410,18 @@ func (b *GameConfigBuilder) Build() (*GameConfig, error) {
 // Errors returns all accumulated errors.
 func (b *GameConfigBuilder) Errors() []error {
 	return b.errors
+}
+
+// Hash returns a hash of the config for preload cache validation
+// Only includes fields that affect generation (not timestamp)
+func (c *GameConfig) Hash() string {
+	data := fmt.Sprintf("%s_%s_%s_%s_%v",
+		c.Theme,
+		c.Model,
+		c.Difficulty,
+		c.Length,
+		c.AdultMode,
+	)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:8])
 }

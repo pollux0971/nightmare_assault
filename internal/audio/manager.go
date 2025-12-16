@@ -53,10 +53,14 @@ func (m *AudioManager) Initialize() error {
 		return fmt.Errorf("audio files not complete, run 'nightmare --download-audio' or continue in silent mode")
 	}
 
-	// Initialize oto context
+	// Use platform-specific settings from config
+	sampleRate := m.config.PlatformSettings.SampleRate
+	channelCount := m.config.PlatformSettings.ChannelCount
+
+	// Initialize oto context with platform settings
 	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
-		SampleRate:   48000,
-		ChannelCount: 2,
+		SampleRate:   sampleRate,
+		ChannelCount: channelCount,
 		Format:       oto.FormatSignedInt16LE,
 	})
 	if err != nil {
@@ -76,7 +80,8 @@ func (m *AudioManager) Initialize() error {
 		// Initialize SFX player
 		m.sfxPlayer = NewSFXPlayer(ctx, m.config, m.audioDir)
 
-		log.Println("[INFO] Audio system initialized successfully")
+		log.Printf("[INFO] Audio system initialized (platform: %s, sample_rate: %d)\n",
+			m.config.Platform, sampleRate)
 		return nil
 	case <-time.After(100 * time.Millisecond):
 		m.handleAudioError(fmt.Errorf("audio initialization timeout"))
@@ -94,7 +99,7 @@ func (m *AudioManager) InitializeAsync() {
 }
 
 // checkAudioFiles checks if the required audio files exist in ~/.nightmare/audio/.
-// Returns true if at least the basic structure exists.
+// Returns true if at least BGM files are present (SFX is optional).
 func (m *AudioManager) checkAudioFiles() bool {
 	// Check if audio directory exists
 	if _, err := os.Stat(m.audioDir); os.IsNotExist(err) {
@@ -107,19 +112,27 @@ func (m *AudioManager) checkAudioFiles() bool {
 		return false
 	}
 
-	// Check for SFX directory
-	sfxDir := filepath.Join(m.audioDir, "sfx")
-	if _, err := os.Stat(sfxDir); os.IsNotExist(err) {
+	// Count BGM files (at least 6 required)
+	bgmFiles, _ := filepath.Glob(filepath.Join(bgmDir, "*"))
+
+	if len(bgmFiles) < 6 {
+		log.Printf("[WARN] Insufficient BGM files: %d (expected 6+)\n", len(bgmFiles))
 		return false
 	}
 
-	// Count files (at least 6 BGM + 10 SFX = 16 files)
-	bgmFiles, _ := filepath.Glob(filepath.Join(bgmDir, "*"))
-	sfxFiles, _ := filepath.Glob(filepath.Join(sfxDir, "*"))
+	// Check for SFX directory (optional)
+	sfxDir := filepath.Join(m.audioDir, "sfx")
+	if _, err := os.Stat(sfxDir); os.IsNotExist(err) {
+		log.Printf("[INFO] SFX directory not found, continuing with BGM only\n")
+		return true
+	}
 
-	if len(bgmFiles) < 6 || len(sfxFiles) < 8 {
-		log.Printf("[WARN] Incomplete audio files: %d BGM, %d SFX (expected 6+ BGM, 8+ SFX)\n", len(bgmFiles), len(sfxFiles))
-		return false
+	// Count SFX files (optional, just log if insufficient)
+	sfxFiles, _ := filepath.Glob(filepath.Join(sfxDir, "*"))
+	if len(sfxFiles) < 8 {
+		log.Printf("[INFO] SFX files: %d (expected 8+, continuing with BGM only)\n", len(sfxFiles))
+	} else {
+		log.Printf("[INFO] Audio files complete: %d BGM, %d SFX\n", len(bgmFiles), len(sfxFiles))
 	}
 
 	return true

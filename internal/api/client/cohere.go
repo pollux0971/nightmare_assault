@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // CohereClient implements the Provider interface for Cohere's API.
@@ -47,7 +46,7 @@ func NewCohereClient(cfg CohereConfig) *CohereClient {
 	return &CohereClient{
 		providerID: cfg.ProviderID, apiKey: cfg.APIKey, baseURL: baseURL,
 		model: model, maxTokens: maxTokens,
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		httpClient: &http.Client{Timeout: 0}, // No timeout - let slow models complete
 	}
 }
 

@@ -13,8 +13,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Expected version 1.0, got %s", cfg.Version)
 	}
 
-	if cfg.Language != "zh-TW" {
-		t.Errorf("Expected language zh-TW, got %s", cfg.Language)
+	if cfg.Language != "en-US" {
+		t.Errorf("Expected language en-US, got %s", cfg.Language)
 	}
 
 	if cfg.API.APIKeys == nil {
@@ -23,6 +23,10 @@ func TestDefaultConfig(t *testing.T) {
 
 	if cfg.API.LastTested == nil {
 		t.Error("Expected LastTested map to be initialized")
+	}
+
+	if cfg.API.Provider.MaxTokens != 100000 {
+		t.Errorf("Expected MaxTokens 100000, got %d", cfg.API.Provider.MaxTokens)
 	}
 }
 
@@ -35,8 +39,8 @@ func TestConfigSaveLoad(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Language = "en"
 	cfg.Theme = "dark"
-	cfg.API.Smart.ProviderID = "openai"
-	cfg.API.Smart.Model = "gpt-4o"
+	cfg.API.Provider.ProviderID = "openai"
+	cfg.API.Provider.Model = "gpt-4o"
 
 	if err := cfg.SaveToPath(configPath); err != nil {
 		t.Fatalf("Failed to save config: %v", err)
@@ -56,8 +60,8 @@ func TestConfigSaveLoad(t *testing.T) {
 		t.Errorf("Expected theme dark, got %s", loaded.Theme)
 	}
 
-	if loaded.API.Smart.ProviderID != "openai" {
-		t.Errorf("Expected provider openai, got %s", loaded.API.Smart.ProviderID)
+	if loaded.API.Provider.ProviderID != "openai" {
+		t.Errorf("Expected provider openai, got %s", loaded.API.Provider.ProviderID)
 	}
 }
 
@@ -80,10 +84,10 @@ func TestIsConfigured(t *testing.T) {
 		t.Error("Expected unconfigured config")
 	}
 
-	cfg.API.Smart.ProviderID = "openai"
+	cfg.API.Provider.ProviderID = "openai"
 
 	if !cfg.IsConfigured() {
-		t.Error("Expected configured config after setting smart provider")
+		t.Error("Expected configured config after setting provider")
 	}
 }
 
@@ -202,5 +206,78 @@ func TestConfigPath(t *testing.T) {
 
 	if path != expected {
 		t.Errorf("Expected %s, got %s", expected, path)
+	}
+}
+
+func TestMigrateToSingleProvider(t *testing.T) {
+	cfg := DefaultConfig()
+	smartSettings := ProviderSettings{
+		ProviderID: "openai",
+		Model:      "gpt-4o",
+		MaxTokens:  4096,
+	}
+	cfg.API.Smart = &smartSettings
+
+	migrated := cfg.MigrateToSingleProvider()
+	if !migrated {
+		t.Error("Expected migration to occur")
+	}
+
+	if cfg.API.Provider.ProviderID != "openai" {
+		t.Errorf("Expected provider openai, got %s", cfg.API.Provider.ProviderID)
+	}
+
+	if cfg.API.Provider.MaxTokens != 100000 {
+		t.Errorf("Expected MaxTokens 100000, got %d", cfg.API.Provider.MaxTokens)
+	}
+
+	if cfg.API.Smart != nil {
+		t.Error("Expected Smart to be nil after migration")
+	}
+
+	if cfg.API.Fast != nil {
+		t.Error("Expected Fast to be nil after migration")
+	}
+}
+
+func TestMigrationPrefersSmart(t *testing.T) {
+	cfg := DefaultConfig()
+	smartSettings := ProviderSettings{ProviderID: "openai"}
+	fastSettings := ProviderSettings{ProviderID: "anthropic"}
+	cfg.API.Smart = &smartSettings
+	cfg.API.Fast = &fastSettings
+
+	cfg.MigrateToSingleProvider()
+
+	if cfg.API.Provider.ProviderID != "openai" {
+		t.Error("Expected Smart to be preferred over Fast")
+	}
+}
+
+func TestMigrationAlreadyMigrated(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.API.Provider.ProviderID = "openai"
+
+	migrated := cfg.MigrateToSingleProvider()
+	if migrated {
+		t.Error("Expected no migration for already migrated config")
+	}
+}
+
+func TestMigrationEmptyOldConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	smartSettings := ProviderSettings{}
+	fastSettings := ProviderSettings{}
+	cfg.API.Smart = &smartSettings
+	cfg.API.Fast = &fastSettings
+
+	cfg.MigrateToSingleProvider()
+
+	if cfg.API.Provider.ProviderID != "" {
+		t.Error("Expected empty Provider after migrating empty old config")
+	}
+
+	if cfg.API.Provider.MaxTokens != 100000 {
+		t.Errorf("Expected default MaxTokens 100000, got %d", cfg.API.Provider.MaxTokens)
 	}
 }

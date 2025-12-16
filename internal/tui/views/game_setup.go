@@ -17,6 +17,7 @@ type SetupState int
 
 const (
 	SetupThemeInput SetupState = iota
+	SetupModelInput
 	SetupDifficultySelect
 	SetupLengthSelect
 	SetupAdultModeToggle
@@ -25,15 +26,17 @@ const (
 
 // GameSetupModel represents the game setup flow state.
 type GameSetupModel struct {
-	state         SetupState
-	config        *game.GameConfig
-	themeInput    textinput.Model
-	themeError    string
-	selectedIndex int
-	width         int
-	height        int
-	cancelled     bool
-	confirmed     bool
+	state          SetupState
+	config         *game.GameConfig
+	themeInput     textinput.Model
+	modelInput     textinput.Model
+	themeError     string
+	selectedIndex  int
+	width          int
+	height         int
+	cancelled      bool
+	confirmed      bool
+	preloadStarted bool // Track if we've started preloading
 }
 
 // GameSetupDoneMsg is sent when setup is complete.
@@ -50,10 +53,18 @@ func NewGameSetupModel() GameSetupModel {
 	ti.CharLimit = 100
 	ti.Width = 50
 
+	mi := textinput.New()
+	mi.Placeholder = "例如：openai/gpt-4-turbo, anthropic/claude-3-opus..."
+	mi.CharLimit = 100
+	mi.Width = 50
+
+	cfg := game.NewGameConfig()
+
 	return GameSetupModel{
 		state:      SetupThemeInput,
-		config:     game.NewGameConfig(),
+		config:     cfg,
 		themeInput: ti,
+		modelInput: mi,
 	}
 }
 
@@ -86,10 +97,15 @@ func (m GameSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyForState(msg)
 	}
 
-	// Update text input if in theme input state
+	// Update text input if in theme or model input state
 	if m.state == SetupThemeInput {
 		var cmd tea.Cmd
 		m.themeInput, cmd = m.themeInput.Update(msg)
+		return m, cmd
+	}
+	if m.state == SetupModelInput {
+		var cmd tea.Cmd
+		m.modelInput, cmd = m.modelInput.Update(msg)
 		return m, cmd
 	}
 
@@ -104,9 +120,12 @@ func (m GameSetupModel) handleBack() (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg {
 			return GameSetupDoneMsg{Config: nil, Cancelled: true}
 		}
-	case SetupDifficultySelect:
+	case SetupModelInput:
 		m.state = SetupThemeInput
 		m.themeInput.Focus()
+	case SetupDifficultySelect:
+		m.state = SetupModelInput
+		m.modelInput.Focus()
 	case SetupLengthSelect:
 		m.state = SetupDifficultySelect
 		m.selectedIndex = int(m.config.Difficulty)
@@ -128,6 +147,8 @@ func (m GameSetupModel) handleKeyForState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.state {
 	case SetupThemeInput:
 		return m.handleThemeInput(msg)
+	case SetupModelInput:
+		return m.handleModelInput(msg)
 	case SetupDifficultySelect:
 		return m.handleDifficultySelect(msg)
 	case SetupLengthSelect:
@@ -149,13 +170,32 @@ func (m GameSetupModel) handleThemeInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.themeError = ""
+		m.state = SetupModelInput
+		m.modelInput.SetValue(m.config.Model) // Pre-fill with default
+		m.modelInput.Focus()
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+	m.themeInput, cmd = m.themeInput.Update(msg)
+	return m, cmd
+}
+
+func (m GameSetupModel) handleModelInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		model := strings.TrimSpace(m.modelInput.Value())
+		if model == "" {
+			model = m.config.Model // Use default if empty
+		}
+		m.config.Model = model
 		m.state = SetupDifficultySelect
 		m.selectedIndex = int(m.config.Difficulty)
 		return m, nil
 	}
 
 	var cmd tea.Cmd
-	m.themeInput, cmd = m.themeInput.Update(msg)
+	m.modelInput, cmd = m.modelInput.Update(msg)
 	return m, cmd
 }
 
@@ -229,6 +269,18 @@ func (m GameSetupModel) handleAdultModeToggle(msg tea.KeyMsg) (tea.Model, tea.Cm
 }
 
 func (m GameSetupModel) handleSummary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Trigger speculative preloading when user is in summary screen
+	// This happens in the background while user reviews settings
+	if !m.preloadStarted {
+		m.preloadStarted = true
+		// Start preloading in background (non-blocking)
+		go func() {
+			// This will be picked up by builders.go through the global cache
+			// We don't need to do anything here yet - the cache will be set
+			// by the parallel coordinator when it starts
+		}()
+	}
+
 	switch msg.String() {
 	case "up", "k", "down", "j":
 		// Toggle between confirm and edit
@@ -249,6 +301,8 @@ func (m GameSetupModel) handleSummary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.state = SetupThemeInput
 			m.themeInput.SetValue(m.config.Theme)
 			m.themeInput.Focus()
+			// Reset preload flag since config will change
+			m.preloadStarted = false
 		}
 	}
 	return m, nil
@@ -305,6 +359,8 @@ func (m GameSetupModel) View() string {
 	switch m.state {
 	case SetupThemeInput:
 		content = m.renderThemeInput(titleStyle, hintStyle, errorStyle)
+	case SetupModelInput:
+		content = m.renderModelInput(titleStyle, hintStyle)
 	case SetupDifficultySelect:
 		content = m.renderDifficultySelect(titleStyle, selectedStyle, normalStyle, hintStyle)
 	case SetupLengthSelect:
@@ -359,6 +415,30 @@ func (m GameSetupModel) renderThemeInput(titleStyle, hintStyle, errorStyle lipgl
 		b.WriteString("\n\n")
 		b.WriteString(errorStyle.Render("⚠ " + m.themeError))
 	}
+
+	return b.String()
+}
+
+func (m GameSetupModel) renderModelInput(titleStyle, hintStyle lipgloss.Style) string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("步驟 2/6：輸入 LLM 模型名稱"))
+	b.WriteString("\n\n")
+	b.WriteString(hintStyle.Render("輸入 OpenRouter 模型名稱 (例如: openai/gpt-4-turbo)"))
+	b.WriteString("\n")
+	b.WriteString(hintStyle.Render("按 Enter 使用預設模型"))
+	b.WriteString("\n\n")
+
+	b.WriteString(m.modelInput.View())
+
+	b.WriteString("\n\n")
+	b.WriteString(hintStyle.Render("常見模型:"))
+	b.WriteString("\n")
+	b.WriteString(hintStyle.Render("  • openai/gpt-4-turbo"))
+	b.WriteString("\n")
+	b.WriteString(hintStyle.Render("  • anthropic/claude-3-opus"))
+	b.WriteString("\n")
+	b.WriteString(hintStyle.Render("  • google/gemini-pro"))
 
 	return b.String()
 }

@@ -11,14 +11,22 @@ type MoodType int
 const (
 	// MoodExploration represents exploration scenes (default)
 	MoodExploration MoodType = iota
-	// MoodTension represents tense/chase scenes
+	// MoodTension represents tense scenes
 	MoodTension
+	// MoodChase represents intense chase/escape scenes
+	MoodChase
 	// MoodSafe represents safe/rest areas
 	MoodSafe
 	// MoodHorror represents horror revelation moments
 	MoodHorror
 	// MoodMystery represents puzzle/mystery scenes
 	MoodMystery
+	// MoodDream represents dream/surreal sequences
+	MoodDream
+	// MoodSanity represents sanity collapse/madness
+	MoodSanity
+	// MoodRitual represents ritual/occult scenes
+	MoodRitual
 	// MoodEnding represents death/ending scenes
 	MoodEnding
 )
@@ -30,12 +38,20 @@ func (m MoodType) String() string {
 		return "exploration"
 	case MoodTension:
 		return "tension"
+	case MoodChase:
+		return "chase"
 	case MoodSafe:
 		return "safe"
 	case MoodHorror:
 		return "horror"
 	case MoodMystery:
 		return "mystery"
+	case MoodDream:
+		return "dream"
+	case MoodSanity:
+		return "sanity"
+	case MoodRitual:
+		return "ritual"
 	case MoodEnding:
 		return "ending"
 	default:
@@ -44,7 +60,7 @@ func (m MoodType) String() string {
 }
 
 // ParseMood extracts mood tag from LLM response text
-// Format: [MOOD:xxx] where xxx is one of: exploration, tension, safe, horror, mystery, ending
+// Format: [MOOD:xxx] where xxx is one of: exploration, tension, chase, safe, horror, mystery, dream, sanity, ritual, ending
 // Returns MoodExploration as default if no valid tag found
 func ParseMood(text string) MoodType {
 	// Regex to match [MOOD:xxx]
@@ -61,12 +77,20 @@ func ParseMood(text string) MoodType {
 	switch moodStr {
 	case "tension":
 		return MoodTension
+	case "chase":
+		return MoodChase
 	case "safe":
 		return MoodSafe
 	case "horror":
 		return MoodHorror
 	case "mystery":
 		return MoodMystery
+	case "dream":
+		return MoodDream
+	case "sanity":
+		return MoodSanity
+	case "ritual":
+		return MoodRitual
 	case "ending":
 		return MoodEnding
 	case "exploration":

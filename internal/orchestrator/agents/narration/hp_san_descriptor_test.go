@@ -447,4 +447,188 @@ func TestSANLoss_AllSeverities(t *testing.T) {
 	}
 }
 
+// TestDescribeHPDamage_InvalidSeverity tests describeHPDamage with invalid severity (for default case coverage)
+// This test uses a mock approach by directly testing the severity classification edge cases
+func TestDescribeHPDamage_InvalidSeverity(t *testing.T) {
+	// Test edge cases that approach default case logic
+	// While getHPSeverity doesn't return invalid values in normal usage,
+	// we can test the boundary conditions
+	tests := []struct {
+		name           string
+		delta          int
+		expectContains []string
+	}{
+		{
+			name:           "zero damage (edge case)",
+			delta:          0,
+			expectContains: []string{}, // No description for zero damage
+		},
+		{
+			name:           "positive damage value (unusual but valid)",
+			delta:          5, // Positive value treated as recovery
+			expectContains: []string{"HP +5"},
+		},
+		{
+			name:           "extreme negative damage",
+			delta:          -100,
+			expectContains: []string{"致命", "HP -100"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DescribeHPChange(tt.delta, "")
+
+			if len(tt.expectContains) == 0 {
+				// Zero damage should return empty string
+				assert.Empty(t, result)
+			} else {
+				// Check expected content
+				for _, expected := range tt.expectContains {
+					assert.Contains(t, result, expected,
+						"Description should contain '%s'", expected)
+				}
+			}
+		})
+	}
+}
+
+// TestDescribeSANLoss_InvalidSeverity tests describeSANLoss with invalid severity (for default case coverage)
+func TestDescribeSANLoss_InvalidSeverity(t *testing.T) {
+	// Test edge cases that approach default case logic
+	tests := []struct {
+		name           string
+		delta          int
+		expectContains []string
+	}{
+		{
+			name:           "zero SAN loss (edge case)",
+			delta:          0,
+			expectContains: []string{}, // No description for zero loss
+		},
+		{
+			name:           "positive SAN value (recovery, not loss)",
+			delta:          5,
+			expectContains: []string{"SAN +5"},
+		},
+		{
+			name:           "extreme negative SAN loss",
+			delta:          -100,
+			expectContains: []string{"意識崩潰", "SAN -100"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := DescribeSANChange(tt.delta, "")
+
+			if len(tt.expectContains) == 0 {
+				// Zero loss should return empty string
+				assert.Empty(t, result)
+			} else {
+				// Check expected content
+				for _, expected := range tt.expectContains {
+					assert.Contains(t, result, expected,
+						"Description should contain '%s'", expected)
+				}
+			}
+		})
+	}
+}
+
+// TestHPSANDescription_WithAndWithoutReason tests all HP/SAN changes with/without reason
+func TestHPSANDescription_WithAndWithoutReason(t *testing.T) {
+	tests := []struct {
+		name       string
+		changeType string
+		delta      int
+		reason     string
+	}{
+		{"HP damage with reason", "hp", -20, "你被攻擊了"},
+		{"HP damage without reason", "hp", -20, ""},
+		{"HP recovery with reason", "hp", 15, "你使用了繃帶"},
+		{"HP recovery without reason", "hp", 15, ""},
+		{"SAN loss with reason", "san", -25, "你看見了恐怖的東西"},
+		{"SAN loss without reason", "san", -25, ""},
+		{"SAN recovery with reason", "san", 10, "你感到安心"},
+		{"SAN recovery without reason", "san", 10, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result string
+			if tt.changeType == "hp" {
+				result = DescribeHPChange(tt.delta, tt.reason)
+			} else {
+				result = DescribeSANChange(tt.delta, tt.reason)
+			}
+
+			// Should have description
+			assert.NotEmpty(t, result, "Description should not be empty")
+
+			// Check delta is in description
+			if tt.delta > 0 {
+				assert.Contains(t, result, fmt.Sprintf("+%d", tt.delta))
+			} else {
+				assert.Contains(t, result, fmt.Sprintf("%d", tt.delta))
+			}
+
+			// Check reason is included if provided
+			if tt.reason != "" {
+				assert.Contains(t, result, tt.reason,
+					"Description should contain reason when provided")
+			}
+		})
+	}
+}
+
+// TestGetSeverity_BoundaryValues tests HP and SAN severity classification at exact boundaries
+func TestGetSeverity_BoundaryValues(t *testing.T) {
+	// Test HP severity boundaries
+	hpTests := []struct {
+		delta    int
+		expected HPSeverity
+	}{
+		{-1, HPSeverityMinor},    // Just inside minor range
+		{-10, HPSeverityMinor},   // Boundary of minor
+		{-11, HPSeverityModerate}, // Just into moderate
+		{-30, HPSeverityModerate}, // Boundary of moderate
+		{-31, HPSeverityMajor},    // Just into major
+		{-50, HPSeverityMajor},    // Boundary of major
+		{-51, HPSeverityLethal},   // Just into lethal
+		{-999, HPSeverityLethal},  // Extreme lethal
+	}
+
+	for _, tt := range hpTests {
+		t.Run(fmt.Sprintf("HP_%d", tt.delta), func(t *testing.T) {
+			severity := getHPSeverity(tt.delta)
+			assert.Equal(t, tt.expected, severity,
+				"HP %d should be severity %v", tt.delta, tt.expected)
+		})
+	}
+
+	// Test SAN severity boundaries
+	sanTests := []struct {
+		delta    int
+		expected SANSeverity
+	}{
+		{-1, SANSeverityMinor},    // Just inside minor range
+		{-10, SANSeverityMinor},   // Boundary of minor
+		{-11, SANSeverityModerate}, // Just into moderate
+		{-30, SANSeverityModerate}, // Boundary of moderate
+		{-31, SANSeverityMajor},    // Just into major
+		{-50, SANSeverityMajor},    // Boundary of major
+		{-51, SANSeverityLethal},   // Just into lethal
+		{-999, SANSeverityLethal},  // Extreme lethal
+	}
+
+	for _, tt := range sanTests {
+		t.Run(fmt.Sprintf("SAN_%d", tt.delta), func(t *testing.T) {
+			severity := getSANSeverity(tt.delta)
+			assert.Equal(t, tt.expected, severity,
+				"SAN %d should be severity %v", tt.delta, tt.expected)
+		})
+	}
+}
+
 

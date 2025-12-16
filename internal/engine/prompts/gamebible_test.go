@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nightmare-assault/nightmare-assault/internal/engine/prompts/builder"
 	"github.com/nightmare-assault/nightmare-assault/internal/engine/rules"
 	"github.com/nightmare-assault/nightmare-assault/internal/game"
 	"github.com/nightmare-assault/nightmare-assault/internal/game/npc"
@@ -124,32 +125,64 @@ func TestBuildContinuationPrompt(t *testing.T) {
 }
 
 func TestExtractSeeds(t *testing.T) {
-	content := `這是一段故事內容。
+	t.Run("Legacy HTML comment format", func(t *testing.T) {
+		content := `這是一段故事內容。
 <!-- SEED:Item:一把生鏽的鑰匙 -->
 你繼續前進。
 <!-- SEED:Event:遠處傳來腳步聲 -->
 結尾。`
 
-	seeds := ExtractSeeds(content)
+		seeds := ExtractSeeds(content)
 
-	if len(seeds) != 2 {
-		t.Errorf("Expected 2 seeds, got %d", len(seeds))
-	}
+		if len(seeds) != 2 {
+			t.Errorf("Expected 2 seeds, got %d", len(seeds))
+		}
 
-	if len(seeds) > 0 {
-		if seeds[0].Type != "Item" {
-			t.Errorf("First seed type = %v, want Item", seeds[0].Type)
+		if len(seeds) > 0 {
+			if seeds[0].Type != "Item" {
+				t.Errorf("First seed type = %v, want Item", seeds[0].Type)
+			}
+			if seeds[0].Description != "一把生鏽的鑰匙" {
+				t.Errorf("First seed description = %v, want 一把生鏽的鑰匙", seeds[0].Description)
+			}
 		}
-		if seeds[0].Description != "一把生鏽的鑰匙" {
-			t.Errorf("First seed description = %v, want 一把生鏽的鑰匙", seeds[0].Description)
-		}
-	}
 
-	if len(seeds) > 1 {
-		if seeds[1].Type != "Event" {
-			t.Errorf("Second seed type = %v, want Event", seeds[1].Type)
+		if len(seeds) > 1 {
+			if seeds[1].Type != "Event" {
+				t.Errorf("Second seed type = %v, want Event", seeds[1].Type)
+			}
 		}
-	}
+	})
+
+	t.Run("JSON format via ParseStructuredOutput", func(t *testing.T) {
+		jsonContent := `{
+			"story": "故事內容",
+			"choices": [],
+			"seeds": [
+				{"type": "Item", "description": "一把生鏽的鑰匙"},
+				{"type": "Event", "description": "遠處傳來腳步聲"}
+			]
+		}`
+
+		// Import builder package to access ParseStructuredOutput
+		output, err := builder.ParseStructuredOutput(jsonContent)
+		if err != nil {
+			t.Fatalf("ParseStructuredOutput failed: %v", err)
+		}
+
+		if len(output.Seeds) != 2 {
+			t.Errorf("Expected 2 seeds from JSON, got %d", len(output.Seeds))
+		}
+
+		if len(output.Seeds) > 0 {
+			if output.Seeds[0].Type != "Item" {
+				t.Errorf("First seed type = %v, want Item", output.Seeds[0].Type)
+			}
+			if output.Seeds[0].Description != "一把生鏽的鑰匙" {
+				t.Errorf("First seed description mismatch")
+			}
+		}
+	})
 }
 
 func TestExtractSeeds_NoSeeds(t *testing.T) {
@@ -162,26 +195,50 @@ func TestExtractSeeds_NoSeeds(t *testing.T) {
 }
 
 func TestCleanContent(t *testing.T) {
-	content := `這是一段故事內容。
+	t.Run("Legacy HTML markers removal", func(t *testing.T) {
+		content := `這是一段故事內容。
 <!-- SEED:Item:一把生鏽的鑰匙 -->
 你繼續前進。
 <!-- SEED:Event:遠處傳來腳步聲 -->
 結尾。`
 
-	cleaned := CleanContent(content)
+		cleaned := CleanContent(content)
 
-	// Should not contain seed markers
-	if strings.Contains(cleaned, "<!-- SEED") {
-		t.Error("CleanContent should remove seed markers")
-	}
+		// Should not contain seed markers
+		if strings.Contains(cleaned, "<!-- SEED") {
+			t.Error("CleanContent should remove seed markers")
+		}
 
-	// Should preserve actual content
-	if !strings.Contains(cleaned, "這是一段故事內容") {
-		t.Error("CleanContent should preserve story content")
-	}
-	if !strings.Contains(cleaned, "你繼續前進") {
-		t.Error("CleanContent should preserve story content")
-	}
+		// Should preserve actual content
+		if !strings.Contains(cleaned, "這是一段故事內容") {
+			t.Error("CleanContent should preserve story content")
+		}
+		if !strings.Contains(cleaned, "你繼續前進") {
+			t.Error("CleanContent should preserve story content")
+		}
+	})
+
+	t.Run("JSON format - clean story without choices", func(t *testing.T) {
+		jsonContent := `{"story": "純故事內容，無選項混入", "choices": ["選項1", "選項2"]}`
+
+		output, err := builder.ParseStructuredOutput(jsonContent)
+		if err != nil {
+			t.Fatalf("ParseStructuredOutput failed: %v", err)
+		}
+
+		// Story should not contain choice markers
+		if strings.Contains(output.Story, "選擇：") {
+			t.Error("JSON story should not contain choice headers")
+		}
+		if strings.Contains(output.Story, "選項1") {
+			t.Error("JSON story should not contain choices text")
+		}
+
+		// Verify story is clean
+		if output.Story != "純故事內容，無選項混入" {
+			t.Errorf("Expected clean story, got: %s", output.Story)
+		}
+	})
 }
 
 func TestGameBibleContainsCoreMechanics(t *testing.T) {
@@ -350,12 +407,12 @@ func TestBuildOpeningPromptWithRules(t *testing.T) {
 	}
 
 	// Should mention weaving clues (AC4)
-	if !strings.Contains(result, "clues about the hidden rules") {
+	if !strings.Contains(result, "規則暗示") && !strings.Contains(result, "Rule Hints") {
 		t.Error("BuildOpeningPromptWithRules should mention rule clues")
 	}
 
 	// Should warn not to state rules explicitly
-	if !strings.Contains(result, "Never state rules explicitly") {
+	if !strings.Contains(result, "絕不明確說明規則") && !strings.Contains(result, "只透過氛圍暗示") {
 		t.Error("BuildOpeningPromptWithRules should warn against explicit rule statements")
 	}
 }
@@ -499,7 +556,7 @@ func TestBuildOpeningPromptWithTeammates(t *testing.T) {
 	}
 
 	// Should mention introducing teammates
-	if !strings.Contains(result, "Introduce the following teammates") {
+	if !strings.Contains(result, "隊友介紹") && !strings.Contains(result, "Teammate Introduction") {
 		t.Error("BuildOpeningPromptWithTeammates should mention teammate introduction")
 	}
 
@@ -512,12 +569,12 @@ func TestBuildOpeningPromptWithTeammates(t *testing.T) {
 	}
 
 	// Should mention SHOW DON'T TELL
-	if !strings.Contains(result, "SHOW their personality") {
+	if !strings.Contains(result, "透過一個動作") && !strings.Contains(result, "用行動展現") {
 		t.Error("BuildOpeningPromptWithTeammates should mention SHOW DON'T TELL")
 	}
 
 	// Should warn against direct trait description
-	if !strings.Contains(result, "NEVER directly describe traits") {
+	if !strings.Contains(result, "絕不直接描述特質") {
 		t.Error("BuildOpeningPromptWithTeammates should warn against direct trait description")
 	}
 }

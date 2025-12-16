@@ -161,12 +161,18 @@ type ProgressCallback func(percent int, state EstimationState)
 
 // GenerationResult represents the result of story generation.
 type GenerationResult struct {
-	Content     string
-	Choices     []string
-	Seeds       []builder.SeedInfo
-	Error       error
-	TimeTaken   time.Duration
-	RetryCount  int
+	Content         string
+	Choices         []string // Legacy: kept for backward compatibility
+	ChoiceSituation string   // Choice context: situation
+	ChoiceQuestion  string   // Choice context: question (optional)
+	ChoiceOptions   []string // Choice context: options
+	Seeds           []builder.SeedInfo
+	HPChange        int    // HP change from state_changes
+	SANChange       int    // SAN change from state_changes
+	ChangeReason    string // Reason for state changes
+	Error           error
+	TimeTaken       time.Duration
+	RetryCount      int
 }
 
 // GenerateOpening generates the opening story segment.
@@ -379,10 +385,34 @@ func (e *StoryEngine) generate(ctx context.Context, systemPrompt, userPrompt str
 		}
 	}
 
+	// Extract choice context from new format
+	var choiceSituation, choiceQuestion string
+	var choiceOptions []string
+	if output.ChoiceContext != nil {
+		choiceSituation = output.ChoiceContext.Situation
+		choiceQuestion = output.ChoiceContext.Question
+		choiceOptions = output.ChoiceContext.Options
+	}
+
+	// Extract state changes
+	var hpChange, sanChange int
+	var changeReason string
+	if output.StateChanges != nil {
+		hpChange = output.StateChanges.HP
+		sanChange = output.StateChanges.SAN
+		changeReason = output.StateChanges.Reason
+	}
+
 	result := &GenerationResult{
-		Content: output.Story,
-		Choices: output.Choices,
-		Seeds:   output.Seeds,
+		Content:         output.Story,
+		Choices:         output.Choices, // Legacy support
+		ChoiceSituation: choiceSituation,
+		ChoiceQuestion:  choiceQuestion,
+		ChoiceOptions:   choiceOptions,
+		Seeds:           output.Seeds,
+		HPChange:        hpChange,
+		SANChange:       sanChange,
+		ChangeReason:    changeReason,
 	}
 
 	// Add seeds to story state

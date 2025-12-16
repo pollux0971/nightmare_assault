@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // GoogleClient implements the Provider interface for Google's Generative AI API.
@@ -48,7 +47,7 @@ func NewGoogleClient(cfg GoogleConfig) *GoogleClient {
 	return &GoogleClient{
 		providerID: cfg.ProviderID, apiKey: cfg.APIKey, baseURL: baseURL,
 		model: model, maxTokens: maxTokens,
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		httpClient: &http.Client{Timeout: 0}, // No timeout - let slow models complete
 	}
 }
 

@@ -3,6 +3,8 @@ package engine
 import (
 	"testing"
 	"time"
+
+	"github.com/nightmare-assault/nightmare-assault/internal/engine/prompts/builder"
 )
 
 func TestNewStoryState(t *testing.T) {
@@ -127,11 +129,12 @@ func TestNewStoryEngine(t *testing.T) {
 func TestDefaultEngineConfig(t *testing.T) {
 	config := DefaultEngineConfig()
 
-	if config.TimeoutFirstToken != 5*time.Second {
-		t.Errorf("TimeoutFirstToken = %v, want 5s", config.TimeoutFirstToken)
+	// Timeouts are disabled (0) for slow free models
+	if config.TimeoutFirstToken != 0 {
+		t.Errorf("TimeoutFirstToken = %v, want 0 (disabled)", config.TimeoutFirstToken)
 	}
-	if config.TimeoutTotal != 30*time.Second {
-		t.Errorf("TimeoutTotal = %v, want 30s", config.TimeoutTotal)
+	if config.TimeoutTotal != 0 {
+		t.Errorf("TimeoutTotal = %v, want 0 (disabled)", config.TimeoutTotal)
 	}
 	if config.MaxRetries != 3 {
 		t.Errorf("MaxRetries = %d, want 3", config.MaxRetries)
@@ -160,62 +163,82 @@ func TestStoryEngine_Reset(t *testing.T) {
 	}
 }
 
-func TestParseChoices(t *testing.T) {
-	tests := []struct {
-		name     string
-		content  string
-		expected []string
-	}{
-		{
-			name: "Chinese format",
-			content: `故事內容...
+// TestStoryEngine_ParseJSONOutput tests JSON output parsing integration
+func TestStoryEngine_ParseJSONOutput(t *testing.T) {
+	jsonOutput := `{
+		"story": "完整故事內容，包含詳細的場景描述。",
+		"choices": ["選項1：向左走", "選項2：向右走", "選項3：原地等待"],
+		"seeds": [
+			{"type": "Item", "description": "測試物品"}
+		]
+	}`
 
-**選擇：**
-1. 進入房間
-2. 離開這裡
-3. 仔細觀察`,
-			expected: []string{"進入房間", "離開這裡", "仔細觀察"},
-		},
-		{
-			name: "English format",
-			content: `Story content...
+	output, err := builder.ParseStructuredOutput(jsonOutput)
 
-**Choices:**
-1. Enter the room
-2. Leave this place`,
-			expected: []string{"Enter the room", "Leave this place"},
-		},
-		{
-			name: "With Chinese header and separator",
-			content: `Content...
-
-**選擇：**
-1、選項一
-2、選項二`,
-			expected: []string{"選項一", "選項二"},
-		},
-		{
-			name: "No choices",
-			content: `Story without choices.`,
-			expected: []string{},
-		},
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			choices := parseChoices(tt.content)
-			if len(choices) != len(tt.expected) {
-				t.Errorf("parseChoices returned %d choices, want %d", len(choices), len(tt.expected))
-				return
-			}
-			for i, choice := range choices {
-				if choice != tt.expected[i] {
-					t.Errorf("Choice %d = %q, want %q", i, choice, tt.expected[i])
-				}
-			}
-		})
+	if output.Story != "完整故事內容，包含詳細的場景描述。" {
+		t.Errorf("Story mismatch. Got: %s", output.Story)
+	}
+	if len(output.Choices) != 3 {
+		t.Errorf("Expected 3 choices, got %d", len(output.Choices))
+	}
+	if len(output.Seeds) != 1 {
+		t.Errorf("Expected 1 seed, got %d", len(output.Seeds))
+	}
+	if output.Seeds[0].Type != "Item" {
+		t.Errorf("Expected seed type 'Item', got '%s'", output.Seeds[0].Type)
 	}
 }
+
+// TestStoryEngine_ParseLegacyFormat tests backward compatibility with legacy text format
+func TestStoryEngine_ParseLegacyFormat(t *testing.T) {
+	legacyOutput := `這是舊格式的故事內容。
+
+很多描述文字在這裡。
+
+選擇：
+1. 第一個選項
+2. 第二個選項
+3. 第三個選項`
+
+	output, err := builder.ParseStructuredOutput(legacyOutput)
+
+	if err != nil {
+		t.Fatalf("Expected no error with legacy format, got %v", err)
+	}
+	if output.Story == "" {
+		t.Error("Story should not be empty")
+	}
+	if len(output.Choices) != 3 {
+		t.Errorf("Expected 3 choices from legacy format, got %d", len(output.Choices))
+	}
+}
+
+// TestStoryEngine_ParsePrologueJSON tests prologue format with no choices
+func TestStoryEngine_ParsePrologueJSON(t *testing.T) {
+	prologueJSON := `{
+		"story": "序章內容，沒有選擇。\n\n【按任意鍵繼續到第二章】",
+		"choices": [],
+		"seeds": []
+	}`
+
+	output, err := builder.ParseStructuredOutput(prologueJSON)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if output.Story == "" {
+		t.Error("Story should not be empty")
+	}
+	if len(output.Choices) != 0 {
+		t.Errorf("Expected 0 choices for prologue, got %d", len(output.Choices))
+	}
+}
+
+// NOTE: Legacy parsing tests have been moved to builder/output_parser_test.go
+// These functions (parseChoices, containsChoiceHeader, etc.) are now in the builder package
 
 func TestGenerateSeedID(t *testing.T) {
 	id1 := generateSeedID(0, 0)
@@ -236,92 +259,5 @@ func TestSeedType_Constants(t *testing.T) {
 	types := []SeedType{SeedTypeItem, SeedTypeEvent, SeedTypeCharacter, SeedTypeLocation}
 	if len(types) != 4 {
 		t.Error("Should have 4 seed types")
-	}
-}
-
-func TestHelperFunctions(t *testing.T) {
-	// splitLines
-	lines := splitLines("a\nb\nc")
-	if len(lines) != 3 {
-		t.Errorf("splitLines returned %d lines, want 3", len(lines))
-	}
-
-	// trimSpace
-	trimmed := trimSpace("  hello  ")
-	if trimmed != "hello" {
-		t.Errorf("trimSpace = %q, want 'hello'", trimmed)
-	}
-
-	// toLower
-	lower := toLower("HELLO")
-	if lower != "hello" {
-		t.Errorf("toLower = %q, want 'hello'", lower)
-	}
-
-	// contains
-	if !contains("hello world", "world") {
-		t.Error("contains should return true")
-	}
-	if contains("hello", "world") {
-		t.Error("contains should return false")
-	}
-}
-
-func TestContainsChoiceHeader(t *testing.T) {
-	tests := []struct {
-		line     string
-		expected bool
-	}{
-		{"選擇：", true},
-		{"**選擇：**", true},
-		{"Choices:", true},
-		{"options", true},
-		{"選項", true},
-		{"random text", false},
-		{"", false},
-	}
-
-	for _, tt := range tests {
-		if got := containsChoiceHeader(tt.line); got != tt.expected {
-			t.Errorf("containsChoiceHeader(%q) = %v, want %v", tt.line, got, tt.expected)
-		}
-	}
-}
-
-func TestIsNumberedChoice(t *testing.T) {
-	tests := []struct {
-		line     string
-		expected bool
-	}{
-		{"1. Choice", true},
-		{"2) Option", true},
-		{"3、選項", true},
-		{"Not a choice", false},
-		{"1", false},
-		{"", false},
-	}
-
-	for _, tt := range tests {
-		if got := isNumberedChoice(tt.line); got != tt.expected {
-			t.Errorf("isNumberedChoice(%q) = %v, want %v", tt.line, got, tt.expected)
-		}
-	}
-}
-
-func TestExtractChoiceText(t *testing.T) {
-	tests := []struct {
-		line     string
-		expected string
-	}{
-		{"1. Enter the room", "Enter the room"},
-		{"2) Leave", "Leave"},
-		{"3、觀察", "觀察"},
-		{"ab", ""},
-	}
-
-	for _, tt := range tests {
-		if got := extractChoiceText(tt.line); got != tt.expected {
-			t.Errorf("extractChoiceText(%q) = %q, want %q", tt.line, got, tt.expected)
-		}
 	}
 }

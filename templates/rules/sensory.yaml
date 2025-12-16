@@ -1,0 +1,85 @@
+version: "1.0"
+category: sensory
+rules:
+  - id: sensory_001
+    name: 不可直視怪物規則
+    category: sensory
+    difficulty: medium
+    trigger_medium: 直接用眼睛看見怪物的完整形體
+    false_clue: 聽到恐怖的聲音會吸引怪物
+    survival_rule: 遇到怪物時必須閉眼或避開視線，只能用餘光觀察
+    punishment:
+      san_damage: 30
+      hp_damage: 0
+      effect: 直視怪物導致精神崩潰，理智值大幅下降
+    clue_hints:
+      - 牆上的塗鴉：「不要看它」
+      - 倖存者日記：「那些直視它的人都瘋了」
+      - 走廊的鏡子全部都被打破了
+    tags:
+      - vision
+      - monster
+      - sensory
+
+  - id: sensory_002
+    name: 鏡子反射規則
+    category: sensory
+    difficulty: hard
+    trigger_medium: 通過鏡子間接觀察怪物
+    false_clue: 打破鏡子可以驅趕怪物
+    survival_rule: 絕對不能看鏡子中的怪物，必須背對鏡子或摀住眼睛
+    punishment:
+      san_damage: 25
+      hp_damage: 15
+      effect: 鏡中怪物會從反射中攻擊你
+    clue_hints:
+      - 房間內所有鏡子都被布蓋住
+      - 筆記：「鏡子是它的門」
+      - 鏡子前有大量血跡
+    tags:
+      - vision
+      - mirror
+      - reflection
+      - sensory
+
+  - id: sensory_003
+    name: 聲音引導規則
+    category: sensory
+    difficulty: easy
+    trigger_medium: 跟隨怪物發出的聲音或呼喊聲
+    false_clue: 保持安靜可以避開危險
+    survival_rule: 聽到聲音時，必須往反方向逃離，絕不跟隨
+    punishment:
+      san_damage: 15
+      hp_damage: 20
+      effect: 被聲音引誘至陷阱，受到物理傷害
+    clue_hints:
+      - 告示牌：「聽到呼救聲時，往相反方向跑」
+      - 地板箭頭指向遠離聲源的方向
+      - 廣播：「它會模仿人聲」
+    tags:
+      - sound
+      - deception
+      - sensory
+
+  - id: sensory_004
+    name: 黑暗中的呼吸規則
+    category: sensory
+    difficulty: hard
+    trigger_medium: 在完全黑暗中發出任何聲音（包括呼吸、腳步）
+    false_clue: 使用手電筒可以驅趕黑暗中的東西
+    survival_rule: 進入黑暗區域時必須屏住呼吸，不能發出任何聲音
+    punishment:
+      san_damage: 20
+      hp_damage: 25
+      effect: 黑暗中的獵食者會根據聲音定位並攻擊
+    clue_hints:
+      - 黑暗區域入口的警告：「安靜...」
+      - 地上有窒息而死的屍體
+      - 牆上刮痕：「它聽得見一切」
+    tags:
+      - sound
+      - darkness
+      - breathing
+      - sensory
+      - stealth

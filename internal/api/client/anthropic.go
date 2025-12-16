@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // AnthropicClient implements the Provider interface for Anthropic's Claude API.
@@ -53,7 +52,7 @@ func NewAnthropicClient(cfg AnthropicConfig) *AnthropicClient {
 		baseURL:    baseURL,
 		model:      model,
 		maxTokens:  maxTokens,
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		httpClient: &http.Client{Timeout: 0}, // No timeout - let slow models complete
 	}
 }
 

@@ -2,6 +2,8 @@ package narration
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestBuildFallbackSkeleton 測試降級骨架生成
@@ -113,6 +115,29 @@ func TestBuildFallbackSkeletonDifficulty(t *testing.T) {
 				t.Errorf("Expected %d seeds for %s difficulty, got %d",
 					tt.expectedSeeds, tt.difficulty, len(fallback.PlotStructure.GlobalSeeds))
 			}
+		})
+	}
+}
+
+// TestGetSeedsCountByDifficulty tests seed count determination for different difficulties
+func TestGetSeedsCountByDifficulty(t *testing.T) {
+	tests := []struct {
+		difficulty string
+		expected   int
+	}{
+		{"easy", 3},
+		{"normal", 4},
+		{"hard", 5},
+		{"hell", 5},
+		{"unknown", 4}, // Default to normal
+		{"", 4},        // Empty defaults to normal
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.difficulty, func(t *testing.T) {
+			result := getSeedsCountByDifficulty(tt.difficulty)
+			assert.Equal(t, tt.expected, result,
+				"Difficulty '%s' should return %d seeds", tt.difficulty, tt.expected)
 		})
 	}
 }

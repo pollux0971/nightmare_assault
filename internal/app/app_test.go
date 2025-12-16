@@ -29,9 +29,41 @@ func TestInit(t *testing.T) {
 	m := New("1.0.0")
 	cmd := m.Init()
 
-	// Init returns nil (config loading happens in Update now)
-	if cmd != nil {
-		t.Error("Expected Init to return nil")
+	// Init 應返回 tea.WindowSize() 命令以獲取終端機尺寸
+	// Bubbletea 需要此命令來正確渲染 UI
+	if cmd == nil {
+		t.Error("Expected Init to return tea.WindowSize() command, got nil")
+	}
+}
+
+func TestNewWithUpdateManager(t *testing.T) {
+	// 測試環境中，os.Executable() 可能失敗
+	// 我們預期 NewWithUpdateManager 優雅處理此情況
+	m := NewWithUpdateManager("1.0.0")
+
+	// 即使 update manager 初始化失敗，仍應創建有效 model
+	if m.version != "1.0.0" {
+		t.Errorf("Expected version 1.0.0, got %s", m.version)
+	}
+
+	if m.state != StateLoading {
+		t.Errorf("Expected state StateLoading, got %v", m.state)
+	}
+
+	// Update manager 可能為 nil（測試環境）- 這是可接受的
+	// 不斷言其狀態，因為依賴平台/環境
+}
+
+func TestNewWithOptions(t *testing.T) {
+	// 測試選項模式有效
+	m := New("1.0.0", WithUpdateManager(nil))
+
+	if m.version != "1.0.0" {
+		t.Errorf("Expected version 1.0.0, got %s", m.version)
+	}
+
+	if m.updateManager != nil {
+		t.Error("Expected updateManager to be nil when passed explicitly")
 	}
 }
 

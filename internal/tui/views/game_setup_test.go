@@ -38,8 +38,8 @@ func TestGameSetupModel_ThemeInput(t *testing.T) {
 	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = newModel.(GameSetupModel)
 
-	if m.state != SetupDifficultySelect {
-		t.Errorf("After valid theme, state = %v, want %v", m.state, SetupDifficultySelect)
+	if m.state != SetupModelInput {
+		t.Errorf("After valid theme, state = %v, want %v", m.state, SetupModelInput)
 	}
 
 	if m.config.Theme != "廢棄醫院" {
@@ -71,6 +71,10 @@ func TestGameSetupModel_DifficultySelect(t *testing.T) {
 	m := NewGameSetupModel()
 	m.themeInput.SetValue("valid theme")
 	newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(GameSetupModel)
+
+	// 通過 model input（使用預設模型）
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = newModel.(GameSetupModel)
 
 	// Now in difficulty select state
@@ -191,7 +195,8 @@ func TestGameSetupModel_BackNavigation(t *testing.T) {
 		initialState  SetupState
 		expectedState SetupState
 	}{
-		{"Difficulty to Theme", SetupDifficultySelect, SetupThemeInput},
+		{"ModelInput to Theme", SetupModelInput, SetupThemeInput},
+		{"Difficulty to ModelInput", SetupDifficultySelect, SetupModelInput},
 		{"Length to Difficulty", SetupLengthSelect, SetupDifficultySelect},
 		{"AdultMode to Length", SetupAdultModeToggle, SetupLengthSelect},
 		{"Summary to AdultMode", SetupSummary, SetupAdultModeToggle},
@@ -201,6 +206,7 @@ func TestGameSetupModel_BackNavigation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := NewGameSetupModel()
 			m.config.Theme = "valid theme"
+			m.config.Model = "test-model"
 			m.state = tt.initialState
 
 			newModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})

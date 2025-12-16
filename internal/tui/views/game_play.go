@@ -62,9 +62,12 @@ type GamePlayModel struct {
 
 	// Game state
 	currentStory  string
-	choices       []string
-	selectedChoice int
-	turnCount     int
+	choices          []string // Legacy: kept for backward compatibility
+	choiceSituation  string   // Current choice context: situation
+	choiceQuestion   string   // Current choice context: question (optional)
+	choiceOptions    []string // Current choice context: options
+	selectedChoice   int
+	turnCount        int
 
 	// Typewriter effect
 	fullText      string   // Complete text received from API
@@ -78,6 +81,7 @@ type GamePlayModel struct {
 	loading       bool
 	gameOver      bool
 	quitConfirm   bool
+	isPrologue    bool     // Whether currently showing prologue (序章)
 
 	// Pregenerated content
 	pregenerated  *PregeneratedContent
@@ -174,8 +178,15 @@ func (m GamePlayModel) Init() tea.Cmd {
 
 // StreamDoneMsg is sent when streaming completes
 type StreamDoneMsg struct {
-	Choices []string
-	Error   error
+	Content         string   // Parsed story content (not raw JSON)
+	Choices         []string // Legacy: kept for backward compatibility
+	ChoiceSituation string   // Choice context: situation
+	ChoiceQuestion  string   // Choice context: question (optional)
+	ChoiceOptions   []string // Choice context: options
+	HPChange        int      // HP change from state_changes
+	SANChange       int      // SAN change from state_changes
+	ChangeReason    string   // Reason for state changes
+	Error           error
 }
 
 // generateOpeningStory starts the opening story generation with streaming.
@@ -204,8 +215,15 @@ func (m *GamePlayModel) generateOpeningStory() tea.Cmd {
 			chunkChan <- StoryLoadingErrorMsg{Error: err}
 		} else {
 			chunkChan <- StreamDoneMsg{
-				Choices: result.Choices,
-				Error:   nil,
+				Content:         result.Content, // Send parsed content, not raw JSON
+				Choices:         result.Choices, // Legacy support
+				ChoiceSituation: result.ChoiceSituation,
+				ChoiceQuestion:  result.ChoiceQuestion,
+				ChoiceOptions:   result.ChoiceOptions,
+				HPChange:        result.HPChange,
+				SANChange:       result.SANChange,
+				ChangeReason:    result.ChangeReason,
+				Error:           nil,
 			}
 		}
 		close(chunkChan)
@@ -258,26 +276,77 @@ func (m GamePlayModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case StreamChunkMsg:
-		// Received a chunk from streaming API
+		// Received a chunk from streaming API - just accumulate, don't display yet
 		m.fullText += string(msg)
 
-		var cmd tea.Cmd
-		if !m.isTyping {
-			// Start typewriter effect on first chunk
-			m.isTyping = true
-			cmd = typewriterTickCmd()
-		}
-
-		// Continue listening to stream channel
+		// Continue listening to stream channel (no typewriter during streaming)
 		if m.streamChan != nil {
-			return m, tea.Batch(cmd, listenToStreamChannel(m.streamChan))
+			return m, listenToStreamChannel(m.streamChan)
 		}
-		return m, cmd
+		return m, nil
 
 	case StreamDoneMsg:
 		// Streaming complete, store choices and update state
-		m.choices = msg.Choices
+		m.choices = msg.Choices // Legacy support
+		m.choiceSituation = msg.ChoiceSituation
+		m.choiceQuestion = msg.ChoiceQuestion
+		m.choiceOptions = msg.ChoiceOptions
 		m.streamChan = nil // Clear channel reference
+
+		// Apply state changes (HP/SAN)
+		if msg.HPChange != 0 || msg.SANChange != 0 {
+			m.stats.HP += msg.HPChange
+			m.stats.SAN += msg.SANChange
+
+			// Clamp values
+			if m.stats.HP > 100 {
+				m.stats.HP = 100
+			}
+			if m.stats.HP < 0 {
+				m.stats.HP = 0
+			}
+			if m.stats.SAN > 100 {
+				m.stats.SAN = 100
+			}
+			if m.stats.SAN < 0 {
+				m.stats.SAN = 0
+			}
+
+			// TODO: Show state change notification with reason (msg.ChangeReason)
+		}
+
+		// Replace raw JSON with parsed content and append to history
+		if msg.Content != "" {
+			// Clean HTML/XML tags from content
+			cleanContent := stripHTMLTags(msg.Content)
+
+			// For first story (opening), replace; for continuations, append
+			if m.currentStory == "" {
+				// First story (opening/prologue)
+				m.currentStory = cleanContent
+				m.fullText = cleanContent
+				// Start typewriter from beginning for first story
+				m.charIndex = 0
+				m.displayText = ""
+			} else {
+				// Continuation - append to history
+				oldStory := m.currentStory
+				m.currentStory += "\n\n" + cleanContent
+				m.fullText = m.currentStory
+
+				// For continuation, start typewriter from end of old content
+				// This way only new content has typewriter effect
+				m.displayText = oldStory
+				m.charIndex = len([]rune(oldStory))
+			}
+		}
+
+		// Check if this is prologue (no choices and contains prologue marker)
+		if len(msg.ChoiceOptions) == 0 && strings.Contains(msg.Content, "按任意鍵") {
+			m.isPrologue = true
+		} else {
+			m.isPrologue = false
+		}
 
 		// Check for mood change and switch BGM
 		if m.audioManager != nil && m.audioManager.IsInitialized() {
@@ -288,13 +357,14 @@ func (m GamePlayModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// If this was a continuation (not opening), update turn count and add separator
+		// Update turn count for continuations
 		if m.turnCount > 0 || m.ready {
 			m.turnCount++
-			m.currentStory = m.fullText // Update story history
 		}
 
-		return m, nil
+		// Start typewriter effect to display the parsed content
+		m.isTyping = true
+		return m, typewriterTickCmd()
 
 	case TypewriterTickMsg:
 		// Typewriter animation tick
@@ -309,12 +379,8 @@ func (m GamePlayModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.displayText = string(runes[:end])
 			m.charIndex = end
 
-			// Update viewport with new text
-			m.viewport.SetContent(m.displayText)
-			// Only call GotoBottom if viewport has been sized
-			if m.viewport.Height > 0 && m.viewport.Width > 0 {
-				m.viewport.GotoBottom()
-			}
+			// Update viewport with new text (with word wrapping)
+			m.safeSetViewportContent(m.displayText, true)
 
 			return m, typewriterTickCmd()
 		}
@@ -328,10 +394,7 @@ func (m GamePlayModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentStory += "\n\n" + msg.Content
 		m.choices = msg.Choices
 		m.selectedChoice = 0
-		m.viewport.SetContent(m.currentStory)
-		if m.viewport.Height > 0 && m.viewport.Width > 0 {
-			m.viewport.GotoBottom()
-		}
+		m.safeSetViewportContent(m.currentStory, true)
 		m.turnCount++
 		m.loading = false // Hide loading overlay
 		return m, nil
@@ -352,6 +415,11 @@ func (m GamePlayModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.displayText = ""
 		m.charIndex = 0
 		m.ready = true
+
+		// Check if this is prologue (no choices and contains prologue marker)
+		if len(m.choices) == 0 && strings.Contains(msg.Content, "按任意鍵") {
+			m.isPrologue = true
+		}
 
 		// Start BGM after story loads (for serial generation path)
 		if m.audioManager != nil && m.audioManager.IsInitialized() {
@@ -395,6 +463,30 @@ func (m GamePlayModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleKeyPress handles all keyboard input with unified input model.
 func (m GamePlayModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	// Special handling for prologue end (序章結束)
+	// Any key press (except q) should continue to Chapter 1
+	if m.isPrologue && !m.loading && !m.isTyping {
+		// Skip quit key in prologue
+		if msg.String() == "q" {
+			m.quitConfirm = true
+			return m, nil
+		}
+
+		// Any other key continues to Chapter 1
+		m.isPrologue = false
+		m.loading = true
+
+		// Add transition message to story
+		m.currentStory += "\n\n【進入第一章】\n\n"
+		m.fullText = m.currentStory
+		m.displayText = m.currentStory
+		m.charIndex = len([]rune(m.currentStory))
+		m.safeSetViewportContent(m.displayText, true)
+
+		// Generate first chapter continuation
+		return m, m.generateContinuation("開始冒險")
+	}
 
 	// Handle scroll keys when input is empty
 	if m.textInput.Value() == "" {
@@ -480,21 +572,26 @@ func (m GamePlayModel) handleQuitConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleChoiceSelected processes the selected choice.
 func (m GamePlayModel) handleChoiceSelected() (tea.Model, tea.Cmd) {
-	if m.selectedChoice >= len(m.choices) {
+	// Use choiceOptions if available, fallback to legacy choices
+	options := m.choiceOptions
+	if len(options) == 0 {
+		options = m.choices // Fallback to legacy
+	}
+
+	if m.selectedChoice >= len(options) {
 		return m, nil
 	}
 
-	choice := m.choices[m.selectedChoice]
+	choice := options[m.selectedChoice]
 
-	// Add player's choice to story
-	m.currentStory += fmt.Sprintf("\n\n> 你選擇: %s\n\n", choice)
-	m.fullText = m.currentStory // Start new stream from current position
+	// DO NOT add "> 你選擇:" meta-narrative here
+	// The LLM will integrate the choice naturally into the story narrative
+	// Just show a separator before loading
+	m.currentStory += "\n\n───────────────────\n\n"
+	m.fullText = m.currentStory
 	m.displayText = m.currentStory
 	m.charIndex = len([]rune(m.currentStory))
-	m.viewport.SetContent(m.displayText)
-	if m.viewport.Height > 0 && m.viewport.Width > 0 {
-		m.viewport.GotoBottom()
-	}
+	m.safeSetViewportContent(m.displayText, true)
 
 	// Set loading state and trigger story continuation
 	m.loading = true
@@ -526,13 +623,22 @@ func (m *GamePlayModel) generateContinuation(choice string) tea.Cmd {
 		// Send completion message
 		if err != nil {
 			chunkChan <- StreamDoneMsg{
-				Choices: []string{"重試"},
-				Error:   err,
+				Content:       "",
+				Choices:       []string{"重試"},
+				ChoiceOptions: []string{"重試"},
+				Error:         err,
 			}
 		} else {
 			chunkChan <- StreamDoneMsg{
-				Choices: result.Choices,
-				Error:   nil,
+				Content:         result.Content, // Send parsed content, not raw JSON
+				Choices:         result.Choices, // Legacy support
+				ChoiceSituation: result.ChoiceSituation,
+				ChoiceQuestion:  result.ChoiceQuestion,
+				ChoiceOptions:   result.ChoiceOptions,
+				HPChange:        result.HPChange,
+				SANChange:       result.SANChange,
+				ChangeReason:    result.ChangeReason,
+				Error:           nil,
 			}
 		}
 		close(chunkChan)
@@ -566,10 +672,7 @@ func (m GamePlayModel) handleTextInput(input string) (tea.Model, tea.Cmd) {
 			} else {
 				m.currentStory += fmt.Sprintf("\n\n%s", output)
 			}
-			m.viewport.SetContent(m.currentStory)
-			if m.viewport.Height > 0 && m.viewport.Width > 0 {
-				m.viewport.GotoBottom()
-			}
+			m.safeSetViewportContent(m.currentStory, true)
 		}
 		return m, nil
 	}
@@ -580,10 +683,7 @@ func (m GamePlayModel) handleTextInput(input string) (tea.Model, tea.Cmd) {
 	m.fullText = m.currentStory // Start new stream from current position
 	m.displayText = m.currentStory
 	m.charIndex = len([]rune(m.currentStory))
-	m.viewport.SetContent(m.displayText)
-	if m.viewport.Height > 0 && m.viewport.Width > 0 {
-		m.viewport.GotoBottom()
-	}
+	m.safeSetViewportContent(m.displayText, true)
 
 	// Generate continuation with the free text as input
 	m.loading = true
@@ -786,9 +886,15 @@ func (m GamePlayModel) renderStatusBar() string {
 	return statusStyle.Render(status)
 }
 
-// renderChoices renders the choice selection area.
+// renderChoices renders the choice selection area with context.
 func (m GamePlayModel) renderChoices() string {
-	if len(m.choices) == 0 {
+	// Use choiceOptions if available, fallback to legacy choices
+	options := m.choiceOptions
+	if len(options) == 0 {
+		options = m.choices // Fallback to legacy
+	}
+
+	if len(options) == 0 {
 		return lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#7F8C8D")).
 			Padding(1, 2).
@@ -796,30 +902,48 @@ func (m GamePlayModel) renderChoices() string {
 	}
 
 	theme := themes.GetManager().GetCurrentTheme()
-
 	var b strings.Builder
-	b.WriteString(lipgloss.NewStyle().
-		Foreground(theme.Colors.Accent).
-		Bold(true).
-		Render("請選擇:"))
+
+	// Separator line
+	separatorStyle := lipgloss.NewStyle().
+		Foreground(theme.Colors.Border)
+	separator := strings.Repeat("─", m.width-6)
+	b.WriteString(separatorStyle.Render(separator))
 	b.WriteString("\n\n")
 
-	for i, choice := range m.choices {
-		prefix := fmt.Sprintf("  %d. ", i+1)
+	// Situation (if available)
+	if m.choiceSituation != "" {
+		situationStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#AAAAAA")).
+			Italic(true)
+		b.WriteString(situationStyle.Render(m.choiceSituation))
+		b.WriteString("\n\n")
+	}
+
+	// Question (if available)
+	if m.choiceQuestion != "" {
+		questionStyle := lipgloss.NewStyle().
+			Foreground(theme.Colors.Accent).
+			Bold(true)
+		b.WriteString(questionStyle.Render(m.choiceQuestion))
+		b.WriteString("\n\n")
+	}
+
+	// Options
+	for i, option := range options {
+		prefix := fmt.Sprintf("  [%d] ", i+1)
 		style := lipgloss.NewStyle().Foreground(theme.Colors.Primary)
 
 		if i == m.selectedChoice {
-			prefix = fmt.Sprintf("❯ %d. ", i+1)
+			prefix = fmt.Sprintf("❯ [%d] ", i+1)
 			style = style.Foreground(theme.Colors.Accent).Bold(true)
 		}
 
-		b.WriteString(prefix + style.Render(choice) + "\n")
+		b.WriteString(prefix + style.Render(option) + "\n")
 	}
 
 	return lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(theme.Colors.Border).
-		Padding(0, 1).
+		Padding(0, 2).
 		Width(m.width - 4).
 		Render(b.String())
 }
@@ -920,6 +1044,24 @@ func typewriterTickCmd() tea.Cmd {
 	})
 }
 
+// safeSetViewportContent safely sets viewport content and scrolls to bottom.
+// Only updates if viewport has valid dimensions.
+func (m *GamePlayModel) safeSetViewportContent(text string, scrollToBottom bool) {
+	// Skip if viewport has invalid dimensions
+	if m.viewport.Width <= 0 || m.viewport.Height <= 0 {
+		return
+	}
+
+	// Wrap text and set content
+	wrappedText := wrapText(text, m.viewport.Width)
+	m.viewport.SetContent(wrappedText)
+
+	// Scroll to bottom if requested
+	if scrollToBottom {
+		m.viewport.GotoBottom()
+	}
+}
+
 // parseMoodFromContent extracts mood from story text using keyword matching
 func parseMoodFromContent(content string) engine.MoodType {
 	contentLower := strings.ToLower(content)
@@ -985,4 +1127,123 @@ func parseMoodFromContent(content string) engine.MoodType {
 	}
 
 	return engine.MoodExploration // Default
+}
+
+// wrapText wraps text to fit within the specified width, handling CJK characters correctly.
+// Adds right margin for better readability.
+func wrapText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+
+	// Reserve right margin (10% of width or minimum 8 characters)
+	rightMargin := width / 10
+	if rightMargin < 8 {
+		rightMargin = 8
+	}
+	effectiveWidth := width - rightMargin
+
+	if effectiveWidth <= 20 {
+		effectiveWidth = width // Don't apply margin if width is too small
+	}
+
+	var lines []string
+	currentLine := strings.Builder{}
+	currentWidth := 0
+
+	for _, r := range text {
+		charWidth := runeWidth(r)
+
+		if r == '\n' {
+			lines = append(lines, currentLine.String())
+			currentLine.Reset()
+			currentWidth = 0
+			continue
+		}
+
+		if currentWidth+charWidth > effectiveWidth {
+			lines = append(lines, currentLine.String())
+			currentLine.Reset()
+			currentWidth = 0
+		}
+
+		currentLine.WriteRune(r)
+		currentWidth += charWidth
+	}
+
+	if currentLine.Len() > 0 {
+		lines = append(lines, currentLine.String())
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// runeWidth returns the display width of a rune.
+func runeWidth(r rune) int {
+	// ASCII characters are 1 wide
+	if r < 128 {
+		return 1
+	}
+
+	// CJK characters are typically 2 wide
+	if r >= 0x4E00 && r <= 0x9FFF { // CJK Unified Ideographs
+		return 2
+	}
+	if r >= 0x3400 && r <= 0x4DBF { // CJK Extension A
+		return 2
+	}
+	if r >= 0x3040 && r <= 0x309F { // Hiragana
+		return 2
+	}
+	if r >= 0x30A0 && r <= 0x30FF { // Katakana
+		return 2
+	}
+
+	// Emoji are typically 2 wide
+	if r >= 0x1F300 && r <= 0x1F9FF {
+		return 2
+	}
+	// Additional emoji ranges
+	if r >= 0x2600 && r <= 0x27BF { // Miscellaneous Symbols
+		return 2
+	}
+
+	// Default to 1
+	return 1
+}
+
+// stripHTMLTags removes all HTML/XML tags and comments from text.
+func stripHTMLTags(text string) string {
+	// First, remove HTML comments <!-- ... -->
+	for {
+		start := strings.Index(text, "<!--")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(text[start:], "-->")
+		if end == -1 {
+			break
+		}
+		text = text[:start] + text[start+end+3:]
+	}
+
+	// Then remove regular tags <...>
+	var result strings.Builder
+	inTag := false
+
+	for _, r := range text {
+		if r == '<' {
+			inTag = true
+			continue
+		}
+		if r == '>' {
+			inTag = false
+			continue
+		}
+		if !inTag {
+			result.WriteRune(r)
+		}
+	}
+
+	return result.String()
 }

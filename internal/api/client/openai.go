@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // OpenAIClient implements the Provider interface for OpenAI-compatible APIs.
@@ -55,7 +54,7 @@ func NewOpenAIClient(cfg OpenAIConfig) *OpenAIClient {
 		model:      model,
 		maxTokens:  maxTokens,
 		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: 0, // No timeout - let slow models complete
 		},
 	}
 }

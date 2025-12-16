@@ -120,7 +120,7 @@ func (c *SFXCommand) setVolume(volumeStr string) (string, error) {
 
 	volumeFloat := float64(volume) / 100.0
 	player.SetVolume(volumeFloat)
-	c.config.Audio.SFXVolume = volumeFloat
+	c.config.Audio.SFXVolume = volume
 	if err := c.config.Save(); err != nil {
 		return "", fmt.Errorf("failed to save config: %w", err)
 	}

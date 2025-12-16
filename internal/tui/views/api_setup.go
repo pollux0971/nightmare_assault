@@ -22,6 +22,7 @@ const (
 	StateSelectProvider APISetupState = iota
 	StateEnterAPIKey
 	StateTesting
+	StateEnterModel // New: Enter model name after successful connection test
 	StateSuccess
 	StateError
 )
@@ -37,18 +38,20 @@ func (i ProviderItem) FilterValue() string { return i.info.Name }
 
 // APISetupModel is the TUI model for API configuration.
 type APISetupModel struct {
-	state          APISetupState
-	providerList   list.Model
-	textInput      textinput.Model
-	spinner        spinner.Model
+	state            APISetupState
+	providerList     list.Model
+	textInput        textinput.Model
+	modelInput       textinput.Model // New: for model name input
+	spinner          spinner.Model
 	selectedProvider *api.ProviderInfo
-	apiKey         string
-	errorMsg       string
-	config         *config.Config
-	width          int
-	height         int
-	done           bool
-	testResult     error
+	apiKey           string
+	modelName        string // New: to store user's model selection
+	errorMsg         string
+	config           *config.Config
+	width            int
+	height           int
+	done             bool
+	testResult       error
 }
 
 // Styles
@@ -99,9 +102,9 @@ func NewAPISetupModel(cfg *config.Config) APISetupModel {
 	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
 		Foreground(lipgloss.Color("#7B2CBF"))
 
-	l := list.New(items, delegate, 0, 0)
+	l := list.New(items, delegate, 80, 24)
 	l.Title = "選擇 API 供應商"
-	l.SetShowStatusBar(false)
+	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(true)
 	l.Styles.Title = titleStyle
 
@@ -113,6 +116,12 @@ func NewAPISetupModel(cfg *config.Config) APISetupModel {
 	ti.CharLimit = 256
 	ti.Width = 50
 
+	// Create text input for model name
+	mi := textinput.New()
+	mi.Placeholder = "輸入模型名稱 (例如: anthropic/claude-3.5-sonnet)"
+	mi.CharLimit = 128
+	mi.Width = 50
+
 	// Create spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -122,6 +131,7 @@ func NewAPISetupModel(cfg *config.Config) APISetupModel {
 		state:        StateSelectProvider,
 		providerList: l,
 		textInput:    ti,
+		modelInput:   mi,
 		spinner:      s,
 		config:       cfg,
 	}
@@ -143,7 +153,16 @@ func (m APISetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.providerList.SetSize(msg.Width-4, msg.Height-8)
+		// Give list more space - only reserve space for margins
+		listHeight := msg.Height - 4
+		if listHeight < 10 {
+			listHeight = 10
+		}
+		listWidth := msg.Width - 2
+		if listWidth < 40 {
+			listWidth = 40
+		}
+		m.providerList.SetSize(listWidth, listHeight)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -156,6 +175,12 @@ func (m APISetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.state == StateEnterAPIKey {
 				m.state = StateSelectProvider
 				m.textInput.Reset()
+				return m, nil
+			}
+			if m.state == StateEnterModel {
+				// Go back to API key entry (re-test if needed)
+				m.state = StateEnterAPIKey
+				m.modelInput.Reset()
 				return m, nil
 			}
 		case "enter":
@@ -172,12 +197,13 @@ func (m APISetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TestConnectionMsg:
 		m.testResult = msg.Err
 		if msg.Err == nil {
-			m.state = StateSuccess
-			// Save config
-			if err := m.saveConfig(); err != nil {
-				m.state = StateError
-				m.errorMsg = fmt.Sprintf("儲存配置失敗: %v", err)
-			}
+			// Connection successful - go to model input
+			m.state = StateEnterModel
+			// Pre-fill with default model for this provider
+			defaultModel := api.GetDefaultModel(m.selectedProvider.ID)
+			m.modelInput.SetValue(defaultModel)
+			m.modelInput.Focus()
+			return m, textinput.Blink
 		} else {
 			m.state = StateError
 			m.errorMsg = m.getFriendlyError(msg.Err)
@@ -192,6 +218,8 @@ func (m APISetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.providerList, cmd = m.providerList.Update(msg)
 	case StateEnterAPIKey:
 		m.textInput, cmd = m.textInput.Update(msg)
+	case StateEnterModel:
+		m.modelInput, cmd = m.modelInput.Update(msg)
 	}
 
 	return m, cmd
@@ -219,9 +247,24 @@ func (m APISetupModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.testConnection(),
 		)
 
+	case StateEnterModel:
+		m.modelName = strings.TrimSpace(m.modelInput.Value())
+		if m.modelName == "" {
+			// Use default model if empty
+			m.modelName = api.GetDefaultModel(m.selectedProvider.ID)
+		}
+		// Save config with model name
+		if err := m.saveConfig(); err != nil {
+			m.state = StateError
+			m.errorMsg = fmt.Sprintf("儲存配置失敗: %v", err)
+			return m, nil
+		}
+		m.state = StateSuccess
+		return m, nil
+
 	case StateSuccess:
 		m.done = true
-		return m, tea.Quit
+		return m, nil
 
 	case StateError:
 		// Go back to API key input
@@ -255,9 +298,13 @@ func (m *APISetupModel) saveConfig() error {
 		return err
 	}
 
-	// Set as active provider for smart model
-	m.config.API.Smart.ProviderID = m.selectedProvider.ID
-	m.config.API.Smart.Model = "" // Let provider use default
+	// Set as active provider
+	m.config.API.Provider.ProviderID = m.selectedProvider.ID
+	m.config.API.Provider.Model = m.modelName // Save user's model selection
+	// Keep existing MaxTokens or set default if zero
+	if m.config.API.Provider.MaxTokens == 0 {
+		m.config.API.Provider.MaxTokens = 100000
+	}
 
 	return m.config.Save()
 }
@@ -303,12 +350,39 @@ func (m APISetupModel) View() string {
 		b.WriteString(m.spinner.View())
 		b.WriteString(" 連線測試中...")
 
+	case StateEnterModel:
+		b.WriteString(titleStyle.Render(fmt.Sprintf("設定 %s 模型", m.selectedProvider.Name)))
+		b.WriteString("\n\n")
+		b.WriteString(successStyle.Render("✓ API Key 驗證成功！"))
+		b.WriteString("\n\n")
+		b.WriteString(subtitleStyle.Render("請輸入要使用的模型名稱"))
+		b.WriteString("\n\n")
+		b.WriteString(m.modelInput.View())
+		b.WriteString("\n\n")
+		// Show hints based on provider
+		hints := api.GetModelHints(m.selectedProvider.ID)
+		if len(hints) > 0 {
+			b.WriteString(infoStyle.Render("建議模型："))
+			b.WriteString("\n")
+			for _, hint := range hints {
+				b.WriteString(infoStyle.Render(fmt.Sprintf("  • %s", hint)))
+				b.WriteString("\n")
+			}
+			b.WriteString("\n")
+		}
+		if m.errorMsg != "" {
+			b.WriteString(errorStyle.Render(m.errorMsg))
+			b.WriteString("\n")
+		}
+		b.WriteString(infoStyle.Render("按 Enter 確認，按 Esc 返回"))
+
 	case StateSuccess:
 		b.WriteString(titleStyle.Render("設定完成"))
 		b.WriteString("\n\n")
-		b.WriteString(successStyle.Render("✓ 連線成功！"))
+		b.WriteString(successStyle.Render("✓ 設定完成！"))
 		b.WriteString("\n\n")
 		b.WriteString(fmt.Sprintf("供應商: %s\n", m.selectedProvider.Name))
+		b.WriteString(fmt.Sprintf("模型: %s\n", m.modelName))
 		b.WriteString(fmt.Sprintf("API Key: %s\n", config.MaskAPIKey(m.apiKey)))
 		b.WriteString("\n")
 		b.WriteString(infoStyle.Render("按 Enter 繼續"))

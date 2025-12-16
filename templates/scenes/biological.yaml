@@ -1,0 +1,275 @@
+version: "1.0"
+category: biological
+scenes:
+  # Scene 1: 血肉增生 (Flesh Growth) - 廢棄醫院
+  - id: bio_001
+    name: 血肉增生
+    category: biological
+    applicable_areas:
+      - 醫院
+      - 診所
+      - 手術室
+    stage1:
+      description: 牆上有血管樣霉斑，鐵鏽味
+      atmosphere:
+        - 陰暗潮濕
+        - 鐵鏽氣味
+        - 壓迫感
+        - 微弱的脈動聲
+      common_props:
+        - 生鏽的手術台
+        - 破碎的注射器
+        - 發黴的病床
+        - 染血的手術刀
+      hazards:
+        - 地板上的血跡
+        - 黴菌斑塊
+        - 銳利的醫療廢棄物
+    stage2:
+      description: 牆壁柔軟溫熱如皮膚，門把變指骨
+      atmosphere:
+        - 溫熱潮濕
+        - 腥甜氣味
+        - 脈動感明顯
+        - 肉體溫度
+      common_props:
+        - 變形的門把（像指骨）
+        - 柔軟的牆面
+        - 跳動的地磚
+        - 肉質化的家具
+      hazards:
+        - 會蠕動的牆壁
+        - 溫熱黏液
+        - 觸手般的血管
+        - 精神污染
+    stage3:
+      description: 房間變成胃，牆壁分泌消化液
+      atmosphere:
+        - 極度潮濕悶熱
+        - 強烈腐蝕性氣味
+        - 劇烈蠕動
+        - 窒息感
+      common_props:
+        - 胃壁般的牆面
+        - 消化液池
+        - 巨大的胃酸腺體
+        - 未消化的「食物」
+      hazards:
+        - 腐蝕性消化液
+        - 收縮的胃壁
+        - 吞噬性的肉壁
+        - 窒息和溺斃風險
+        - 極度精神污染
+    tags:
+      - medical
+      - flesh_growth
+      - biological
+      - body_horror
+    description: 廢棄醫院逐漸血肉化的恐怖過程，從微妙的霉斑演變成完全活體化的消化器官。
+
+  # Scene 2: 變異污染 (Mutation Contamination) - 生物實驗室
+  - id: bio_002
+    name: 變異污染
+    category: biological
+    applicable_areas:
+      - 實驗室
+      - 研究所
+      - 生物安全設施
+    stage1:
+      description: 培養皿中的樣本出現異常增殖，微弱的爬行聲
+      atmosphere:
+        - 冰冷無菌
+        - 消毒水味
+        - 詭異的安靜
+        - 金屬光澤
+      common_props:
+        - 破裂的培養皿
+        - 過度增殖的細胞
+        - 閃爍的警報燈
+        - 實驗記錄本
+      hazards:
+        - 洩漏的培養液
+        - 異常生長的樣本
+        - 破碎的玻璃器皿
+    stage2:
+      description: 實驗體突破容器，空氣中飄浮變異孢子
+      atmosphere:
+        - 溫度上升
+        - 有機物腐敗味
+        - 孢子霧氣
+        - 生物電流聲
+      common_props:
+        - 破碎的收容櫃
+        - 逃脫的實驗體
+        - 變異的組織樣本
+        - 失效的防護設備
+      hazards:
+        - 變異孢子
+        - 攻擊性實驗體
+        - 感染風險
+        - 有毒氣體
+        - 精神侵蝕
+    stage3:
+      description: 整個實驗室被變異生物占據，牆壁長出器官
+      atmosphere:
+        - 極度悶熱
+        - 強烈惡臭
+        - 生物質覆蓋一切
+        - 集體意識的呢喃
+      common_props:
+        - 融合的實驗體群落
+        - 長滿器官的牆壁
+        - 巨大的變異核心
+        - 寄生化的設備
+      hazards:
+        - 群體攻擊
+        - 強制變異
+        - 寄生侵入
+        - 精神同化
+        - 集體意識吞噬
+    tags:
+      - laboratory
+      - mutation
+      - biological
+      - experiment_gone_wrong
+      - contamination
+    description: 生物實驗室失控的變異擴散過程，從單一樣本的異常到整個空間的生物化。
+
+  # Scene 3: 有機迷宮 (Organic Maze) - 血肉森林
+  - id: bio_003
+    name: 有機迷宮
+    category: biological
+    applicable_areas:
+      - 地下空間
+      - 廢棄建築
+      - 洞穴
+    stage1:
+      description: 牆壁覆蓋濕滑的有機膜，微弱的心跳聲
+      atmosphere:
+        - 潮濕黏膩
+        - 微弱的腥味
+        - 遠處的脈動聲
+        - 溫暖感
+      common_props:
+        - 有機膜覆蓋的牆面
+        - 黏液痕跡
+        - 脈動的血管紋路
+        - 肉質藤蔓
+      hazards:
+        - 滑膩的地面
+        - 黏性分泌物
+        - 輕微精神干擾
+    stage2:
+      description: 空間扭曲，肉壁開始生長器官和眼球
+      atmosphere:
+        - 明顯溫熱
+        - 強烈腥臭
+        - 清晰的心跳和呼吸聲
+        - 被注視感
+      common_props:
+        - 長出眼球的牆壁
+        - 跳動的肉塊
+        - 蠕動的觸手
+        - 分泌黏液的腺體
+      hazards:
+        - 攻擊性觸手
+        - 腐蝕性體液
+        - 監視的眼球
+        - 精神污染
+        - 空間扭曲
+    stage3:
+      description: 整個空間變成巨型生物內部，消化和吸收入侵者
+      atmosphere:
+        - 極度悶熱窒息
+        - 惡臭難耐
+        - 劇烈蠕動
+        - 生物意識的壓迫
+      common_props:
+        - 巨大的內臟器官
+        - 消化液瀑布
+        - 肋骨般的支撐結構
+        - 脈動的心臟
+      hazards:
+        - 吞噬性肉壁
+        - 強酸消化液
+        - 寄生蟲群
+        - 器官攻擊
+        - 意識吞噬
+        - 強制同化
+    tags:
+      - organic_horror
+      - body_horror
+      - flesh
+      - nightmare
+      - biological
+    description: 從普通空間逐漸轉化為巨型生物內部的恐怖過程，最終成為活體迷宮。
+
+  # Scene 4: 死而復生 (Resurrection) - 停屍間
+  - id: bio_004
+    name: 死而復生
+    category: biological
+    applicable_areas:
+      - 停屍間
+      - 太平間
+      - 殯儀館
+    stage1:
+      description: 冷藏櫃傳出輕微敲擊聲，屍袋微微顫動
+      atmosphere:
+        - 冰冷刺骨
+        - 福馬林氣味
+        - 死亡氣息
+        - 詭異的寂靜
+      common_props:
+        - 整齊的冷藏櫃
+        - 靜止的屍袋
+        - 解剖工具
+        - 標籤牌
+      hazards:
+        - 冰冷溫度
+        - 有毒防腐劑
+        - 鋒利器械
+        - 輕微靈異現象
+    stage2:
+      description: 屍體開始蠕動，冷藏櫃門從內部被推開
+      atmosphere:
+        - 溫度異常波動
+        - 腐敗與福馬林混合的惡臭
+        - 呻吟和喘息聲
+        - 死者的怨念
+      common_props:
+        - 半開的冷藏櫃
+        - 蠕動的屍體
+        - 撕裂的屍袋
+        - 血跡和體液
+      hazards:
+        - 活動的屍體
+        - 抓痕和咬傷
+        - 病原體感染
+        - 精神衝擊
+        - 靈異攻擊
+    stage3:
+      description: 死者集體復活，停屍間變成不死生物的巢穴
+      atmosphere:
+        - 惡臭瀰漫
+        - 死者的哀嚎
+        - 血肉撕裂聲
+        - 絕望的氣息
+      common_props:
+        - 復活的屍群
+        - 破碎的冷藏櫃
+        - 內臟和肢體碎片
+        - 死者的巢穴
+      hazards:
+        - 屍群圍攻
+        - 疾病傳染
+        - 撕咬和分屍
+        - 強制轉化
+        - 意識抹殺
+        - 成為它們的一員
+    tags:
+      - morgue
+      - undead
+      - resurrection
+      - death
+      - biological
+    description: 停屍間中死者復甦的恐怖過程，從微弱的生命跡象到完全的不死軍團。

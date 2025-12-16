@@ -16,6 +16,7 @@ type SettingsAction int
 const (
 	SettingsActionTheme SettingsAction = iota
 	SettingsActionAPI
+	SettingsActionMaxTokens
 	SettingsActionAudio
 	SettingsActionBack
 )
@@ -40,6 +41,7 @@ func NewSettingsMenuModel() SettingsMenuModel {
 	items := []SettingsItem{
 		{title: "主題", description: "切換界面主題", action: SettingsActionTheme},
 		{title: "API 設定", description: "管理 API 供應商", action: SettingsActionAPI},
+		{title: "MaxTokens 設定", description: "調整生成長度上限", action: SettingsActionMaxTokens},
 		{title: "音效設定", description: "調整音量與音效", action: SettingsActionAudio},
 		{title: "返回", description: "返回主選單", action: SettingsActionBack},
 	}
@@ -89,6 +91,9 @@ func (m SettingsMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleSelect()
 		case "4":
 			m.selectedIndex = 3
+			return m.handleSelect()
+		case "5":
+			m.selectedIndex = 4
 			return m.handleSelect()
 
 		case "enter", " ":

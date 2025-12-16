@@ -61,7 +61,23 @@ func (dg *DreamGenerator) buildOpeningDreamPrompt(theme, rulesSummary, playerRol
 6. 結尾留懸念，引導進入正式故事
 7. 使用第二人稱「你」來敘述
 
-輸出格式：純夢境敘事文字，無額外說明。`, theme, rulesSummary, playerRole)
+📋 OUTPUT FORMAT (CRITICAL):
+You MUST respond with a JSON object in this exact format:
+
+{
+  "dream": "Your complete dream narrative text here (200-400 characters in Chinese)",
+  "symbols": ["意象1：鏡子", "意象2：門", "意象3：影子"],
+  "rules_hinted": [1, 2],
+  "atmosphere": "uneasy"
+}
+
+IMPORTANT:
+- "dream" field: Contains the FULL dream narrative text
+- "symbols" field: Array of 2-3 symbolic elements mentioned in the dream
+- "rules_hinted" field: Array of rule IDs that are subtly hinted (optional)
+- "atmosphere" field: Must be one of: "calm", "uneasy", "nightmare"
+- DO NOT add any text outside the JSON object
+- Ensure valid JSON formatting`, theme, rulesSummary, playerRole)
 }
 
 // CreateDreamRecord creates a DreamRecord from generated content
@@ -156,7 +172,13 @@ func (dg *DreamGenerator) buildNightmarePrompt(context ChapterDreamContext) stri
 5. 結尾突然驚醒
 6. 使用第二人稱「你」來敘述
 
-輸出格式：純夢境敘事文字。`, context.RecentEvents, context.PlayerSAN, context.KnownClues)
+📋 OUTPUT FORMAT:
+{
+  "dream": "夢境敘述文字 (100-200 字)",
+  "symbols": ["扭曲的意象1", "超現實元素2"],
+  "rules_hinted": [],
+  "atmosphere": "nightmare"
+}`, context.RecentEvents, context.PlayerSAN, context.KnownClues)
 }
 
 // buildHintDreamPrompt creates prompt for hint dreams
@@ -175,7 +197,13 @@ func (dg *DreamGenerator) buildHintDreamPrompt(context ChapterDreamContext) stri
 5. 玩家事後回想時能恍然大悟
 6. 使用第二人稱「你」來敘述
 
-輸出格式：純夢境敘事文字。`, context.KnownClues, context.RuleHints, context.ChapterNum)
+📋 OUTPUT FORMAT:
+{
+  "dream": "夢境敘述文字 (100-200 字)",
+  "symbols": ["象徵1", "象徵2"],
+  "rules_hinted": [1],
+  "atmosphere": "uneasy"
+}`, context.KnownClues, context.RuleHints, context.ChapterNum)
 }
 
 // buildGriefDreamPrompt creates prompt for grief dreams
@@ -194,7 +222,13 @@ func (dg *DreamGenerator) buildGriefDreamPrompt(context ChapterDreamContext) str
 5. 結尾帶有不捨感
 6. 使用第二人稱「你」來敘述
 
-輸出格式：純夢境敘事文字。`, context.DeadTeammates, context.ChapterNum, context.RecentEvents)
+📋 OUTPUT FORMAT:
+{
+  "dream": "夢境敘述文字 (100-200 字)",
+  "symbols": ["隊友的物品", "回憶場景"],
+  "rules_hinted": [],
+  "atmosphere": "grief"
+}`, context.DeadTeammates, context.ChapterNum, context.RecentEvents)
 }
 
 // buildWarningDreamPrompt creates prompt for warning dreams
@@ -213,7 +247,13 @@ func (dg *DreamGenerator) buildWarningDreamPrompt(context ChapterDreamContext) s
 5. 結尾留下不安感
 6. 使用第二人稱「你」來敘述
 
-輸出格式：純夢境敘事文字。`, context.PlayerSAN, context.RuleHints, context.ChapterNum)
+📋 OUTPUT FORMAT:
+{
+  "dream": "夢境敘述文字 (100-200 字)",
+  "symbols": ["警示符號1", "危險意象2"],
+  "rules_hinted": [],
+  "atmosphere": "uneasy"
+}`, context.PlayerSAN, context.RuleHints, context.ChapterNum)
 }
 
 // buildRandomDreamPrompt creates prompt for random dreams
@@ -231,7 +271,13 @@ func (dg *DreamGenerator) buildRandomDreamPrompt(context ChapterDreamContext) st
 5. 結尾平和或略帶疑惑
 6. 使用第二人稱「你」來敘述
 
-輸出格式：純夢境敘事文字。`, context.ChapterNum, context.RecentEvents)
+📋 OUTPUT FORMAT:
+{
+  "dream": "夢境敘述文字 (100-200 字)",
+  "symbols": ["奇幻元素1", "超現實場景2"],
+  "rules_hinted": [],
+  "atmosphere": "calm"
+}`, context.ChapterNum, context.RecentEvents)
 }
 
 // DetermineDreamProbability calculates dream trigger probability based on context

@@ -1,0 +1,532 @@
+version: "1.0"
+npc_types:
+  # NPC 1: 老兵倖存者 (Veteran Survivor)
+  - id: npc_001
+    name: 老兵倖存者
+    archetype: survivor
+    functional_role: 經驗指導（分享生存技巧）
+    normal_state:
+      description: 冷靜警覺，分享實戰經驗
+      personality_traits:
+        - 冷靜
+        - 謹慎
+        - 經驗豐富
+        - 警覺
+        - 務實
+      dialogue_style: 簡短直接，充滿實戰經驗的建議，偶爾透露過去的創傷
+      behavior_patterns:
+        - 快速識別危險
+        - 制定戰術計劃
+        - 保持安全距離
+        - 觀察環境變化
+    anxious_state:
+      description: 過度警戒，開始出現創傷閃回
+      personality_traits:
+        - 過度警戒
+        - 緊張不安
+        - 疑神疑鬼
+        - 不信任他人
+        - 容易激怒
+      dialogue_style: 語氣變得急促，頻繁提到過去的失敗，開始質疑所有人的動機
+      behavior_patterns:
+        - 拒絕分享資源
+        - 獨自行動
+        - 過度反應於聲音
+        - 頻繁檢查武器
+    corrupted_state:
+      description: 陷入創傷循環，將所有人視為威脅
+      personality_traits:
+        - 偏執
+        - 攻擊性強
+        - 完全不信任
+        - 瀕臨崩潰
+        - 自我毀滅傾向
+      dialogue_style: 語無倫次，混雜著戰場回憶和當前現實，可能突然暴怒
+      behavior_patterns:
+        - 攻擊隊友
+        - 設置陷阱防禦「敵人」
+        - 囤積武器彈藥
+        - 可能自殺式攻擊怪物
+    special_abilities:
+      - 快速識別危險
+      - 製作簡易武器
+      - 戰術規劃
+      - 急救知識
+    knowledge_level: partial
+    trust_level: trustworthy
+    background_hints:
+      - 曾是退役軍人
+      - 在這個夢魘中已經存活了數個循環
+      - 失去過隊友，因此對新人保持距離
+      - 知道某些規則，但不是全部
+    tags:
+      - survivor
+      - experienced
+      - tactical
+      - reliable
+    description: 一位經歷過多次夢魘循環的退役軍人。根據壓力程度，他會從冷靜的戰術顧問逐漸轉變為偏執的孤狼。
+
+  # NPC 2: 恐慌的新人 (Panicked Newcomer)
+  - id: npc_002
+    name: 恐慌的新人
+    archetype: victim
+    functional_role: 危險信號（用恐懼預警）
+    normal_state:
+      description: 困惑害怕，但努力保持理智
+      personality_traits:
+        - 害怕
+        - 困惑
+        - 依賴他人
+        - 求生慾強
+        - 願意合作
+      dialogue_style: 語速稍快，詢問很多問題，尋求指導和保護
+      behavior_patterns:
+        - 緊跟團隊
+        - 重複詢問「我們安全嗎」
+        - 對突發聲音反應劇烈
+        - 服從指示
+    anxious_state:
+      description: 恐懼加劇，開始失去理智
+      personality_traits:
+        - 極度害怕
+        - 慌張失措
+        - 情緒不穩定
+        - 容易尖叫
+        - 判斷力下降
+      dialogue_style: 語速極快且混亂，經常重複問題，聲音顫抖，容易尖叫
+      behavior_patterns:
+        - 顫抖和冒冷汗
+        - 頻繁尖叫引來危險
+        - 做出不理智的決定
+        - 可能突然逃跑
+    corrupted_state:
+      description: 完全崩潰，成為行走的危險源
+      personality_traits:
+        - 完全崩潰
+        - 歇斯底里
+        - 自我保護本能消失
+        - 危險行為
+        - 精神崩潰
+      dialogue_style: 尖叫、哭喊、語無倫次，可能重複說著意義不明的話
+      behavior_patterns:
+        - 持續尖叫吸引所有怪物
+        - 隨意觸發規則
+        - 抱住隊友不放
+        - 可能直接衝向怪物
+    special_abilities:
+      - 敏銳的直覺（恐懼帶來的第六感）
+      - 逃跑速度快
+    knowledge_level: none
+    trust_level: neutral
+    background_hints:
+      - 剛進入夢魘世界
+      - 完全不了解規則
+      - 恐懼給予異常敏銳的危險直覺
+      - 容易被怪物的聲音吸引
+    tags:
+      - newcomer
+      - panicked
+      - victim
+      - unstable
+    description: 一個剛剛被困在夢魘中的普通人。隨著恐懼累積，從尋求幫助的新人轉變為危險的累贅。
+
+  # NPC 3: 神秘嚮導 (Mysterious Guide)
+  - id: npc_003
+    name: 神秘嚮導
+    archetype: helper
+    functional_role: 智慧指引（隱晦提示真相）
+    normal_state:
+      description: 神秘冷靜，用謎語給予指引
+      personality_traits:
+        - 神秘
+        - 知識淵博
+        - 冷靜超然
+        - 難以捉摸
+        - 富有耐心
+      dialogue_style: 充滿隱喻和謎語，從不直接回答問題，喜歡用故事暗示真相
+      behavior_patterns:
+        - 在關鍵時刻出現
+        - 提供隱晦的線索
+        - 保持一定距離
+        - 觀察而非直接幫助
+    anxious_state:
+      description: 變得更加隱晦，暗示某種禁忌
+      personality_traits:
+        - 極度神秘
+        - 謹慎小心
+        - 警告意味濃厚
+        - 時隱時現
+        - 不願多說
+      dialogue_style: 謎語變得更加晦澀，經常說「不能說太多」，警告危險接近
+      behavior_patterns:
+        - 頻繁消失
+        - 只在安全時出現
+        - 給予更加隱晦的警告
+        - 避免直接接觸
+    corrupted_state:
+      description: 揭示真相的代價，開始與夢魘融合
+      personality_traits:
+        - 半人半魔
+        - 痛苦掙扎
+        - 知曉一切但無法言說
+        - 悲劇性
+        - 超然而絕望
+      dialogue_style: 在人性和怪物性之間掙扎，說出的真相伴隨著瘋狂，警告「不要成為我」
+      behavior_patterns:
+        - 身體開始異化
+        - 痛苦地洩露真相
+        - 在人性清醒時警告他人遠離
+        - 最終完全消失或成為新的夢魘
+    special_abilities:
+      - 完整了解所有規則
+      - 能感知怪物位置
+      - 可以短暫穩定他人精神
+      - 開鎖技能
+    knowledge_level: full
+    trust_level: neutral
+    background_hints:
+      - 在夢魘中存在了未知的時間
+      - 似乎不受某些規則約束
+      - 幫助過許多人，但從不說明原因
+      - 可能已經不完全是人類
+    tags:
+      - guide
+      - mysterious
+      - knowledgeable
+      - helper
+      - enigmatic
+    description: 一個在夢魘中存在已久的神秘人物。從神秘的引導者逐漸揭示出他與夢魘融合的悲劇本質。
+
+  # NPC 4: 感染者 (The Infected)
+  - id: npc_004
+    name: 感染者
+    archetype: threat
+    functional_role: 警示存在（展示違規後果）
+    normal_state:
+      description: 勉強保持理智，警告他人遠離
+      personality_traits:
+        - 痛苦掙扎
+        - 自我意識清醒
+        - 充滿悔恨
+        - 警告他人
+        - 理智尚存
+      dialogue_style: 吃力地說話，頻繁停頓喘息，警告他人「不要犯我的錯誤」
+      behavior_patterns:
+        - 與他人保持距離
+        - 分享觸發規則的經歷
+        - 提供關鍵情報
+        - 壓制感染症狀
+    anxious_state:
+      description: 理智間歇性喪失，轉化加速
+      personality_traits:
+        - 理智不穩
+        - 間歇性失控
+        - 痛苦加劇
+        - 危險性增加
+        - 悲劇性顯現
+      dialogue_style: 時而正常交談，時而呢喃瘋語，經常痛苦呻吟，聲音逐漸扭曲
+      behavior_patterns:
+        - 短暫失去控制
+        - 身體開始異變
+        - 對怪物產生感應
+        - 在清醒時洩露秘密
+    corrupted_state:
+      description: 完全轉化，成為新的怪物
+      personality_traits:
+        - 完全異化
+        - 理智消失
+        - 純粹的威脅
+        - 人性痕跡殘留
+        - 悲劇完結
+      dialogue_style: 怪物的嘶吼中偶爾夾雜破碎的人語，如「對不起」、「逃」
+      behavior_patterns:
+        - 攻擊所有人類
+        - 表現出異常能力
+        - 偶爾在熟悉的人面前猶豫
+        - 最終完全成為怪物
+    special_abilities:
+      - 異常力量（感染帶來）
+      - 對怪物的感應
+      - 在清醒時可提供關鍵情報
+    knowledge_level: partial
+    trust_level: untrustworthy
+    background_hints:
+      - 違反了某個重要規則
+      - 正在緩慢轉變成怪物
+      - 知道一些其他人不知道的秘密
+      - 轉化不可逆轉
+    tags:
+      - infected
+      - dangerous
+      - unstable
+      - tragic
+      - threat
+    description: 一個正在被夢魘侵蝕的可憐人。從掙扎抗拒的人類逐漸轉化為完全的怪物。
+
+  # NPC 5: 自私的背叛者 (The Selfish Betrayer)
+  - id: npc_005
+    name: 自私的背叛者
+    archetype: betrayer
+    functional_role: 混淆視聽（提供虛假情報）
+    normal_state:
+      description: 友善誠懇的假面，暗中盤算
+      personality_traits:
+        - 表面友善
+        - 善於偽裝
+        - 高度理性
+        - 求生慾極強
+        - 精於計算
+      dialogue_style: 誠懇友好，提供看似有用的建議，實則隱藏關鍵資訊
+      behavior_patterns:
+        - 主動提供幫助（帶有目的）
+        - 觀察並記錄他人行為
+        - 暗中評估利用價值
+        - 保留關鍵資訊
+    anxious_state:
+      description: 假面開始破裂，更加自私
+      personality_traits:
+        - 偽裝漸失
+        - 自私顯露
+        - 狡詐
+        - 操縱他人
+        - 缺乏同理心
+      dialogue_style: 表面友善但破綻增多，開始故意提供錯誤資訊
+      behavior_patterns:
+        - 故意誤導他人
+        - 製造陷阱
+        - 犧牲他人以自保
+        - 偷竊資源
+    corrupted_state:
+      description: 完全暴露本性，純粹的自私與背叛
+      personality_traits:
+        - 完全自私
+        - 無情背叛
+        - 極度狡詐
+        - 道德崩壞
+        - 生存至上
+      dialogue_style: 不再偽裝，直接威脅利誘，嘲笑他人的信任
+      behavior_patterns:
+        - 直接背叛團隊
+        - 將他人推向怪物
+        - 可能與夢魘達成交易
+        - 為生存不擇手段
+    special_abilities:
+      - 高超的說謊技巧
+      - 製造陷阱
+      - 偷竊和潛行
+      - 犧牲他人以自保
+    knowledge_level: full
+    trust_level: untrustworthy
+    background_hints:
+      - 存活了很長時間，但是靠犧牲他人
+      - 完全了解規則，但故意誤導他人
+      - 曾經背叛過多個團隊
+      - 可能與夢魘本身有某種交易
+    tags:
+      - betrayer
+      - manipulative
+      - selfish
+      - dangerous
+      - liar
+    description: 一個極度自私的倖存者。從偽裝的好人逐漸暴露為徹底的背叛者。
+
+  # NPC 6: 盡責的守護者 (The Dutiful Protector)
+  - id: npc_006
+    name: 盡責的守護者
+    archetype: helper
+    functional_role: 團隊支撐（保護和鼓勵）
+    normal_state:
+      description: 勇敢善良，願意保護他人
+      personality_traits:
+        - 勇敢
+        - 富有同情心
+        - 正義感強
+        - 樂於助人
+        - 冷靜可靠
+      dialogue_style: 溫暖鼓勵，充滿希望，主動承擔風險保護他人
+      behavior_patterns:
+        - 走在隊伍前方
+        - 主動面對危險
+        - 鼓勵恐懼的人
+        - 分享資源
+    anxious_state:
+      description: 過度保護，開始不顧自身安危
+      personality_traits:
+        - 過度保護
+        - 自我犧牲傾向
+        - 壓力增大
+        - 過於信任他人
+        - 判斷力下降
+      dialogue_style: 仍然鼓勵他人，但語氣變得強制性，堅持「沒人會死」
+      behavior_patterns:
+        - 強制保護不需要的人
+        - 承受所有風險
+        - 忽視自身傷害
+        - 過度消耗體力
+    corrupted_state:
+      description: 殉道者心態，成為危險的善意
+      personality_traits:
+        - 殉道者
+        - 偏執的善良
+        - 自我毀滅
+        - 強迫性保護
+        - 理智崩壞
+      dialogue_style: 狂熱地宣稱「我會救所有人」，即使面對必死局面
+      behavior_patterns:
+        - 強迫他人接受保護
+        - 自殺式保護行為
+        - 可能阻止他人逃生
+        - 最終犧牲自己（可能拖累他人）
+    special_abilities:
+      - 激勵他人（減少SAN損失）
+      - 承受傷害保護他人
+      - 急救專家
+      - 團隊協調
+    knowledge_level: partial
+    trust_level: trustworthy
+    background_hints:
+      - 曾是醫護人員
+      - 信念是保護每一個人
+      - 已經救過許多人，但也失去過許多
+      - 過於善良可能成為弱點
+    tags:
+      - protector
+      - helper
+      - selfless
+      - medic
+      - trustworthy
+    description: 一位擁有強烈使命感的前醫護人員。從可靠的保護者逐漸變為危險的殉道者。
+
+  # NPC 7: 瘋狂的研究者 (The Mad Researcher)
+  - id: npc_007
+    name: 瘋狂的研究者
+    archetype: neutral
+    functional_role: 知識來源（危險的真相）
+    normal_state:
+      description: 理性分析，科學探究夢魘本質
+      personality_traits:
+        - 極度理性
+        - 好奇心強
+        - 冷靜客觀
+        - 略微冷漠
+        - 求知慾旺盛
+      dialogue_style: 理性分析，使用科學術語，對恐怖現象表現出學術興趣
+      behavior_patterns:
+        - 記錄觀察結果
+        - 分析怪物行為
+        - 提供科學解釋
+        - 收集樣本
+    anxious_state:
+      description: 過度研究導致精神受損，理性與瘋狂並存
+      personality_traits:
+        - 瘋狂
+        - 理性與瘋狂交織
+        - 危險的好奇心
+        - 對生命漠視
+        - 癡迷
+      dialogue_style: 喃喃自語夾雜著深奧的理論，時而清晰時而混亂
+      behavior_patterns:
+        - 危險的實驗
+        - 用隊友做測試
+        - 記憶力超群
+        - 提供有用但危險的知識
+    corrupted_state:
+      description: 完全瘋狂，成為夢魘的觀察者
+      personality_traits:
+        - 完全瘋狂
+        - 理智盡失
+        - 極度危險
+        - 與夢魘共鳴
+        - 不再是人類
+      dialogue_style: 笑著述說恐怖真相，混雜著瘋狂的理論和不明語言
+      behavior_patterns:
+        - 進行不道德實驗
+        - 主動引來怪物研究
+        - 可能解剖活人
+        - 融入夢魘成為其一部分
+    special_abilities:
+      - 深度了解夢魘的本質
+      - 能分析怪物弱點
+      - 記憶力超群
+      - 科學推理
+    knowledge_level: full
+    trust_level: neutral
+    background_hints:
+      - 曾試圖研究夢魘的本質
+      - 知道太多真相導致精神崩潰
+      - 會提供有用但危險的知識
+      - 可能進行不道德的實驗
+    tags:
+      - researcher
+      - mad
+      - knowledgeable
+      - dangerous
+      - neutral
+    description: 一個因深入研究夢魘而精神崩潰的科學家。從理性的研究者墜入完全的瘋狂。
+
+  # NPC 8: 純真的孩童 (The Innocent Child)
+  - id: npc_008
+    name: 純真的孩童
+    archetype: victim
+    functional_role: 真相之鏡（純真看破虛妄）
+    normal_state:
+      description: 天真無邪，能看見他人看不見的真相
+      personality_traits:
+        - 天真
+        - 純潔
+        - 誠實
+        - 直覺敏銳
+        - 信任他人
+      dialogue_style: 簡單直白，說出其他人看不見的真相，經常詢問為什麼
+      behavior_patterns:
+        - 指出怪物的位置
+        - 說出絕對真實的話
+        - 天真地接近危險
+        - 怪物對其反應奇特
+    anxious_state:
+      description: 開始感到恐懼，純真漸失
+      personality_traits:
+        - 恐懼
+        - 困惑
+        - 脆弱
+        - 開始不信任
+        - 依賴性增強
+      dialogue_style: 聲音顫抖，問「為什麼大人們要說謊」，開始哭泣
+      behavior_patterns:
+        - 緊抱玩具或依賴對象
+        - 躲藏
+        - 偶爾仍說真話
+        - 怪物開始對其產生攻擊性
+    corrupted_state:
+      description: 純真徹底消失，成為夢魘的一部分
+      personality_traits:
+        - 純真盡失
+        - 被夢魘吞噬
+        - 可怕的童真
+        - 不祥
+        - 詭異
+      dialogue_style: 用童稚的聲音說出恐怖真相，邀請人「一起玩」，詭異地歌唱
+      behavior_patterns:
+        - 引誘人進入陷阱
+        - 成為夢魘的代言人
+        - 詭異的童謠和遊戲
+        - 最恐怖的存在
+    special_abilities:
+      - 能看見常人看不見的東西
+      - 不會說謊（提供的資訊絕對真實）
+      - 怪物對其反應不同
+      - 純真可能影響某些規則
+    knowledge_level: none
+    trust_level: trustworthy
+    background_hints:
+      - 不清楚自己為何在這裡
+      - 能看見怪物的真實形態
+      - 說的話總是真實的，但難以理解
+      - 可能是夢魘的一部分，或是唯一的希望
+    tags:
+      - child
+      - innocent
+      - truthful
+      - victim
+      - mysterious
+    description: 一個不知為何出現在夢魘中的孩子。從純真的真相之鏡墮落為最詭異的存在。

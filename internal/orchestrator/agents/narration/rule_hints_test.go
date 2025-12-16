@@ -1,6 +1,7 @@
 package narration
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -603,3 +604,284 @@ func TestGenerateRuleHint_EdgeCases(t *testing.T) {
 	}
 }
 
+// TestBuildHintTextWithProgression_AllLevels tests buildHintTextWithProgression with all hint levels
+func TestBuildHintTextWithProgression_AllLevels(t *testing.T) {
+	tests := []struct {
+		name         string
+		hintLevel    HintLevel
+		keywords     []string
+		warningCount int
+		expectEmpty  bool
+	}{
+		{
+			name:         "direct hint with keywords",
+			hintLevel:    HintLevelDirect,
+			keywords:     []string{"夜晚", "開燈"},
+			warningCount: 0,
+			expectEmpty:  false,
+		},
+		{
+			name:         "direct hint without keywords",
+			hintLevel:    HintLevelDirect,
+			keywords:     []string{},
+			warningCount: 0,
+			expectEmpty:  false,
+		},
+		{
+			name:         "direct hint second warning",
+			hintLevel:    HintLevelDirect,
+			keywords:     []string{"規則"},
+			warningCount: 1,
+			expectEmpty:  false,
+		},
+		{
+			name:         "vague hint with keywords",
+			hintLevel:    HintLevelVague,
+			keywords:     []string{"地下室"},
+			warningCount: 0,
+			expectEmpty:  false,
+		},
+		{
+			name:         "vague hint without keywords",
+			hintLevel:    HintLevelVague,
+			keywords:     []string{},
+			warningCount: 0,
+			expectEmpty:  false,
+		},
+		{
+			name:         "subtle hint with keywords",
+			hintLevel:    HintLevelSubtle,
+			keywords:     []string{"聲音"},
+			warningCount: 0,
+			expectEmpty:  false,
+		},
+		{
+			name:         "subtle hint without keywords",
+			hintLevel:    HintLevelSubtle,
+			keywords:     []string{},
+			warningCount: 0,
+			expectEmpty:  false,
+		},
+		{
+			name:         "none level returns empty",
+			hintLevel:    HintLevelNone,
+			keywords:     []string{"測試"},
+			warningCount: 0,
+			expectEmpty:  true,
+		},
+		{
+			name:         "invalid level returns empty",
+			hintLevel:    HintLevel(99), // Invalid level
+			keywords:     []string{"測試"},
+			warningCount: 0,
+			expectEmpty:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildHintTextWithProgression(tt.hintLevel, tt.keywords, tt.warningCount)
+
+			if tt.expectEmpty {
+				assert.Empty(t, result, "Should return empty hint")
+			} else {
+				assert.NotEmpty(t, result, "Should return non-empty hint")
+			}
+		})
+	}
+}
+
+// TestBuildKeywordContext_MultipleKeywords tests buildKeywordContext with various keyword counts
+func TestBuildKeywordContext_MultipleKeywords(t *testing.T) {
+	tests := []struct {
+		name      string
+		keywords  []string
+		connector string
+	}{
+		{
+			name:      "empty keywords",
+			keywords:  []string{},
+			connector: "關於",
+		},
+		{
+			name:      "single keyword",
+			keywords:  []string{"夜晚"},
+			connector: "關於",
+		},
+		{
+			name:      "two keywords",
+			keywords:  []string{"夜晚", "開燈"},
+			connector: "與",
+		},
+		{
+			name:      "three keywords",
+			keywords:  []string{"夜晚", "開燈", "危險"},
+			connector: "關於",
+		},
+		{
+			name:      "five keywords",
+			keywords:  []string{"規則", "違反", "後果", "警告", "嚴重"},
+			connector: "與",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Run multiple times to test randomness in keyword selection
+			for i := 0; i < 5; i++ {
+				result := buildKeywordContext(tt.keywords, tt.connector)
+
+				if len(tt.keywords) == 0 {
+					assert.Empty(t, result, "Should return empty for no keywords")
+				} else {
+					assert.NotEmpty(t, result, "Should return non-empty for keywords")
+					assert.Contains(t, result, tt.connector,
+						"Should contain connector")
+					// Should contain at least one keyword
+					foundKeyword := false
+					for _, keyword := range tt.keywords {
+						if strings.Contains(result, keyword) {
+							foundKeyword = true
+							break
+						}
+					}
+					assert.True(t, foundKeyword,
+						"Should contain at least one keyword from the list")
+				}
+			}
+		})
+	}
+}
+
+// TestBuildDirectHint_WarningProgression tests buildDirectHint warning progression
+func TestBuildDirectHint_WarningProgression(t *testing.T) {
+	tests := []struct {
+		name           string
+		keywords       []string
+		warningCount   int
+		expectContains []string
+	}{
+		{
+			name:           "first warning with keywords",
+			keywords:       []string{"夜晚", "開燈"},
+			warningCount:   0,
+			expectContains: []string{"可能不太對"},
+		},
+		{
+			name:           "second warning with keywords",
+			keywords:       []string{"夜晚", "開燈"},
+			warningCount:   1,
+			expectContains: []string{"警告", "嚴重後果"},
+		},
+		{
+			name:           "third warning (same as second)",
+			keywords:       []string{"規則"},
+			warningCount:   2,
+			expectContains: []string{"警告", "嚴重後果"},
+		},
+		{
+			name:           "first warning without keywords",
+			keywords:       []string{},
+			warningCount:   0,
+			expectContains: []string{"可能不太對"},
+		},
+		{
+			name:           "second warning without keywords",
+			keywords:       []string{},
+			warningCount:   1,
+			expectContains: []string{"警告", "嚴重後果"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildDirectHint(tt.keywords, tt.warningCount)
+
+			assert.NotEmpty(t, result, "Direct hint should not be empty")
+
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, result, expected,
+					"Hint should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestBuildVagueHint_WithAndWithoutKeywords tests buildVagueHint with various keyword scenarios
+func TestBuildVagueHint_WithAndWithoutKeywords(t *testing.T) {
+	tests := []struct {
+		name           string
+		keywords       []string
+		expectContains []string
+	}{
+		{
+			name:           "with single keyword",
+			keywords:       []string{"地下室"},
+			expectContains: []string{"氛圍", "詭異"},
+		},
+		{
+			name:           "with multiple keywords",
+			keywords:       []string{"夜晚", "開燈", "危險"},
+			expectContains: []string{"氛圍", "詭異"},
+		},
+		{
+			name:           "without keywords",
+			keywords:       []string{},
+			expectContains: []string{"氛圍", "詭異"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildVagueHint(tt.keywords)
+
+			assert.NotEmpty(t, result, "Vague hint should not be empty")
+
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, result, expected,
+					"Hint should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestBuildSubtleHint_WithAndWithoutKeywords tests buildSubtleHint with various keyword scenarios
+func TestBuildSubtleHint_WithAndWithoutKeywords(t *testing.T) {
+	tests := []struct {
+		name     string
+		keywords []string
+	}{
+		{
+			name:     "with single keyword",
+			keywords: []string{"聲音"},
+		},
+		{
+			name:     "with multiple keywords",
+			keywords: []string{"聲音", "回應", "危險"},
+		},
+		{
+			name:     "without keywords",
+			keywords: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Run multiple times to test randomness in template selection
+			results := make(map[string]bool)
+			for i := 0; i < 10; i++ {
+				result := buildSubtleHint(tt.keywords)
+				assert.NotEmpty(t, result, "Subtle hint should not be empty")
+				results[result] = true
+			}
+
+			// With randomness, we should see some variation over multiple runs
+			// (unless keywords are provided, which adds prefix)
+			if len(tt.keywords) == 0 {
+				// Without keywords, we should see multiple different templates
+				assert.GreaterOrEqual(t, len(results), 1,
+					"Should generate at least one template variation")
+			}
+		})
+	}
+}

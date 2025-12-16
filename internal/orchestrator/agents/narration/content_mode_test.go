@@ -1303,3 +1303,243 @@ func TestGenerateNarrative_AllTensionLevels(t *testing.T) {
 	}
 }
 
+// TestGenerateRuleHints_MissingRule tests generateRuleHints when rule is not found in ActiveRules
+func TestGenerateRuleHints_MissingRule(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	gameState := engine.NewGameStateV2()
+	gameState.ActiveRules = []*engine.ActiveRule{
+		{ID: "rule_001", Name: "不要在夜晚開燈"},
+	}
+	gameState.RuleWarnings = make(map[string]int)
+
+	req := &ContentRequest{
+		Beat:             5,
+		GameState:        gameState,
+		LastPlayerChoice: "開了燈",
+		Difficulty:       "normal",
+		JudgeResult: &JudgeResult{
+			ViolatedRules: []string{"rule_999"}, // Rule not in ActiveRules
+			ImpactLevel:   "moderate",
+			HPDelta:       0,
+			SANDelta:      -10,
+			Reason:        "違反未知規則",
+		},
+	}
+
+	hints := agent.generateRuleHints(req)
+
+	// Should generate hint with generic description "未知規則"
+	require.NotEmpty(t, hints, "Should generate hint even if rule not found")
+	assert.Contains(t, hints[0], "未知",
+		"Hint should contain generic unknown rule indicator")
+}
+
+// TestGenerateRuleHints_MultipleViolations tests generateRuleHints with multiple violated rules
+func TestGenerateRuleHints_MultipleViolations(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	gameState := engine.NewGameStateV2()
+	gameState.ActiveRules = []*engine.ActiveRule{
+		{ID: "rule_001", Name: "不要在夜晚開燈"},
+		{ID: "rule_002", Name: "不要進入地下室"},
+		{ID: "rule_003", Name: "聽到聲音不要回應"},
+	}
+	gameState.RuleWarnings = make(map[string]int)
+
+	req := &ContentRequest{
+		Beat:             5,
+		GameState:        gameState,
+		LastPlayerChoice: "違反多條規則",
+		Difficulty:       "normal",
+		JudgeResult: &JudgeResult{
+			ViolatedRules: []string{"rule_001", "rule_002", "rule_003"},
+			ImpactLevel:   "major",
+			HPDelta:       -15,
+			SANDelta:      -20,
+			Reason:        "同時違反多條規則",
+		},
+	}
+
+	hints := agent.generateRuleHints(req)
+
+	// Should generate hints for all violated rules
+	assert.Equal(t, 3, len(hints), "Should generate 3 hints for 3 violations")
+
+	// Check all rules have warning counts updated
+	assert.Equal(t, 1, gameState.RuleWarnings["rule_001"])
+	assert.Equal(t, 1, gameState.RuleWarnings["rule_002"])
+	assert.Equal(t, 1, gameState.RuleWarnings["rule_003"])
+}
+
+// TestGenerateRuleHints_EmptyViolations tests generateRuleHints with no violations
+func TestGenerateRuleHints_EmptyViolations(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	gameState := engine.NewGameStateV2()
+	gameState.ActiveRules = []*engine.ActiveRule{
+		{ID: "rule_001", Name: "不要在夜晚開燈"},
+	}
+
+	tests := []struct {
+		name        string
+		judgeResult *JudgeResult
+	}{
+		{
+			name:        "nil JudgeResult",
+			judgeResult: nil,
+		},
+		{
+			name: "empty ViolatedRules",
+			judgeResult: &JudgeResult{
+				ViolatedRules: []string{},
+				ImpactLevel:   "none",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &ContentRequest{
+				Beat:             5,
+				GameState:        gameState,
+				LastPlayerChoice: "正常行動",
+				Difficulty:       "normal",
+				JudgeResult:      tt.judgeResult,
+			}
+
+			hints := agent.generateRuleHints(req)
+
+			assert.Empty(t, hints, "Should return empty hints when no violations")
+		})
+	}
+}
+
+// TestInvokeContent_CompleteWorkflow tests InvokeContent with complete workflow including all features
+func TestInvokeContent_CompleteWorkflow(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	gameState := engine.NewGameStateV2()
+	gameState.SetHP(80)
+	gameState.SetSAN(60)
+	gameState.ActiveRules = []*engine.ActiveRule{
+		{ID: "rule_001", Name: "不要在夜晚開燈"},
+	}
+	gameState.RuleWarnings = make(map[string]int)
+	gameState.Tension = &engine.TensionState{
+		Level: engine.TensionLevelMedium,
+	}
+
+	req := &ContentRequest{
+		Beat:             5,
+		GameState:        gameState,
+		LastPlayerChoice: "開了燈",
+		Difficulty:       "normal",
+		JudgeResult: &JudgeResult{
+			ViolatedRules:   []string{"rule_001"},
+			ImpactLevel:     "moderate",
+			HPDelta:         -15,
+			SANDelta:        -10,
+			IsHallucination: false,
+			Reason:          "你違反了規則，受到了懲罰",
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := agent.InvokeContent(ctx, req)
+
+	// Should succeed
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Check all components are present
+	assert.NotEmpty(t, resp.MainNarrative, "Should have main narrative")
+	assert.NotEmpty(t, resp.RuleHints, "Should have rule hints")
+	assert.Equal(t, -15, resp.HPChange, "Should have HP change")
+	assert.Equal(t, -10, resp.SANChange, "Should have SAN change")
+	assert.False(t, resp.DeathTriggered, "Should not trigger death")
+
+	// Check HP/SAN descriptions are in narrative
+	assert.Contains(t, resp.MainNarrative, "HP -15",
+		"Narrative should contain HP change")
+	assert.Contains(t, resp.MainNarrative, "SAN -10",
+		"Narrative should contain SAN change")
+
+	// Check rule warning was incremented
+	assert.Equal(t, 1, gameState.RuleWarnings["rule_001"],
+		"Rule warning should be incremented")
+}
+
+// TestInvokeContent_DeathByHP tests death triggered by HP reaching 0
+func TestInvokeContent_DeathByHP(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	gameState := engine.NewGameStateV2()
+	gameState.SetHP(10) // Low HP
+	gameState.SetSAN(50)
+
+	req := &ContentRequest{
+		Beat:             5,
+		GameState:        gameState,
+		LastPlayerChoice: "受到致命傷害",
+		Difficulty:       "normal",
+		JudgeResult: &JudgeResult{
+			ViolatedRules: []string{},
+			ImpactLevel:   "major",
+			HPDelta:       -15, // This will bring HP to -5
+			SANDelta:      0,
+			Reason:        "致命一擊",
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := agent.InvokeContent(ctx, req)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Death should be triggered
+	assert.True(t, resp.DeathTriggered, "Death should be triggered when HP <= 0")
+}
+
+// TestInvokeContent_DeathBySAN tests death triggered by SAN reaching 0
+func TestInvokeContent_DeathBySAN(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	gameState := engine.NewGameStateV2()
+	gameState.SetHP(50)
+	gameState.SetSAN(8) // Low SAN
+
+	req := &ContentRequest{
+		Beat:             5,
+		GameState:        gameState,
+		LastPlayerChoice: "陷入幻覺",
+		Difficulty:       "normal",
+		JudgeResult: &JudgeResult{
+			ViolatedRules:   []string{},
+			ImpactLevel:     "major",
+			HPDelta:         0,
+			SANDelta:        -5,
+			IsHallucination: true, // Will add additional penalty
+			Reason:          "瘋狂吞噬",
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := agent.InvokeContent(ctx, req)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Death should be triggered (SAN: 8 - 5 - 5(hallucination) = -2)
+	assert.True(t, resp.DeathTriggered, "Death should be triggered when SAN <= 0")
+	assert.Contains(t, resp.MainNarrative, "一切都不真實了",
+		"Should contain severe hallucination description")
+}
+

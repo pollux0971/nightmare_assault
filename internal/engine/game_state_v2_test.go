@@ -2,8 +2,11 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/nightmare-assault/nightmare-assault/internal/engine/seed"
 )
 
 // Test Task 1: GameStateV2 struct definition
@@ -170,12 +173,22 @@ func TestGameStateV2_JSONDoesNotIncludeMutex(t *testing.T) {
 func TestGameStateV2_AddGlobalSeed(t *testing.T) {
 	state := NewGameStateV2()
 
-	seed := &GlobalSeed{
-		ID:      "GS001",
-		Content: "測試伏筆",
+	testSeed, err := seed.NewGlobalSeed(
+		"GS001",
+		"測試伏筆",
+		"測試真相",
+		"tragic",
+		[]seed.ClueTier{
+			{Tier: 1, Content: "Tier 1", Keywords: []string{"test"}, BeatStart: 1, BeatEnd: 5},
+			{Tier: 2, Content: "Tier 2", Keywords: []string{"test"}, BeatStart: 6, BeatEnd: 12},
+			{Tier: 3, Content: "Tier 3", Keywords: []string{"test"}, BeatStart: 13, BeatEnd: 18},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Failed to create test seed: %v", err)
 	}
 
-	state.AddGlobalSeed(seed)
+	state.AddGlobalSeed(testSeed)
 
 	seeds := state.GetGlobalSeeds()
 	if len(seeds) != 1 {
@@ -231,5 +244,168 @@ func TestGameStateV2_BoundaryConditions(t *testing.T) {
 	state.SetSAN(150)
 	if san := state.GetSAN(); san != 150 {
 		t.Errorf("SAN should allow values > 100, got %d", san)
+	}
+}
+
+// Test deep copy protection (Issue #2)
+func TestGameStateV2_DeepCopyProtection(t *testing.T) {
+	gs := NewGameStateV2()
+
+	// Test GlobalSeed deep copy
+	testSeed, err := seed.NewGlobalSeed(
+		"GS001",
+		"Original content",
+		"Original truth",
+		"tragic",
+		[]seed.ClueTier{
+			{Tier: 1, Content: "Clue 1", Keywords: []string{"hint"}, BeatStart: 1, BeatEnd: 5},
+			{Tier: 2, Content: "Clue 2", Keywords: []string{"clue"}, BeatStart: 6, BeatEnd: 12},
+			{Tier: 3, Content: "Clue 3", Keywords: []string{"reveal"}, BeatStart: 13, BeatEnd: 18},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Failed to create test seed: %v", err)
+	}
+	gs.AddGlobalSeed(testSeed)
+
+	// 獲取副本並嘗試修改
+	seeds := gs.GetGlobalSeeds()
+	seeds[0].Content = "Modified content"
+	if seeds[0].CurrentTier < 3 {
+		_ = seeds[0].AdvanceTier()
+	}
+
+	// 驗證原始數據未被修改
+	original := gs.GetGlobalSeeds()
+	if original[0].Content != "Original content" {
+		t.Errorf("Deep copy failed: GlobalSeed content was modified")
+	}
+	if original[0].CurrentTier != 1 {
+		t.Errorf("Deep copy failed: GlobalSeed CurrentTier was modified")
+	}
+
+	// Test LocalSeed deep copy
+	gs.AddLocalSeed(&LocalSeed{
+		ID:      "LS001",
+		Content: "Original local",
+		Urgency: 50,
+	})
+
+	localSeeds := gs.GetLocalSeeds()
+	localSeeds[0].Content = "Modified local"
+	localSeeds[0].IsHarvested = true
+
+	// 驗證原始數據未被修改
+	originalLocal := gs.GetLocalSeeds()
+	if originalLocal[0].Content != "Original local" {
+		t.Errorf("Deep copy failed: LocalSeed content was modified")
+	}
+	if originalLocal[0].IsHarvested {
+		t.Errorf("Deep copy failed: LocalSeed IsHarvested was modified")
+	}
+}
+
+// Test UnmarshalJSON error cases (Issue #3)
+func TestGameStateV2_UnmarshalJSON_ErrorCases(t *testing.T) {
+	gs := NewGameStateV2()
+
+	// Test empty data
+	err := gs.UnmarshalJSON(nil)
+	if err == nil {
+		t.Error("Expected error for nil data")
+	}
+
+	// Test invalid JSON
+	err = gs.UnmarshalJSON([]byte("invalid json"))
+	if err == nil {
+		t.Error("Expected error for invalid JSON")
+	}
+}
+
+// Test concurrent access (Issue #4)
+func TestGameStateV2_ConcurrentAccess(t *testing.T) {
+	gs := NewGameStateV2()
+
+	var wg sync.WaitGroup
+	iterations := 100
+
+	// 並發讀寫 HP
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				gs.SetHP(j)
+				gs.GetHP()
+			}
+		}()
+	}
+
+	// 並發讀寫 SAN
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				gs.SetSAN(j)
+				gs.GetSAN()
+			}
+		}()
+	}
+
+	// 並發讀寫 Seeds
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				testSeed, _ := seed.NewGlobalSeed(
+					fmt.Sprintf("GS%03d-%03d", id, j),
+					"content",
+					"truth",
+					"tragic",
+					[]seed.ClueTier{
+						{Tier: 1, Content: "C1", Keywords: []string{}, BeatStart: 1, BeatEnd: 5},
+						{Tier: 2, Content: "C2", Keywords: []string{}, BeatStart: 6, BeatEnd: 12},
+						{Tier: 3, Content: "C3", Keywords: []string{}, BeatStart: 13, BeatEnd: 18},
+					},
+				)
+				gs.AddGlobalSeed(testSeed)
+				gs.GetGlobalSeeds()
+			}
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+// Test extreme boundary values (Issue #4)
+func TestGameStateV2_ExtremeBoundaryValues(t *testing.T) {
+	gs := NewGameStateV2()
+
+	// Note: GameStateV2 itself does NOT enforce clamping
+	// This is StateManager's responsibility (to be implemented in Epic 5)
+	// These tests verify that GameStateV2 accepts any value
+
+	// HP extreme values
+	gs.SetHP(-1000)
+	if gs.GetHP() != -1000 {
+		t.Errorf("Expected HP=-1000, got %d", gs.GetHP())
+	}
+
+	gs.SetHP(1000)
+	if gs.GetHP() != 1000 {
+		t.Errorf("Expected HP=1000, got %d", gs.GetHP())
+	}
+
+	// SAN extreme values
+	gs.SetSAN(-1000)
+	if gs.GetSAN() != -1000 {
+		t.Errorf("Expected SAN=-1000, got %d", gs.GetSAN())
+	}
+
+	gs.SetSAN(1000)
+	if gs.GetSAN() != 1000 {
+		t.Errorf("Expected SAN=1000, got %d", gs.GetSAN())
 	}
 }
