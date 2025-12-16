@@ -1,6 +1,7 @@
 package narration
 
 import (
+	"github.com/nightmare-assault/nightmare-assault/internal/engine"
 	"github.com/nightmare-assault/nightmare-assault/internal/templates"
 )
 
@@ -179,3 +180,73 @@ type EndingCondition struct {
 	MinHP             int     `json:"min_hp,omitempty"`
 	MinSAN            int     `json:"min_san,omitempty"`
 }
+
+// ==========================================================================
+// Opening & Ending Mode Types (Story 6.4)
+// ==========================================================================
+
+// StoryBible 是故事骨架的簡化視圖
+//
+// 用於 Opening & Ending 模式的輸入數據，避免直接依賴 orchestrator.StoryBible
+type StoryBible struct {
+	WorldView       WorldView
+	CoreTruth       CoreTruth
+	PlotStructure   PlotStructure
+	PossibleEndings []Ending
+}
+
+// OpeningRequest 是序章生成請求
+//
+// 用於 Genesis Phase 生成引人入勝的序章（800-1200 字）：
+//   - StoryBible: 故事骨架（來自 Skeleton Mode）
+//   - Difficulty: 難度等級（影響規則暗示的隱晦程度）
+type OpeningRequest struct {
+	StoryBible *StoryBible
+	Difficulty string // easy/normal/hard/hell
+}
+
+// OpeningResponse 是序章生成響應
+//
+// 包含序章敘事與初始遊戲狀態：
+//   - OpeningNarrative: 序章文本（800-1200 字）
+//   - InitialTension: 初始張力值（10-20）
+//   - FirstChoice: 引導第一個選擇的文本（50 字內）
+type OpeningResponse struct {
+	OpeningNarrative string `json:"opening_narrative"`
+	InitialTension   int    `json:"initial_tension"`   // 10-20
+	FirstChoice      string `json:"first_choice_prompt"` // 引導第一個選擇
+}
+
+// EndingRequest 是結局生成請求
+//
+// 用於 Convergence Phase 生成多結局敘事（1000-1500 字）：
+//   - GameState: 當前遊戲狀態（含 Global Seeds 揭露狀態）
+//   - EndingType: 結局類型（True/Good/Bad，可選，未指定則自動判定）
+type EndingRequest struct {
+	GameState  *engine.GameStateV2
+	EndingType string // "true"/"good"/"bad" (optional, will auto-determine if empty)
+}
+
+// EndingResponse 是結局生成響應
+//
+// 包含結局敘事與情感解析：
+//   - EndingNarrative: 結局文本（1000-1500 字，根據類型）
+//   - FinalEmotion: 最終情感（shock/relief/despair）
+//   - ClosingLine: 結局金句（最後一句，留下深刻印象）
+type EndingResponse struct {
+	EndingNarrative string `json:"ending_narrative"`
+	FinalEmotion    string `json:"final_emotion"`    // shock/relief/despair
+	ClosingLine     string `json:"closing_line"`     // 結局金句
+}
+
+// EndingType 枚舉定義
+//
+// 結局類型基於 Global Seeds 揭露程度：
+//   - EndingTrue: ≥80% Global Seeds 完全揭露（Tier 1, 2, 3）
+//   - EndingGood: 40-79% Global Seeds 完全揭露
+//   - EndingBad: <40% Global Seeds 揭露
+const (
+	EndingTrue = "true"
+	EndingGood = "good"
+	EndingBad  = "bad"
+)
