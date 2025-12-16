@@ -694,3 +694,435 @@ func TestGetRuleDescription(t *testing.T) {
 	}
 }
 
+// TestHandleSceneTransition tests scene transition description generation
+func TestHandleSceneTransition(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	tests := []struct {
+		name           string
+		fromScene      string
+		toScene        string
+		transitionType string
+		expectContains []string
+	}{
+		{
+			name:           "spatial transition",
+			fromScene:      "室內走廊",
+			toScene:        "戶外庭院",
+			transitionType: "spatial",
+			expectContains: []string{
+				"場景轉換發生了",
+				"室內走廊",
+				"戶外庭院",
+				"環境的變化",
+				"空氣的溫度",
+			},
+		},
+		{
+			name:           "temporal transition",
+			fromScene:      "白天",
+			toScene:        "夜晚",
+			transitionType: "temporal",
+			expectContains: []string{
+				"時間流逝",
+				"白天",
+				"夜晚",
+				"時間的推移",
+				"光線的角度",
+			},
+		},
+		{
+			name:           "atmospheric transition",
+			fromScene:      "安全房間",
+			toScene:        "危險區域",
+			transitionType: "atmospheric",
+			expectContains: []string{
+				"氛圍驟然改變",
+				"安全房間",
+				"危險區域",
+				"氣氛發生了劇烈的變化",
+				"本能在尖叫",
+			},
+		},
+		{
+			name:           "default transition",
+			fromScene:      "A場景",
+			toScene:        "B場景",
+			transitionType: "unknown",
+			expectContains: []string{
+				"A場景",
+				"B場景",
+				"環境發生了變化",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			description := agent.HandleSceneTransition(tt.fromScene, tt.toScene, tt.transitionType)
+
+			// Check description is not empty
+			assert.NotEmpty(t, description, "Scene transition description should not be empty")
+
+			// Check description length is reasonable (default case is shorter than full transitions)
+			// Default transition: ~60-80 chars, Full transitions: 100-150 chars
+			runeCount := len([]rune(description))
+			if tt.transitionType == "unknown" {
+				assert.GreaterOrEqual(t, runeCount, 50, "Default description should be at least 50 characters")
+			} else {
+				assert.GreaterOrEqual(t, runeCount, 80, "Description should be at least 80 characters")
+			}
+
+			// Check expected content is present
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, description, expected,
+					"Description should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestHandleKeyPlotPoint tests key plot point description generation
+func TestHandleKeyPlotPoint(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	tests := []struct {
+		name           string
+		plotType       PlotPointType
+		beat           int
+		expectContains []string
+		minLength      int
+	}{
+		{
+			name:     "inciting incident",
+			plotType: PlotPointIncitingIncident,
+			beat:     10,
+			expectContains: []string{
+				"一切都在這一刻改變了",
+				"事情遠比你想像的要嚴重",
+				"你已經被捲入了",
+				"無法逃脫的漩渦",
+			},
+			minLength: 150,
+		},
+		{
+			name:     "midpoint",
+			plotType: PlotPointMidpoint,
+			beat:     25,
+			expectContains: []string{
+				"真相的一角浮現了",
+				"你所知道的只是冰山一角",
+				"真正的威脅比你想像的要可怕得多",
+				"你別無選擇",
+			},
+			minLength: 150,
+		},
+		{
+			name:     "second plot point",
+			plotType: PlotPointSecondPlotPoint,
+			beat:     40,
+			expectContains: []string{
+				"這是最黑暗的時刻",
+				"一切都崩潰了",
+				"絕望",
+				"最後的考驗",
+			},
+			minLength: 150,
+		},
+		{
+			name:     "climax",
+			plotType: PlotPointClimax,
+			beat:     50,
+			expectContains: []string{
+				"最終的時刻到來了",
+				"所有的線索",
+				"最後的對抗",
+				"決定一切的時刻",
+			},
+			minLength: 150,
+		},
+		{
+			name:           "unknown plot type",
+			plotType:       PlotPointType("unknown"),
+			beat:           15,
+			expectContains: []string{"關鍵時刻降臨", "Beat 15"},
+			minLength:      20,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			description := agent.HandleKeyPlotPoint(tt.plotType, tt.beat)
+
+			// Check description is not empty
+			assert.NotEmpty(t, description, "Plot point description should not be empty")
+
+			// Check description length (should be 150-250 字 for major plot points)
+			runeCount := len([]rune(description))
+			assert.GreaterOrEqual(t, runeCount, tt.minLength,
+				"Description should be at least %d characters", tt.minLength)
+
+			// Check expected content is present
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, description, expected,
+					"Description should contain '%s'", expected)
+			}
+		})
+	}
+}
+
+// TestHandleHallucinationChoice tests hallucination experience generation
+func TestHandleHallucinationChoice(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	tests := []struct {
+		name             string
+		currentSAN       int
+		expectedSeverity HallucinationSeverity
+		expectedPenalty  int
+		expectContains   []string
+		minLength        int
+	}{
+		{
+			name:             "mild hallucination (SAN 50)",
+			currentSAN:       50,
+			expectedSeverity: HallucinationMild,
+			expectedPenalty:  -2,
+			expectContains: []string{
+				"世界開始扭曲",
+				"牆壁彷彿在呼吸",
+				"燈光變得詭異",
+				"你晃了晃頭",
+				"眼前的景象開始消失",
+			},
+			minLength: 200,
+		},
+		{
+			name:             "mild hallucination (SAN 40)",
+			currentSAN:       40,
+			expectedSeverity: HallucinationMild,
+			expectedPenalty:  -2,
+			expectContains: []string{
+				"世界開始扭曲",
+				"你晃了晃頭",
+			},
+			minLength: 200,
+		},
+		{
+			name:             "moderate hallucination (SAN 30)",
+			currentSAN:       30,
+			expectedSeverity: HallucinationModerate,
+			expectedPenalty:  -3,
+			expectContains: []string{
+				"現實開始崩解",
+				"不存在的聲音",
+				"時間感也變得混亂了",
+				"影子開始移動",
+				"你晃了晃頭",
+			},
+			minLength: 200,
+		},
+		{
+			name:             "moderate hallucination (SAN 20)",
+			currentSAN:       20,
+			expectedSeverity: HallucinationModerate,
+			expectedPenalty:  -3,
+			expectContains: []string{
+				"現實開始崩解",
+				"你晃了晃頭",
+			},
+			minLength: 200,
+		},
+		{
+			name:             "severe hallucination (SAN 15)",
+			currentSAN:       15,
+			expectedSeverity: HallucinationSevere,
+			expectedPenalty:  -5,
+			expectContains: []string{
+				"一切都不真實了",
+				"世界在眼前徹底瓦解",
+				"有另一個你在說話",
+				"理智徹底崩潰的瞬間",
+				"你晃了晃頭",
+			},
+			minLength: 200,
+		},
+		{
+			name:             "severe hallucination (SAN 5)",
+			currentSAN:       5,
+			expectedSeverity: HallucinationSevere,
+			expectedPenalty:  -5,
+			expectContains: []string{
+				"一切都不真實了",
+				"你晃了晃頭",
+			},
+			minLength: 200,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			description, sanPenalty := agent.HandleHallucinationChoice(tt.currentSAN)
+
+			// Check description is not empty
+			assert.NotEmpty(t, description, "Hallucination description should not be empty")
+
+			// Check description length (should be 200-300 字 for main text + ~100 for ending)
+			// Total: 300-550 characters is reasonable
+			runeCount := len([]rune(description))
+			assert.GreaterOrEqual(t, runeCount, tt.minLength,
+				"Description should be at least %d characters", tt.minLength)
+			assert.LessOrEqual(t, runeCount, 550,
+				"Description should not exceed 550 characters")
+
+			// Check SAN penalty matches expected severity
+			assert.Equal(t, tt.expectedPenalty, sanPenalty,
+				"SAN penalty should match expected severity")
+
+			// Check expected content is present
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, description, expected,
+					"Description should contain '%s'", expected)
+			}
+
+			// Check hallucination ending is always present
+			assert.Contains(t, description, "你晃了晃頭",
+				"Description should contain standard hallucination ending")
+		})
+	}
+}
+
+// TestInvokeContent_Hallucination tests hallucination integration in InvokeContent
+func TestInvokeContent_Hallucination(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	tests := []struct {
+		name              string
+		currentSAN        int
+		initialSANDelta   int
+		expectedTotalDelta int
+		expectInNarrative []string
+	}{
+		{
+			name:              "mild hallucination",
+			currentSAN:        50,
+			initialSANDelta:   -5,
+			expectedTotalDelta: -7, // -5 initial + -2 hallucination penalty
+			expectInNarrative: []string{
+				"世界開始扭曲",
+				"你晃了晃頭",
+			},
+		},
+		{
+			name:              "moderate hallucination",
+			currentSAN:        30,
+			initialSANDelta:   -10,
+			expectedTotalDelta: -13, // -10 initial + -3 hallucination penalty
+			expectInNarrative: []string{
+				"現實開始崩解",
+				"你晃了晃頭",
+			},
+		},
+		{
+			name:              "severe hallucination",
+			currentSAN:        15,
+			initialSANDelta:   -8,
+			expectedTotalDelta: -13, // -8 initial + -5 hallucination penalty
+			expectInNarrative: []string{
+				"一切都不真實了",
+				"你晃了晃頭",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gameState := engine.NewGameStateV2()
+			gameState.SetSAN(tt.currentSAN)
+
+			req := &ContentRequest{
+				Beat:             5,
+				GameState:        gameState,
+				LastPlayerChoice: "選擇了幻覺選項",
+				Difficulty:       "normal",
+				JudgeResult: &JudgeResult{
+					ViolatedRules:   []string{},
+					ImpactLevel:     "moderate",
+					HPDelta:         0,
+					SANDelta:        tt.initialSANDelta,
+					IsHallucination: true, // This triggers hallucination handling
+					Reason:          "幻覺體驗",
+				},
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			resp, err := agent.InvokeContent(ctx, req)
+
+			// Should not error
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+
+			// Check SAN change includes hallucination penalty
+			assert.Equal(t, tt.expectedTotalDelta, resp.SANChange,
+				"SANChange should include hallucination penalty")
+
+			// Check hallucination description is in narrative
+			for _, expected := range tt.expectInNarrative {
+				assert.Contains(t, resp.MainNarrative, expected,
+					"Narrative should contain hallucination description")
+			}
+
+			// Check death trigger if SAN drops to 0 or below
+			finalSAN := tt.currentSAN + tt.expectedTotalDelta
+			if finalSAN <= 0 {
+				assert.True(t, resp.DeathTriggered,
+					"Death should be triggered when SAN <= 0")
+			}
+		})
+	}
+}
+
+// TestInvokeContent_HallucinationWithDeath tests hallucination causing death
+func TestInvokeContent_HallucinationWithDeath(t *testing.T) {
+	agent := createTestNarrationAgent(t)
+
+	gameState := engine.NewGameStateV2()
+	gameState.SetSAN(5) // Very low SAN
+
+	req := &ContentRequest{
+		Beat:             10,
+		GameState:        gameState,
+		LastPlayerChoice: "選擇了幻覺選項",
+		Difficulty:       "normal",
+		JudgeResult: &JudgeResult{
+			ViolatedRules:   []string{},
+			ImpactLevel:     "major",
+			HPDelta:         0,
+			SANDelta:        -3,             // Initial penalty
+			IsHallucination: true,           // Will add -5 more (severe hallucination)
+			Reason:          "嚴重幻覺體驗",
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := agent.InvokeContent(ctx, req)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Check SAN change: -3 initial + -5 hallucination = -8
+	assert.Equal(t, -8, resp.SANChange, "SANChange should be -8")
+
+	// Check death is triggered (5 + (-8) = -3, which is <= 0)
+	assert.True(t, resp.DeathTriggered,
+		"Death should be triggered when SAN drops to -3")
+
+	// Check severe hallucination description is present
+	assert.Contains(t, resp.MainNarrative, "一切都不真實了",
+		"Should contain severe hallucination description")
+}
+
