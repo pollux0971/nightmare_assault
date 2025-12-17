@@ -60,9 +60,10 @@ bmad-custom-src/
 .gemini/
 
 # Project Documentation (working copies)
-# Ignore all markdown files except README.md
+# Ignore all markdown files except README.md and CONFIG_SETUP.md
 *.md
 !README.md
+!CONFIG_SETUP.md
 .~lock.*.md#
 *.~lock.*.md#
 

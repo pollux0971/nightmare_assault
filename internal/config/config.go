@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -216,6 +218,9 @@ func LoadFromPath(path string) (*Config, error) {
 		cfg.Save()
 	}
 
+	// Override with environment variables if present
+	cfg.LoadFromEnv()
+
 	return &cfg, nil
 }
 
@@ -297,4 +302,104 @@ func Exists() bool {
 	}
 	_, err = os.Stat(path)
 	return err == nil
+}
+
+// LoadFromEnv loads API configuration from environment variables.
+// Environment variables take precedence over config file settings.
+//
+// Supported environment variables:
+//   - NIGHTMARE_API_PROVIDER: Provider ID (openrouter, anthropic, openai, google, cohere)
+//   - NIGHTMARE_API_MODEL: Model name
+//   - NIGHTMARE_API_MAX_TOKENS: Maximum tokens (integer)
+//   - NIGHTMARE_API_BASE_URL: Custom base URL (optional)
+//   - OPENROUTER_API_KEY: OpenRouter API key
+//   - ANTHROPIC_API_KEY: Anthropic API key
+//   - OPENAI_API_KEY: OpenAI API key
+//   - GOOGLE_API_KEY: Google AI API key
+//   - COHERE_API_KEY: Cohere API key
+//   - NIGHTMARE_DEBUG: Enable debug mode (true/false)
+//   - NIGHTMARE_LOG_API_KEYS: Log API keys (masked) (true/false)
+//   - NIGHTMARE_LOG_REQUESTS: Log API requests/responses (true/false)
+func (c *Config) LoadFromEnv() {
+	// Load provider settings
+	if provider := os.Getenv("NIGHTMARE_API_PROVIDER"); provider != "" {
+		c.API.Provider.ProviderID = provider
+	}
+
+	if model := os.Getenv("NIGHTMARE_API_MODEL"); model != "" {
+		c.API.Provider.Model = model
+	}
+
+	if maxTokensStr := os.Getenv("NIGHTMARE_API_MAX_TOKENS"); maxTokensStr != "" {
+		if maxTokens, err := strconv.Atoi(maxTokensStr); err == nil && maxTokens > 0 {
+			c.API.Provider.MaxTokens = maxTokens
+		}
+	}
+
+	if baseURL := os.Getenv("NIGHTMARE_API_BASE_URL"); baseURL != "" {
+		c.API.Provider.BaseURL = baseURL
+	}
+
+	// Load API keys from environment variables
+	apiKeyEnvVars := map[string]string{
+		"openrouter": "OPENROUTER_API_KEY",
+		"anthropic":  "ANTHROPIC_API_KEY",
+		"openai":     "OPENAI_API_KEY",
+		"google":     "GOOGLE_API_KEY",
+		"cohere":     "COHERE_API_KEY",
+	}
+
+	for providerID, envVar := range apiKeyEnvVars {
+		if apiKey := os.Getenv(envVar); apiKey != "" {
+			c.API.APIKeys[providerID] = apiKey
+		}
+	}
+
+	// Load debug settings
+	if debugStr := os.Getenv("NIGHTMARE_DEBUG"); debugStr != "" {
+		c.Debug.Enabled = strings.ToLower(debugStr) == "true"
+	}
+
+	if logAPIKeysStr := os.Getenv("NIGHTMARE_LOG_API_KEYS"); logAPIKeysStr != "" {
+		c.Debug.LogAPIKeys = strings.ToLower(logAPIKeysStr) == "true"
+	}
+
+	if logRequestsStr := os.Getenv("NIGHTMARE_LOG_REQUESTS"); logRequestsStr != "" {
+		c.Debug.LogRequests = strings.ToLower(logRequestsStr) == "true"
+	}
+}
+
+// GetAPIKey retrieves the API key for a given provider.
+// Priority: Environment variable > Config file
+func (c *Config) GetAPIKey(providerID string) string {
+	// Check environment variable first (highest priority)
+	envVarMap := map[string]string{
+		"openrouter": "OPENROUTER_API_KEY",
+		"anthropic":  "ANTHROPIC_API_KEY",
+		"openai":     "OPENAI_API_KEY",
+		"google":     "GOOGLE_API_KEY",
+		"cohere":     "COHERE_API_KEY",
+	}
+
+	if envVar, ok := envVarMap[providerID]; ok {
+		if apiKey := os.Getenv(envVar); apiKey != "" {
+			return apiKey
+		}
+	}
+
+	// Fall back to config file
+	if apiKey, ok := c.API.APIKeys[providerID]; ok {
+		return apiKey
+	}
+
+	return ""
+}
+
+// SetAPIKey sets the API key for a provider and saves to config file.
+func (c *Config) SetAPIKey(providerID, apiKey string) error {
+	if c.API.APIKeys == nil {
+		c.API.APIKeys = make(map[string]string)
+	}
+	c.API.APIKeys[providerID] = apiKey
+	return c.Save()
 }

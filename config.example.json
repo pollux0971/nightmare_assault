@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "language": "zh-TW",
+  "theme": "midnight",
+  "audio": {
+    "master_volume": 100,
+    "bgm_enabled": true,
+    "sfx_enabled": true,
+    "bgm_volume": 70,
+    "sfx_volume": 80,
+    "heartbeat_enabled": true,
+    "platform": "linux",
+    "platform_settings": {
+      "buffer_size": 1024,
+      "sample_rate": 48000,
+      "channel_count": 2,
+      "low_latency": true
+    }
+  },
+  "api": {
+    "provider": {
+      "provider_id": "openrouter",
+      "model": "anthropic/claude-3.5-sonnet",
+      "max_tokens": 100000
+    },
+    "api_keys": {
+      "openrouter": "sk-or-v1-YOUR_OPENROUTER_KEY_HERE",
+      "anthropic": "sk-ant-YOUR_ANTHROPIC_KEY_HERE",
+      "openai": "sk-YOUR_OPENAI_KEY_HERE",
+      "google": "YOUR_GOOGLE_AI_KEY_HERE",
+      "cohere": "YOUR_COHERE_KEY_HERE"
+    },
+    "last_tested": {}
+  },
+  "typewriter": {
+    "enabled": true,
+    "speed": 40,
+    "show_cursor": true
+  },
+  "debug": {
+    "enabled": false,
+    "log_api_keys": false,
+    "log_requests": false
+  }
+}
