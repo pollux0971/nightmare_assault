@@ -22,11 +22,13 @@ var (
 // Architecture (Story 6-5):
 //   - Dual Mode: Global Generator (Genesis Phase) + Local Manager (Game Loop)
 //   - Uses BaseAgentImpl for retry mechanism and error handling
-//   - Integrates with SeedPruner (Epic 2.5) and TensionManager (Epic 3)
+//   - Integrates with SeedManager (Epic 2.5) and TensionManager (Epic 3)
 //
 // Modes:
 //   - Global Generator: Generates 3-5 Global Seeds with 3-tier clue chains
 //   - Local Manager: Manages LocalSeeds lifecycle (Plant/Harvest/Prune/Skip)
+//
+// H-2 FIX: Added SeedManager and TensionManager dependencies
 type SeedAgent struct {
 	// config is the Agent configuration
 	config AgentConfig
@@ -34,19 +36,29 @@ type SeedAgent struct {
 	// baseImpl provides common Agent functionality (retry, timeout, error handling)
 	baseImpl *BaseAgentImpl
 
-	// TODO: Add dependencies from Epic 2 and Epic 3
-	// pruner SeedPruner
-	// tensionMgr TensionManager
+	// seedManager manages Global and Local Seeds (Epic 2)
+	// Provides pruning functionality via PruneLocalSeedsByScene and PruneExpiredLocalSeeds
+	seedManager *seed.SeedManager
+
+	// tensionManager manages tension state and calculates deltas (Epic 3)
+	tensionManager *engine.TensionManager
 }
 
 // NewSeedAgent creates a new SeedAgent with the given configuration.
 //
+// H-2 FIX: Now accepts optional SeedManager and TensionManager dependencies
+//
 // Parameters:
 //   - config: Agent configuration (Name, Timeout, MaxRetries, LLMClient)
+//   - seedManager: Optional SeedManager for pruning operations (can be nil)
+//   - tensionManager: Optional TensionManager for tension-based decisions (can be nil)
 //
 // Returns:
 //   - *SeedAgent: A new SeedAgent instance
-func NewSeedAgent(config AgentConfig) *SeedAgent {
+//
+// Note: If seedManager or tensionManager are nil, the agent will operate without
+// pruning or tension-based features. This is acceptable for unit tests.
+func NewSeedAgent(config AgentConfig, seedManager *seed.SeedManager, tensionManager *engine.TensionManager) *SeedAgent {
 	// Set default name
 	if config.Name == "" {
 		config.Name = "SeedAgent"
@@ -63,8 +75,10 @@ func NewSeedAgent(config AgentConfig) *SeedAgent {
 	}
 
 	return &SeedAgent{
-		config:   config,
-		baseImpl: NewBaseAgentImpl(config),
+		config:         config,
+		baseImpl:       NewBaseAgentImpl(config),
+		seedManager:    seedManager,
+		tensionManager: tensionManager,
 	}
 }
 

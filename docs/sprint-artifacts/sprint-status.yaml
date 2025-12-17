@@ -154,9 +154,9 @@ development_status:
   6-3-narration-agent-content-mode: done
   6-4-narration-agent-opening-ending: done
   6-5-seed-agent-dual-mode: review
-  6-6-choice-agent-generation-risk: ready-for-dev
-  6-7-judge-agent-ruling-routing: ready-for-dev
-  6-8-npc-agent-generation-dialogue: ready-for-dev
+  6-6-choice-agent-generation-risk: review
+  6-7-judge-agent-ruling-routing: review
+  6-8-npc-agent-generation-dialogue: review
   epic-6-retrospective: optional
 
   # ============================================================================
