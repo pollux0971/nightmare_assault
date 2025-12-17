@@ -273,23 +273,29 @@ func NewMockSeedAgent() *MockSeedAgent {
 	return &MockSeedAgent{}
 }
 
-func (m *MockSeedAgent) GenerateGlobal(ctx context.Context, params agents.GenerateGlobalParams) ([]*seed.GlobalSeed, error) {
+func (m *MockSeedAgent) InvokeGlobalGenerate(ctx context.Context, request *agents.GlobalGenerateRequest) (*agents.GlobalGenerateResponse, error) {
 	// Determine count based on difficulty
 	count := 3
-	switch params.Difficulty {
-	case "easy":
-		count = 3
-	case "medium":
-		count = 4
-	case "hard":
-		count = 5
+	if request.StoryBible != nil {
+		switch request.StoryBible.Difficulty {
+		case "easy":
+			count = 3
+		case "medium":
+			count = 4
+		case "hard", "hell":
+			count = 5
+		}
 	}
 
 	seeds := make([]*seed.GlobalSeed, 0, count)
+	theme := "unknown"
+	if request.StoryBible != nil {
+		theme = request.StoryBible.Theme
+	}
 	for i := 0; i < count; i++ {
 		s, _ := seed.NewGlobalSeed(
 			fmt.Sprintf("GS%03d", i+1),
-			fmt.Sprintf("Global seed %d for %s", i+1, params.MainTheme),
+			fmt.Sprintf("Global seed %d for %s", i+1, theme),
 			fmt.Sprintf("Truth %d", i+1),
 			"mysterious",
 			[]seed.ClueTier{
@@ -300,7 +306,16 @@ func (m *MockSeedAgent) GenerateGlobal(ctx context.Context, params agents.Genera
 		)
 		seeds = append(seeds, s)
 	}
-	return seeds, nil
+	return &agents.GlobalGenerateResponse{GlobalSeeds: seeds}, nil
+}
+
+func (m *MockSeedAgent) InvokeLocalManage(ctx context.Context, request *agents.LocalManageRequest) (*agents.LocalManageResponse, error) {
+	// Simple mock implementation - just skip operation
+	return &agents.LocalManageResponse{
+		Operation:   agents.SeedOpSkip,
+		TargetSeed:  nil,
+		PrunedSeeds: nil,
+	}, nil
 }
 
 // MockNPCAgent is a placeholder implementation.

@@ -482,7 +482,11 @@ type ErrorSeedAgent struct {
 	err error
 }
 
-func (e *ErrorSeedAgent) GenerateGlobal(ctx context.Context, params agents.GenerateGlobalParams) ([]*seed.GlobalSeed, error) {
+func (e *ErrorSeedAgent) InvokeGlobalGenerate(ctx context.Context, request *agents.GlobalGenerateRequest) (*agents.GlobalGenerateResponse, error) {
+	return nil, e.err
+}
+
+func (e *ErrorSeedAgent) InvokeLocalManage(ctx context.Context, request *agents.LocalManageRequest) (*agents.LocalManageResponse, error) {
 	return nil, e.err
 }
 
@@ -586,11 +590,20 @@ type SlowSeedAgent struct {
 	delay time.Duration
 }
 
-func (s *SlowSeedAgent) GenerateGlobal(ctx context.Context, params agents.GenerateGlobalParams) ([]*seed.GlobalSeed, error) {
+func (s *SlowSeedAgent) InvokeGlobalGenerate(ctx context.Context, request *agents.GlobalGenerateRequest) (*agents.GlobalGenerateResponse, error) {
 	select {
 	case <-time.After(s.delay):
 		gs, _ := seed.NewGlobalSeed("test", "test", "test", "test", []seed.ClueTier{})
-		return []*seed.GlobalSeed{gs}, nil
+		return &agents.GlobalGenerateResponse{GlobalSeeds: []*seed.GlobalSeed{gs}}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (s *SlowSeedAgent) InvokeLocalManage(ctx context.Context, request *agents.LocalManageRequest) (*agents.LocalManageResponse, error) {
+	select {
+	case <-time.After(s.delay):
+		return &agents.LocalManageResponse{Operation: agents.SeedOpSkip}, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

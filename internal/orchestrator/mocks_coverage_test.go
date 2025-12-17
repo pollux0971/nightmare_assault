@@ -30,8 +30,8 @@ func TestMockRuleEngine_CheckViolation(t *testing.T) {
 	}
 }
 
-// TestMockSeedAgent_GenerateGlobal_AllDifficulties tests all difficulty levels.
-func TestMockSeedAgent_GenerateGlobal_AllDifficulties(t *testing.T) {
+// TestMockSeedAgent_InvokeGlobalGenerate_AllDifficulties tests all difficulty levels.
+func TestMockSeedAgent_InvokeGlobalGenerate_AllDifficulties(t *testing.T) {
 	agent := NewMockSeedAgent()
 
 	difficulties := []struct {
@@ -41,24 +41,27 @@ func TestMockSeedAgent_GenerateGlobal_AllDifficulties(t *testing.T) {
 		{"easy", 3},
 		{"medium", 4},
 		{"hard", 5},
+		{"hell", 5},
 		{"unknown", 3}, // Default case
 	}
 
 	for _, tc := range difficulties {
 		t.Run(tc.name, func(t *testing.T) {
-			seeds, err := agent.GenerateGlobal(nil, agents.GenerateGlobalParams{
-				WorldView:  "test",
-				MainTheme:  "test",
-				Difficulty: tc.name,
+			resp, err := agent.InvokeGlobalGenerate(nil, &agents.GlobalGenerateRequest{
+				StoryBible: &agents.SeedStoryBible{
+					Theme:      "test",
+					WorldView:  "test",
+					Difficulty: tc.name,
+				},
 			})
 
 			if err != nil {
 				t.Fatalf("Expected no error, got: %v", err)
 			}
 
-			if len(seeds) != tc.expectedCount {
+			if len(resp.GlobalSeeds) != tc.expectedCount {
 				t.Errorf("Expected %d seeds for difficulty '%s', got %d",
-					tc.expectedCount, tc.name, len(seeds))
+					tc.expectedCount, tc.name, len(resp.GlobalSeeds))
 			}
 		})
 	}

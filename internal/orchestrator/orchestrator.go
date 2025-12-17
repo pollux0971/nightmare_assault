@@ -259,7 +259,8 @@ type JudgeResult struct {
 // SeedAgent generates seeds.
 // Use the agents.SeedAgent implementation from internal/orchestrator/agents package.
 type SeedAgent interface {
-	GenerateGlobal(ctx context.Context, params agents.GenerateGlobalParams) ([]*seed.GlobalSeed, error)
+	InvokeGlobalGenerate(ctx context.Context, request *agents.GlobalGenerateRequest) (*agents.GlobalGenerateResponse, error)
+	InvokeLocalManage(ctx context.Context, request *agents.LocalManageRequest) (*agents.LocalManageResponse, error)
 }
 
 // NPCAgent generates NPCs.
@@ -381,14 +382,22 @@ func (o *Orchestrator) RunPhaseGenesis(ctx context.Context) (*GenesisResult, err
 	}
 
 	// Step 3: Generate global seeds
-	globalSeeds, err := o.seedAgent.GenerateGlobal(ctx, agents.GenerateGlobalParams{
-		WorldView:  skeleton.WorldView,
-		MainTheme:  skeleton.MainTheme,
-		Difficulty: "medium", // TODO: Derive from game difficulty setting
+	seedResponse, err := o.seedAgent.InvokeGlobalGenerate(ctx, &agents.GlobalGenerateRequest{
+		StoryBible: &agents.SeedStoryBible{
+			Theme:       skeleton.MainTheme,
+			WorldView:   skeleton.WorldView,
+			Difficulty:  "medium", // TODO: Derive from game difficulty setting
+			CoreTruth:   "",       // TODO: Extract core truth from skeleton when available
+			GlobalSeeds: nil,
+		},
+		Difficulty:      "medium", // TODO: Derive from game difficulty setting
+		StoryLength:     "medium", // TODO: Derive from game settings
+		PossibleEndings: nil,      // TODO: Pass endings from skeleton
 	})
 	if err != nil {
 		return nil, fmt.Errorf("global seed generation failed: %w", err)
 	}
+	globalSeeds := seedResponse.GlobalSeeds
 
 	// Check context after seed generation
 	if err := ctx.Err(); err != nil {
