@@ -151,9 +151,9 @@ development_status:
   epic-6: in-progress
   6-1-base-agent-abstraction: completed
   6-2-narration-agent-skeleton-mode: done
-  6-3-narration-agent-content-mode: in-progress
-  6-4-narration-agent-opening-ending: ready-for-dev
-  6-5-seed-agent-dual-mode: ready-for-dev
+  6-3-narration-agent-content-mode: done
+  6-4-narration-agent-opening-ending: done
+  6-5-seed-agent-dual-mode: in-progress
   6-6-choice-agent-generation-risk: ready-for-dev
   6-7-judge-agent-ruling-routing: ready-for-dev
   6-8-npc-agent-generation-dialogue: ready-for-dev
