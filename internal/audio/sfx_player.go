@@ -45,9 +45,10 @@ type SFXPlayer struct {
 
 // NewSFXPlayer creates a new SFX player
 func NewSFXPlayer(ctx *oto.Context, cfg config.AudioConfig, audioDir string) *SFXPlayer {
+	// Convert volume from 0-100 (int) to 0.0-1.0 (float64)
 	player := &SFXPlayer{
 		ctx:      ctx,
-		volume:   float64(cfg.SFXVolume),
+		volume:   float64(cfg.SFXVolume) / 100.0,
 		enabled:  cfg.SFXEnabled,
 		audioDir: audioDir,
 	}

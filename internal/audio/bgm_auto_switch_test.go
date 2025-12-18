@@ -9,7 +9,7 @@ import (
 )
 
 func TestBGMPlayer_CanSwitch_SameMood(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 70}, t.TempDir())
 
 	// Set current mood to exploration
 	player.currentMood = engine.MoodExploration
@@ -23,7 +23,7 @@ func TestBGMPlayer_CanSwitch_SameMood(t *testing.T) {
 }
 
 func TestBGMPlayer_CanSwitch_MinimumInterval(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 70}, t.TempDir())
 
 	// Set current mood and recent switch time
 	player.currentMood = engine.MoodExploration
@@ -37,7 +37,7 @@ func TestBGMPlayer_CanSwitch_MinimumInterval(t *testing.T) {
 }
 
 func TestBGMPlayer_CanSwitch_AfterMinimumInterval(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 70}, t.TempDir())
 
 	// Set current mood and switch time > 30 seconds ago
 	player.currentMood = engine.MoodExploration
@@ -51,7 +51,7 @@ func TestBGMPlayer_CanSwitch_AfterMinimumInterval(t *testing.T) {
 }
 
 func TestBGMPlayer_CanSwitch_FirstSwitch(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 70}, t.TempDir())
 
 	// lastSwitch is zero time (never switched before)
 	// currentMood is default (exploration)
@@ -64,7 +64,7 @@ func TestBGMPlayer_CanSwitch_FirstSwitch(t *testing.T) {
 }
 
 func TestBGMPlayer_SwitchByMood_IgnoresSameMood(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 70}, t.TempDir())
 
 	// Set current mood
 	player.currentMood = engine.MoodExploration
@@ -86,7 +86,7 @@ func TestBGMPlayer_SwitchByMood_IgnoresSameMood(t *testing.T) {
 }
 
 func TestBGMPlayer_SwitchByMood_IgnoresTooSoon(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 70}, t.TempDir())
 
 	// Set current mood and recent switch
 	player.currentMood = engine.MoodExploration
@@ -106,7 +106,7 @@ func TestBGMPlayer_SwitchByMood_IgnoresTooSoon(t *testing.T) {
 }
 
 func TestBGMPlayer_SwitchByMood_NilContext(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 70}, t.TempDir())
 
 	// Set conditions that allow switch
 	player.currentMood = engine.MoodExploration
@@ -124,7 +124,7 @@ func TestBGMPlayer_SwitchByMood_NilContext(t *testing.T) {
 }
 
 func TestBGMPlayer_GetCurrentMood(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 70}, t.TempDir())
 
 	// Default mood should be exploration
 	mood := player.GetCurrentMood()
@@ -142,7 +142,7 @@ func TestBGMPlayer_GetCurrentMood(t *testing.T) {
 }
 
 func TestBGMPlayer_CurrentMoodInitialization(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 70}, t.TempDir())
 
 	// Verify default initialization
 	if player.currentMood != engine.MoodExploration {

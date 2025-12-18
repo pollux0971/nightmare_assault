@@ -11,9 +11,9 @@ import (
 func TestNewBGMPlayer(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
-		BGMVolume:  0.7,
+		BGMVolume:  70,
 		SFXEnabled: true,
-		SFXVolume:  0.8,
+		SFXVolume:  80,
 	}
 
 	audioDir := t.TempDir()
@@ -53,7 +53,7 @@ func TestBGMPlayer_Enable(t *testing.T) {
 
 // TestBGMPlayer_SetVolume tests volume control
 func TestBGMPlayer_SetVolume(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 0.5}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 50}, t.TempDir())
 
 	tests := []struct {
 		name     string
@@ -126,7 +126,7 @@ func TestBGMSceneMapping(t *testing.T) {
 		filename string
 	}{
 		{BGMSceneExploration, "ambient_exploration"},
-		{BGMSceneChase, "tension_chase"},
+		{BGMSceneChase, "chase_escape"},
 		{BGMSceneSafe, "safe_rest"},
 		{BGMSceneHorror, "horror_reveal"},
 		{BGMSceneMystery, "mystery_puzzle"},
@@ -187,7 +187,7 @@ func TestBGMPlayer_LoopMode(t *testing.T) {
 
 // TestBGMPlayer_FadeOut tests fade out functionality
 func TestBGMPlayer_FadeOut(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.8}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 80}, t.TempDir())
 
 	// Fade out should complete without error even if not playing
 	err := player.FadeOut(100 * time.Millisecond)
@@ -203,7 +203,7 @@ func TestBGMPlayer_FadeOut(t *testing.T) {
 
 // TestBGMPlayer_FadeIn tests fade in functionality
 func TestBGMPlayer_FadeIn(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.0}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0}, t.TempDir())
 
 	// Set target volume
 	targetVolume := 0.7
@@ -224,7 +224,7 @@ func TestBGMPlayer_FadeIn(t *testing.T) {
 
 // TestBGMPlayer_Crossfade tests crossfade functionality
 func TestBGMPlayer_Crossfade(t *testing.T) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 0.8}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMEnabled: true, BGMVolume: 80}, t.TempDir())
 
 	// Crossfade should handle nil context gracefully
 	err := player.Crossfade("new_bgm.mp3", 200*time.Millisecond)

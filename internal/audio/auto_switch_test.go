@@ -10,7 +10,7 @@ import (
 
 func TestCheckMoodAndSwitch_ParsesAndSwitches(t *testing.T) {
 	audioDir := t.TempDir()
-	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}
+	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 70}
 	player := NewBGMPlayer(nil, cfg, audioDir)
 
 	// Simulate first switch (should be allowed)
@@ -32,7 +32,7 @@ func TestCheckMoodAndSwitch_ParsesAndSwitches(t *testing.T) {
 
 func TestCheckMoodAndSwitch_IgnoresSameMood(t *testing.T) {
 	audioDir := t.TempDir()
-	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}
+	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 70}
 	player := NewBGMPlayer(nil, cfg, audioDir)
 
 	// Set current mood to exploration (default)
@@ -54,7 +54,7 @@ func TestCheckMoodAndSwitch_IgnoresSameMood(t *testing.T) {
 
 func TestCheckMoodAndSwitch_RespectsMinimumInterval(t *testing.T) {
 	audioDir := t.TempDir()
-	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}
+	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 70}
 	player := NewBGMPlayer(nil, cfg, audioDir)
 
 	// Force a recent switch
@@ -73,7 +73,7 @@ func TestCheckMoodAndSwitch_RespectsMinimumInterval(t *testing.T) {
 
 func TestCheckMoodAndSwitch_NoMoodTag(t *testing.T) {
 	audioDir := t.TempDir()
-	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}
+	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 70}
 	player := NewBGMPlayer(nil, cfg, audioDir)
 
 	// Text with no mood tag
@@ -104,7 +104,7 @@ func TestCheckMoodAndSwitch_NilPlayer(t *testing.T) {
 
 func TestCheckMoodAndSwitch_EmptyText(t *testing.T) {
 	audioDir := t.TempDir()
-	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}
+	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 70}
 	player := NewBGMPlayer(nil, cfg, audioDir)
 
 	// Empty text
@@ -121,7 +121,7 @@ func TestCheckMoodAndSwitch_EmptyText(t *testing.T) {
 
 func TestCheckMoodAndSwitch_Async(t *testing.T) {
 	audioDir := t.TempDir()
-	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}
+	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 70}
 	player := NewBGMPlayer(nil, cfg, audioDir)
 
 	// Call CheckMoodAndSwitch (should return immediately without blocking)

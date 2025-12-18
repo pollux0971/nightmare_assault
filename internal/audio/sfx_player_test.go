@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewSFXPlayer(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 0.8}
+	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 80}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	if player == nil {
@@ -30,7 +30,7 @@ func TestNewSFXPlayer(t *testing.T) {
 }
 
 func TestSFXPlayer_Enable_Disable(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: false, SFXVolume: 0.7}
+	cfg := config.AudioConfig{SFXEnabled: false, SFXVolume: 70}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// Initially disabled
@@ -52,7 +52,7 @@ func TestSFXPlayer_Enable_Disable(t *testing.T) {
 }
 
 func TestSFXPlayer_SetVolume(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 0.5}
+	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 50}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// Set new volume
@@ -75,7 +75,7 @@ func TestSFXPlayer_SetVolume(t *testing.T) {
 }
 
 func TestSFXPlayer_StopAll(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 0.7}
+	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 70}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// Mock some playing channels
@@ -96,7 +96,7 @@ func TestSFXPlayer_StopAll(t *testing.T) {
 }
 
 func TestSFXPlayer_PlaySFX_NilContext(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 0.7}
+	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 70}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// Try to play with nil context (should not panic)
@@ -109,7 +109,7 @@ func TestSFXPlayer_PlaySFX_NilContext(t *testing.T) {
 }
 
 func TestSFXPlayer_PlaySFX_Disabled(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: false, SFXVolume: 0.7}
+	cfg := config.AudioConfig{SFXEnabled: false, SFXVolume: 70}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// Try to play when disabled (should silently skip)
@@ -141,7 +141,7 @@ func TestSFXPriority_Constants(t *testing.T) {
 }
 
 func TestSFXChannel_Initialization(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 0.7}
+	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 70}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// Verify all channels initialized

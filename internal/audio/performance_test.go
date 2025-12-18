@@ -16,7 +16,7 @@ func TestBGMPlayer_MemoryUsage(t *testing.T) {
 
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
-		BGMVolume:  0.7,
+		BGMVolume:  70,
 	}
 
 	// Force GC before measurement
@@ -54,7 +54,7 @@ func TestBGMPlayer_FadePerformance(t *testing.T) {
 		t.Skip("Skipping performance test in short mode")
 	}
 
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 0.8}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 80}, t.TempDir())
 
 	// Test fade out performance
 	start := time.Now()
@@ -92,7 +92,7 @@ func TestBGMPlayer_VolumeChangeLatency(t *testing.T) {
 		t.Skip("Skipping performance test in short mode")
 	}
 
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 0.5}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 50}, t.TempDir())
 
 	// Measure volume change latency
 	iterations := 100
@@ -146,7 +146,7 @@ func TestBGMPlayer_ConcurrentAccess(t *testing.T) {
 		t.Skip("Skipping performance test in short mode")
 	}
 
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 0.7}, t.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 70}, t.TempDir())
 
 	// Launch multiple goroutines accessing player concurrently
 	done := make(chan bool)
@@ -201,7 +201,7 @@ func TestBGMPlayer_ConcurrentAccess(t *testing.T) {
 
 // BenchmarkBGMPlayer_SetVolume benchmarks volume setting
 func BenchmarkBGMPlayer_SetVolume(b *testing.B) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 0.5}, b.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 50}, b.TempDir())
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -211,7 +211,7 @@ func BenchmarkBGMPlayer_SetVolume(b *testing.B) {
 
 // BenchmarkBGMPlayer_VolumeRead benchmarks volume reading
 func BenchmarkBGMPlayer_VolumeRead(b *testing.B) {
-	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 0.5}, b.TempDir())
+	player := NewBGMPlayer(nil, config.AudioConfig{BGMVolume: 50}, b.TempDir())
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

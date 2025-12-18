@@ -12,7 +12,7 @@ import (
 // TestGameIntegration_NarrativeWithMoodTag simulates game loop integration
 func TestGameIntegration_NarrativeWithMoodTag(t *testing.T) {
 	// Simulate game setup
-	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}
+	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 70}
 	player := NewBGMPlayer(nil, cfg, t.TempDir())
 
 	// Simulate LLM response with mood tag
@@ -37,7 +37,7 @@ func TestGameIntegration_NarrativeWithMoodTag(t *testing.T) {
 
 // TestGameIntegration_MultipleTurns simulates multiple game turns with mood changes
 func TestGameIntegration_MultipleTurns(t *testing.T) {
-	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}
+	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 70}
 	player := NewBGMPlayer(nil, cfg, t.TempDir())
 
 	// Turn 1: Exploration
@@ -84,7 +84,7 @@ func TestGameIntegration_MultipleTurns(t *testing.T) {
 
 // TestGameIntegration_NoAudioContext simulates game without audio
 func TestGameIntegration_NoAudioContext(t *testing.T) {
-	cfg := config.AudioConfig{BGMEnabled: false, BGMVolume: 0.0}
+	cfg := config.AudioConfig{BGMEnabled: false, BGMVolume: 0}
 	player := NewBGMPlayer(nil, cfg, t.TempDir()) // nil context
 
 	// Should not panic even without audio context
@@ -100,7 +100,7 @@ func TestGameIntegration_NoAudioContext(t *testing.T) {
 
 // TestGameIntegration_ParsingEdgeCases tests various mood tag formats
 func TestGameIntegration_ParsingEdgeCases(t *testing.T) {
-	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 0.7}
+	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 70}
 	player := NewBGMPlayer(nil, cfg, t.TempDir())
 
 	testCases := []struct {

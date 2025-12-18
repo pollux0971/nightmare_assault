@@ -17,8 +17,8 @@ func TestAudioManagerConfigIntegration(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Audio.BGMEnabled = true
 	cfg.Audio.SFXEnabled = true
-	cfg.Audio.BGMVolume = 0.7
-	cfg.Audio.SFXVolume = 0.8
+	cfg.Audio.BGMVolume = 70
+	cfg.Audio.SFXVolume = 80
 
 	// Save config
 	if err := cfg.SaveToPath(configPath); err != nil {
@@ -31,12 +31,12 @@ func TestAudioManagerConfigIntegration(t *testing.T) {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Verify audio config
-	if loadedCfg.Audio.BGMVolume != 0.7 {
-		t.Errorf("BGMVolume = %f, expected 0.7", loadedCfg.Audio.BGMVolume)
+	// Verify audio config (volume is int 0-100)
+	if loadedCfg.Audio.BGMVolume != 70 {
+		t.Errorf("BGMVolume = %d, expected 70", loadedCfg.Audio.BGMVolume)
 	}
-	if loadedCfg.Audio.SFXVolume != 0.8 {
-		t.Errorf("SFXVolume = %f, expected 0.8", loadedCfg.Audio.SFXVolume)
+	if loadedCfg.Audio.SFXVolume != 80 {
+		t.Errorf("SFXVolume = %d, expected 80", loadedCfg.Audio.SFXVolume)
 	}
 	if !loadedCfg.Audio.BGMEnabled {
 		t.Error("BGMEnabled should be true")
@@ -51,37 +51,37 @@ func TestAudioManagerWithConfig(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.6,
-		SFXVolume:  0.9,
+		BGMVolume:  60,
+		SFXVolume:  90,
 	}
 
 	manager := NewAudioManager(cfg)
 
-	// Verify initial config
+	// Verify initial config (volume is int 0-100)
 	audioCfg := manager.Config()
-	if audioCfg.BGMVolume != 0.6 {
-		t.Errorf("BGMVolume = %f, expected 0.6", audioCfg.BGMVolume)
+	if audioCfg.BGMVolume != 60 {
+		t.Errorf("BGMVolume = %d, expected 60", audioCfg.BGMVolume)
 	}
-	if audioCfg.SFXVolume != 0.9 {
-		t.Errorf("SFXVolume = %f, expected 0.9", audioCfg.SFXVolume)
+	if audioCfg.SFXVolume != 90 {
+		t.Errorf("SFXVolume = %d, expected 90", audioCfg.SFXVolume)
 	}
 
 	// Update config
 	newCfg := config.AudioConfig{
 		BGMEnabled: false,
 		SFXEnabled: false,
-		BGMVolume:  0.3,
-		SFXVolume:  0.4,
+		BGMVolume:  30,
+		SFXVolume:  40,
 	}
 	manager.UpdateConfig(newCfg)
 
 	// Verify updated config
 	updatedCfg := manager.Config()
-	if updatedCfg.BGMVolume != 0.3 {
-		t.Errorf("BGMVolume = %f, expected 0.3", updatedCfg.BGMVolume)
+	if updatedCfg.BGMVolume != 30 {
+		t.Errorf("BGMVolume = %d, expected 30", updatedCfg.BGMVolume)
 	}
-	if updatedCfg.SFXVolume != 0.4 {
-		t.Errorf("SFXVolume = %f, expected 0.4", updatedCfg.SFXVolume)
+	if updatedCfg.SFXVolume != 40 {
+		t.Errorf("SFXVolume = %d, expected 40", updatedCfg.SFXVolume)
 	}
 	if updatedCfg.BGMEnabled {
 		t.Error("BGMEnabled should be false")
@@ -127,8 +127,8 @@ func TestFullAudioSystemFlow(t *testing.T) {
 	manager.UpdateConfig(config.AudioConfig{
 		BGMEnabled: false,
 		SFXEnabled: false,
-		BGMVolume:  0.5,
-		SFXVolume:  0.5,
+		BGMVolume:  50,
+		SFXVolume:  50,
 	})
 
 	updatedCfg := manager.Config()
@@ -141,15 +141,15 @@ func TestFullAudioSystemFlow(t *testing.T) {
 func TestAudioConfigValidation(t *testing.T) {
 	tests := []struct {
 		name    string
-		bgmVol  float64
-		sfxVol  float64
+		bgmVol  int
+		sfxVol  int
 		wantErr bool
 	}{
-		{"Valid volumes", 0.5, 0.8, false},
-		{"Min volumes", 0.0, 0.0, false},
-		{"Max volumes", 1.0, 1.0, false},
-		{"BGM too high", 1.5, 0.5, true},
-		{"SFX too low", 0.5, -0.1, true},
+		{"Valid volumes", 50, 80, false},
+		{"Min volumes", 0, 0, false},
+		{"Max volumes", 100, 100, false},
+		{"BGM too high", 150, 50, true},
+		{"SFX too low", 50, -10, true},
 	}
 
 	for _, tt := range tests {
@@ -161,9 +161,9 @@ func TestAudioConfigValidation(t *testing.T) {
 				SFXVolume:  tt.sfxVol,
 			}
 
-			// Validate volume ranges
-			hasError := cfg.BGMVolume < 0.0 || cfg.BGMVolume > 1.0 ||
-				cfg.SFXVolume < 0.0 || cfg.SFXVolume > 1.0
+			// Validate volume ranges (0-100)
+			hasError := cfg.BGMVolume < 0 || cfg.BGMVolume > 100 ||
+				cfg.SFXVolume < 0 || cfg.SFXVolume > 100
 
 			if hasError != tt.wantErr {
 				t.Errorf("Validation error = %v, wantErr %v", hasError, tt.wantErr)
@@ -177,8 +177,8 @@ func TestAudioManagerShutdown(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.7,
-		SFXVolume:  0.8,
+		BGMVolume:  70,
+		SFXVolume:  80,
 	}
 
 	manager := NewAudioManager(cfg)

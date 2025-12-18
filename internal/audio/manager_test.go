@@ -13,8 +13,8 @@ func TestNewAudioManager(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.7,
-		SFXVolume:  0.8,
+		BGMVolume:  70,
+		SFXVolume:  80,
 	}
 
 	manager := NewAudioManager(cfg)
@@ -40,8 +40,8 @@ func TestCheckAudioFiles_MissingDirectory(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.7,
-		SFXVolume:  0.8,
+		BGMVolume:  70,
+		SFXVolume:  80,
 	}
 
 	manager := NewAudioManager(cfg)
@@ -85,8 +85,8 @@ func TestCheckAudioFiles_WithMockStructure(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.7,
-		SFXVolume:  0.8,
+		BGMVolume:  70,
+		SFXVolume:  80,
 	}
 
 	manager := NewAudioManager(cfg)
@@ -129,8 +129,8 @@ func TestCheckAudioFiles_IncompleteFiles(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.7,
-		SFXVolume:  0.8,
+		BGMVolume:  70,
+		SFXVolume:  80,
 	}
 
 	manager := NewAudioManager(cfg)
@@ -145,8 +145,8 @@ func TestIsInitialized(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.7,
-		SFXVolume:  0.8,
+		BGMVolume:  70,
+		SFXVolume:  80,
 	}
 
 	manager := NewAudioManager(cfg)
@@ -167,8 +167,8 @@ func TestUpdateConfig(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.7,
-		SFXVolume:  0.8,
+		BGMVolume:  70,
+		SFXVolume:  80,
 	}
 
 	manager := NewAudioManager(cfg)
@@ -176,8 +176,8 @@ func TestUpdateConfig(t *testing.T) {
 	newCfg := config.AudioConfig{
 		BGMEnabled: false,
 		SFXEnabled: false,
-		BGMVolume:  0.5,
-		SFXVolume:  0.6,
+		BGMVolume:  50,
+		SFXVolume:  60,
 	}
 
 	manager.UpdateConfig(newCfg)
@@ -190,11 +190,11 @@ func TestUpdateConfig(t *testing.T) {
 	if updatedCfg.SFXEnabled != false {
 		t.Error("SFXEnabled should be updated to false")
 	}
-	if updatedCfg.BGMVolume != 0.5 {
-		t.Error("BGMVolume should be updated to 0.5")
+	if updatedCfg.BGMVolume != 50 {
+		t.Error("BGMVolume should be updated to 50")
 	}
-	if updatedCfg.SFXVolume != 0.6 {
-		t.Error("SFXVolume should be updated to 0.6")
+	if updatedCfg.SFXVolume != 60 {
+		t.Error("SFXVolume should be updated to 60")
 	}
 }
 
@@ -202,8 +202,8 @@ func TestInitializeAsync_DoesNotBlock(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.7,
-		SFXVolume:  0.8,
+		BGMVolume:  70,
+		SFXVolume:  80,
 	}
 
 	manager := NewAudioManager(cfg)
@@ -223,8 +223,8 @@ func TestAudioDir(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.7,
-		SFXVolume:  0.8,
+		BGMVolume:  70,
+		SFXVolume:  80,
 	}
 
 	manager := NewAudioManager(cfg)
@@ -244,8 +244,8 @@ func TestHandleAudioError_OnlyShowsOnce(t *testing.T) {
 	cfg := config.AudioConfig{
 		BGMEnabled: true,
 		SFXEnabled: true,
-		BGMVolume:  0.7,
-		SFXVolume:  0.8,
+		BGMVolume:  70,
+		SFXVolume:  80,
 	}
 
 	manager := NewAudioManager(cfg)

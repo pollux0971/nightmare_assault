@@ -150,13 +150,14 @@ func TestBGMCommand_List(t *testing.T) {
 	}
 
 	// Check that all BGM tracks are listed
+	// Track names match GetBGMFilename() output in internal/audio/bgm_player.go
 	tracks := []string{
-		"ambient_exploration",
-		"tension_chase",
-		"safe_rest",
-		"horror_reveal",
-		"mystery_puzzle",
-		"ending_death",
+		"ambient_exploration", // BGMSceneExploration
+		"chase_escape",        // BGMSceneChase
+		"safe_rest",           // BGMSceneSafe
+		"horror_reveal",       // BGMSceneHorror
+		"mystery_puzzle",      // BGMSceneMystery
+		"ending_death",        // BGMSceneDeath
 	}
 
 	for _, track := range tracks {

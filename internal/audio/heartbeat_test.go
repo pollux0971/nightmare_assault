@@ -144,7 +144,7 @@ func TestCalculateHeartbeatVolume(t *testing.T) {
 func TestHeartbeatControllerStartStop(t *testing.T) {
 	// Create SFX player (without audio context for unit testing)
 	cfg := config.AudioConfig{
-		SFXVolume:  0.5,
+		SFXVolume:  50,
 		SFXEnabled: true,
 	}
 	sfxPlayer := NewSFXPlayer(nil, cfg, "testdata")
@@ -177,7 +177,7 @@ func TestHeartbeatControllerStartStop(t *testing.T) {
 func TestHeartbeatControllerAdjustBPM(t *testing.T) {
 	// Create SFX player (without audio context for unit testing)
 	cfg := config.AudioConfig{
-		SFXVolume:  0.5,
+		SFXVolume:  50,
 		SFXEnabled: true,
 	}
 	sfxPlayer := NewSFXPlayer(nil, cfg, "testdata")
@@ -213,7 +213,7 @@ func TestHeartbeatControllerAdjustBPM(t *testing.T) {
 func TestHeartbeatControllerOnSANChange(t *testing.T) {
 	// Create SFX player (without audio context for unit testing)
 	cfg := config.AudioConfig{
-		SFXVolume:  0.5,
+		SFXVolume:  50,
 		SFXEnabled: true,
 	}
 	sfxPlayer := NewSFXPlayer(nil, cfg, "testdata")

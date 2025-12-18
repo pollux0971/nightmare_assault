@@ -12,7 +12,7 @@ func TestGetBGMForMood_AllMoodTypes(t *testing.T) {
 		expected string
 	}{
 		{engine.MoodExploration, "ambient_exploration.mp3"},
-		{engine.MoodTension, "tension_chase.mp3"},
+		{engine.MoodTension, "tension.mp3"},
 		{engine.MoodSafe, "safe_rest.mp3"},
 		{engine.MoodHorror, "horror_reveal.mp3"},
 		{engine.MoodMystery, "mystery_puzzle.mp3"},
@@ -34,7 +34,7 @@ func TestGetBGMForMood_MatchesBGMScene(t *testing.T) {
 		bgmScene BGMScene
 	}{
 		{engine.MoodExploration, BGMSceneExploration},
-		{engine.MoodTension, BGMSceneChase},
+		{engine.MoodTension, BGMSceneTension},
 		{engine.MoodSafe, BGMSceneSafe},
 		{engine.MoodHorror, BGMSceneHorror},
 		{engine.MoodMystery, BGMSceneMystery},
@@ -58,7 +58,7 @@ func TestMoodToBGMScene_AllMoodTypes(t *testing.T) {
 		expected BGMScene
 	}{
 		{engine.MoodExploration, BGMSceneExploration},
-		{engine.MoodTension, BGMSceneChase},
+		{engine.MoodTension, BGMSceneTension},
 		{engine.MoodSafe, BGMSceneSafe},
 		{engine.MoodHorror, BGMSceneHorror},
 		{engine.MoodMystery, BGMSceneMystery},

@@ -103,10 +103,12 @@ type MoodType = engine.MoodType
 
 // NewBGMPlayer creates a new BGM player
 func NewBGMPlayer(ctx *oto.Context, cfg config.AudioConfig, audioDir string) *BGMPlayer {
+	// Convert volume from 0-100 (int) to 0.0-1.0 (float64)
+	volume := float64(cfg.BGMVolume) / 100.0
 	return &BGMPlayer{
 		ctx:          ctx,
-		volume:       float64(cfg.BGMVolume),
-		targetVolume: float64(cfg.BGMVolume),
+		volume:       volume,
+		targetVolume: volume,
 		enabled:      cfg.BGMEnabled,
 		loopEnabled:  true, // Default to loop mode
 		currentMood:  engine.MoodExploration, // Default mood

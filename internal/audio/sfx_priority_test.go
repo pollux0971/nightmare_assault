@@ -8,7 +8,7 @@ import (
 )
 
 func TestSFXPlayer_PriorityReplacement(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 0.7}
+	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 70}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// Fill all 4 channels with environment SFX (low priority)
@@ -28,7 +28,7 @@ func TestSFXPlayer_PriorityReplacement(t *testing.T) {
 }
 
 func TestSFXPlayer_IdleChannelPreferred(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 0.7}
+	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 70}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// Set 3 channels as playing
@@ -49,7 +49,7 @@ func TestSFXPlayer_IdleChannelPreferred(t *testing.T) {
 }
 
 func TestSFXPlayer_HighPriorityNotReplaced(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 0.7}
+	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 70}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// All channels playing high priority
@@ -67,7 +67,7 @@ func TestSFXPlayer_HighPriorityNotReplaced(t *testing.T) {
 }
 
 func TestSFXPlayer_DeathPriorityStopsAll(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 0.7}
+	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 70}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// Fill channels with various priorities
@@ -112,7 +112,7 @@ func TestSFXPlayer_PriorityOrdering(t *testing.T) {
 }
 
 func TestSFXPlayer_SamePriorityReplacement(t *testing.T) {
-	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 0.7}
+	cfg := config.AudioConfig{SFXEnabled: true, SFXVolume: 70}
 	player := NewSFXPlayer(nil, cfg, t.TempDir())
 
 	// Fill all channels with same priority

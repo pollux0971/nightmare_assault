@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Nightmare Assault API Configuration Demo ===\n")
+	fmt.Println("=== Nightmare Assault API Configuration Demo ===")
 
 	// 1. Load configuration (automatically loads from env vars and config file)
 	fmt.Println("1. Loading configuration...")
