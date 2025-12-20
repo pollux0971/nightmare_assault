@@ -16,6 +16,8 @@ import (
 	"github.com/nightmare-assault/nightmare-assault/internal/engine"
 	"github.com/nightmare-assault/nightmare-assault/internal/game"
 	"github.com/nightmare-assault/nightmare-assault/internal/game/commands"
+	"github.com/nightmare-assault/nightmare-assault/internal/i18n"
+	"github.com/nightmare-assault/nightmare-assault/internal/logger"
 	"github.com/nightmare-assault/nightmare-assault/internal/tui/themes"
 )
 
@@ -262,6 +264,13 @@ type GameOverMsg struct {
 	Reason string
 }
 
+// ConfigReloadedMsg is sent when config reload is attempted.
+// Story 10-7: Config Hot Reload
+type ConfigReloadedMsg struct {
+	Success bool
+	Error   error
+}
+
 // Update handles messages for the game play view.
 func (m GamePlayModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -403,6 +412,39 @@ func (m GamePlayModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gameOver = true
 		return m, nil
 
+	case ConfigReloadedMsg:
+		// Story 10-7 AC2: Display success/error message to user
+		// Story 10-7 AC3: On error, original config is preserved (handled by config.Reload())
+		t := i18n.GetGlobal()
+		systemLabel := "System"
+		if t != nil {
+			systemLabel = t.T("game.system_label")
+		}
+		if msg.Success {
+			successMsg := "Config reloaded successfully"
+			if t != nil {
+				successMsg = t.T("messages.config_reload_success")
+			}
+			m.currentStory += fmt.Sprintf("\n\n[%s] ✓ %s", systemLabel, successMsg)
+		} else {
+			errorDetail := "unknown error"
+			if msg.Error != nil {
+				errorDetail = msg.Error.Error()
+			}
+			failedMsg := fmt.Sprintf("Config reload failed: %s", errorDetail)
+			keepOriginal := "Keeping original config"
+			if t != nil {
+				failedMsg = t.T("messages.config_reload_failed", errorDetail)
+				keepOriginal = t.T("messages.config_reload_keep_original")
+			}
+			m.currentStory += fmt.Sprintf("\n\n[%s] ✗ %s\n%s", systemLabel, failedMsg, keepOriginal)
+		}
+		m.fullText = m.currentStory
+		m.displayText = m.currentStory
+		m.charIndex = len([]rune(m.currentStory))
+		m.safeSetViewportContent(m.displayText, true)
+		return m, nil
+
 	case StoryLoadingDoneMsg:
 		// Opening story generation complete
 		if msg.Error != nil || msg.Cancelled {
@@ -486,6 +528,11 @@ func (m GamePlayModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		// Generate first chapter continuation
 		return m, m.generateContinuation("開始冒險")
+	}
+
+	// Story 10-7: Config Hot Reload - Ctrl+R to reload config
+	if msg.String() == "ctrl+r" {
+		return m, m.reloadConfig()
 	}
 
 	// Handle scroll keys when input is empty
@@ -688,6 +735,34 @@ func (m GamePlayModel) handleTextInput(input string) (tea.Model, tea.Cmd) {
 	// Generate continuation with the free text as input
 	m.loading = true
 	return m, m.generateContinuation(input)
+}
+
+// reloadConfig attempts to reload the config file.
+// Story 10-7 AC1: Press Ctrl+R to reload config from ~/.nightmare/config.json
+// Story 10-7 AC2: New config takes effect immediately
+// Story 10-7 AC3: On error, show error message and keep original config
+// Story 10-7 AC4: Log detailed errors to log file
+func (m *GamePlayModel) reloadConfig() tea.Cmd {
+	return func() tea.Msg {
+		// Attempt to reload config
+		err := m.config.Reload()
+
+		// Story 10-7 AC4: Log the reload attempt (English for log file consistency)
+		if logger := logger.GetGlobal(); logger != nil {
+			if err != nil {
+				logger.Error("Config hot reload failed", map[string]interface{}{
+					"error": err.Error(),
+				})
+			} else {
+				logger.Info("Config hot reload successful", nil)
+			}
+		}
+
+		return ConfigReloadedMsg{
+			Success: err == nil,
+			Error:   err,
+		}
+	}
 }
 
 // updateLayout determines the current layout mode based on terminal size.
@@ -1007,7 +1082,11 @@ func (m GamePlayModel) renderViewportWithIndicators() string {
 func (m GamePlayModel) renderShortcutBar() string {
 	theme := themes.GetManager().GetCurrentTheme()
 
-	shortcuts := "1-3: 快速選擇 | 打字: 自由輸入 | Enter: 確認 | Esc: 清空輸入 | ↑↓: 滾動 | q: 離開"
+	// Story 10-7: Add Ctrl+R hint for config reload (i18n)
+	shortcuts := "1-3: Quick select | Type: Free input | Enter: Confirm | Esc: Clear | ↑↓: Scroll | Ctrl+R: Reload config | q: Quit"
+	if t := i18n.GetGlobal(); t != nil {
+		shortcuts = t.T("hints.game_shortcut_bar")
+	}
 
 	return lipgloss.NewStyle().
 		Foreground(theme.Colors.Secondary).

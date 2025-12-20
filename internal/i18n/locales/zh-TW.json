@@ -25,7 +25,8 @@
     "chapter_label": "章節",
     "status": "狀態",
     "inventory": "物品欄",
-    "objectives": "目標"
+    "objectives": "目標",
+    "system_label": "系統"
   },
   "commands": {
     "status": "狀態",
@@ -37,7 +38,9 @@
     "load": "讀檔",
     "load_desc": "載入遊戲進度",
     "lang": "語言",
-    "lang_desc": "切換語言 (/lang zh-TW 或 /lang en-US)",
+    "lang_desc": "切換語言 (/lang zh-TW 或 /lang zh-CN 或 /lang en-US)",
+    "log": "日誌",
+    "log_desc": "查看遊戲日誌或設定日誌級別",
     "bgm": "背景音樂",
     "bgm_desc": "切換背景音樂",
     "sfx": "音效",
@@ -46,6 +49,7 @@
     "quit_desc": "離開遊戲"
   },
   "errors": {
+    "config_error": "配置錯誤 [{0}]: {1}",
     "api_failed": "API 請求失敗: {0}",
     "save_failed": "存檔失敗: {0}",
     "load_failed": "讀檔失敗: {0}",
@@ -54,7 +58,29 @@
     "config_load_failed": "載入設定失敗: {0}",
     "config_save_failed": "儲存設定失敗: {0}",
     "file_not_found": "找不到檔案: {0}",
-    "permission_denied": "權限不足: {0}"
+    "permission_denied": "權限不足: {0}",
+    "invalid_log_level": "無效的日誌級別: {0}",
+    "network_failure": "無法連接到網路，請檢查您的網路連線。",
+    "network_suggestion": "請確認：\n• 網路連線是否正常\n• 防火牆是否允許連線\n• 代理設定是否正確",
+    "api_timeout": "LLM API 請求逾時，伺服器回應時間過長。",
+    "api_key_invalid": "API Key 驗證失敗，請檢查您的 API Key 設定。",
+    "api_key_suggestion": "建議操作：\n• 輸入 /api 重新設定 API Key\n• 確認 API Key 格式正確\n• 檢查 API Key 是否已過期",
+    "api_connection_failed": "無法連接到 LLM 服務 ({0})，請檢查網路連線與 API Key 設定。",
+    "api_rate_limited": "請求過於頻繁，API 服務已限制請求速率。",
+    "api_rate_limit_suggestion": "建議操作：\n• 稍等片刻後再試\n• 減少操作頻率\n• 考慮升級 API 配額",
+    "api_server_error": "{0} API 服務目前發生問題。",
+    "api_server_suggestion": "建議操作：\n• 稍後重試\n• 檢查 API 服務狀態頁面\n• 考慮切換其他 API 提供者",
+    "api_timeout_suggestion": "建議操作：\n• 稍後重試\n• 檢查網路連線速度\n• 選擇較快的 API 服務",
+    "save_corrupted": "存檔槽位 {0} 的檔案損壞或版本不相容。",
+    "save_corrupted_suggestion": "建議操作：\n• 開始新遊戲\n• 嘗試其他存檔槽位\n• 如果問題持續，請回報此問題",
+    "save_not_found": "存檔槽位 {0} 是空的，沒有找到存檔。",
+    "save_not_found_suggestion": "建議操作：\n• 選擇其他存檔槽位\n• 開始新遊戲",
+    "save_permission_denied": "存取存檔檔案時權限不足。",
+    "save_permission_suggestion": "建議操作：\n• 檢查檔案權限\n• 確保您有存檔目錄的寫入權限\n• 嘗試以適當的權限執行",
+    "save_failed_suggestion": "建議操作：\n• 檢查可用磁碟空間\n• 確認存檔目錄權限\n• 嘗試其他存檔槽位",
+    "config_invalid": "設定錯誤於欄位：{0}",
+    "config_suggestion": "建議操作：\n• 輸入 /api 重新設定\n• 檢查設定檔格式\n• 刪除設定檔重新設定",
+    "retry_prompt": "可使用自動重試。是否要再試一次？"
   },
   "messages": {
     "game_saved": "遊戲已儲存",
@@ -66,7 +92,11 @@
     "welcome": "歡迎來到惡夢突襲",
     "loading": "載入中...",
     "press_any_key": "按任意鍵繼續",
-    "terminal_too_small": "終端機太小"
+    "terminal_too_small": "終端機太小",
+    "log_level_changed": "日誌級別已設定為 {0}",
+    "config_reload_success": "配置已重新載入",
+    "config_reload_failed": "配置重載失敗: {0}",
+    "config_reload_keep_original": "保持原有配置"
   },
   "setup": {
     "api_key_prompt": "請輸入 OpenAI API 金鑰",
@@ -104,10 +134,22 @@
     "direct_select": "1-4: 直接選擇  |  q: 離開",
     "command_help": "輸入 /help 查看所有命令",
     "san_low": "理智值偏低，請小心",
-    "hp_critical": "生命值危險！"
+    "hp_critical": "生命值危險！",
+    "game_shortcut_bar": "1-3: 快速選擇 | 打字: 自由輸入 | Enter: 確認 | Esc: 清空輸入 | ↑↓: 滾動 | Ctrl+R: 重載配置 | q: 離開"
   },
   "languages": {
     "zh-TW": "繁體中文",
+    "zh-CN": "简体中文",
     "en-US": "English"
+  },
+  "log": {
+    "title": "日誌系統",
+    "current_level": "當前日誌級別",
+    "available_levels": "可用級別",
+    "usage_hint": "提示: 使用 /log level [debug|info|warn|error] 設定日誌級別",
+    "level_debug": "偵錯 (DEBUG) - 詳細的偵錯資訊",
+    "level_info": "資訊 (INFO) - 一般資訊",
+    "level_warn": "警告 (WARN) - 警告資訊",
+    "level_error": "錯誤 (ERROR) - 錯誤資訊"
   }
 }

@@ -11,6 +11,20 @@ import (
 	"time"
 )
 
+// supportedLanguages defines the languages supported by the application.
+// This is duplicated from i18n package to avoid circular dependency.
+var supportedLanguages = []string{"zh-TW", "zh-CN", "en-US"}
+
+// IsValidLanguage checks if a language code is supported.
+func IsValidLanguage(lang string) bool {
+	for _, supported := range supportedLanguages {
+		if supported == lang {
+			return true
+		}
+	}
+	return false
+}
+
 // Config represents the application configuration.
 type Config struct {
 	Version    string           `json:"version"`
@@ -20,6 +34,7 @@ type Config struct {
 	API        APIConfig        `json:"api"`
 	Typewriter TypewriterConfig `json:"typewriter"`
 	Debug      DebugConfig      `json:"debug"`
+	Update     UpdateConfig     `json:"update"`   // Auto-update settings
 }
 
 // DebugConfig contains debug-related settings.
@@ -27,6 +42,13 @@ type DebugConfig struct {
 	Enabled    bool `json:"enabled"`     // Enable debug mode
 	LogAPIKeys bool `json:"log_api_keys"` // Log API key info (masked)
 	LogRequests bool `json:"log_requests"` // Log API requests/responses
+}
+
+// UpdateConfig contains auto-update settings.
+type UpdateConfig struct {
+	Enabled         bool `json:"enabled"`           // Enable auto-update check on startup
+	CheckInterval   int  `json:"check_interval"`    // Check interval in hours (default: 24)
+	AllowPrerelease bool `json:"allow_prerelease"`  // Allow pre-release versions
 }
 
 // AudioConfig contains audio-related settings.
@@ -37,6 +59,7 @@ type AudioConfig struct {
 	BGMVolume        int                   `json:"bgm_volume"`          // 0-100
 	SFXVolume        int                   `json:"sfx_volume"`          // 0-100
 	HeartbeatEnabled bool                  `json:"heartbeat_enabled"`
+	BGMLoop          bool                  `json:"bgm_loop"`            // Loop BGM playback (Story 10-2 AC7)
 	Platform         string                `json:"platform"`            // Detected platform: windows, linux, darwin
 	PlatformSettings PlatformAudioSettings `json:"platform_settings"`   // Platform-specific audio optimizations
 }
@@ -131,6 +154,7 @@ func DefaultConfig() *Config {
 			BGMVolume:        70,
 			SFXVolume:        80,
 			HeartbeatEnabled: true,
+			BGMLoop:          true, // Enable loop by default (Story 10-2 AC7)
 			Platform:         detectPlatform(),
 			PlatformSettings: DefaultPlatformSettings(),
 		},
@@ -152,6 +176,11 @@ func DefaultConfig() *Config {
 			Enabled:    false, // Disabled by default
 			LogAPIKeys: false,
 			LogRequests: false,
+		},
+		Update: UpdateConfig{
+			Enabled:         true, // Enable auto-update check by default
+			CheckInterval:   24,   // Check every 24 hours
+			AllowPrerelease: false, // Stable releases only
 		},
 	}
 }
@@ -402,4 +431,83 @@ func (c *Config) SetAPIKey(providerID, apiKey string) error {
 	}
 	c.API.APIKeys[providerID] = apiKey
 	return c.Save()
+}
+
+// Reload reloads the configuration from disk and applies it to the current instance.
+// Story 10-7 AC1: Reload config from ~/.nightmare/config.json
+// Story 10-7 AC2: On error, preserve original config and return detailed error
+//
+// Returns error if:
+//   - Config file cannot be read
+//   - Config file has invalid JSON format
+//   - Config validation fails
+func (c *Config) Reload() error {
+	// Load fresh config from disk
+	path, err := ConfigPath()
+	if err != nil {
+		return err
+	}
+
+	newConfig, err := LoadFromPath(path)
+	if err != nil {
+		// Return error, original config is preserved
+		return err
+	}
+
+	// Validate the new config before applying
+	if err := validateConfig(newConfig); err != nil {
+		// Return validation error, original config is preserved
+		return err
+	}
+
+	// Apply the new config to the current instance
+	*c = *newConfig
+
+	return nil
+}
+
+// validateConfig validates the configuration for required fields and ranges.
+func validateConfig(c *Config) error {
+	if c == nil {
+		return nil // Allow nil config for backward compatibility
+	}
+
+	// Validate language setting
+	if c.Language != "" && !IsValidLanguage(c.Language) {
+		return &ConfigError{Field: "language", Message: "unsupported language: " + c.Language}
+	}
+
+	// Validate audio settings
+	if c.Audio.MasterVolume < 0 || c.Audio.MasterVolume > 100 {
+		return &ConfigError{Field: "audio.master_volume", Message: "must be between 0 and 100"}
+	}
+	if c.Audio.BGMVolume < 0 || c.Audio.BGMVolume > 100 {
+		return &ConfigError{Field: "audio.bgm_volume", Message: "must be between 0 and 100"}
+	}
+	if c.Audio.SFXVolume < 0 || c.Audio.SFXVolume > 100 {
+		return &ConfigError{Field: "audio.sfx_volume", Message: "must be between 0 and 100"}
+	}
+
+	// Validate typewriter settings
+	if c.Typewriter.Speed < 10 || c.Typewriter.Speed > 200 {
+		return &ConfigError{Field: "typewriter.speed", Message: "must be between 10 and 200 chars/second"}
+	}
+
+	// Validate update settings
+	if c.Update.CheckInterval < 1 {
+		return &ConfigError{Field: "update.check_interval", Message: "must be at least 1 hour"}
+	}
+
+	return nil
+}
+
+// ConfigError represents a configuration validation error.
+type ConfigError struct {
+	Field   string
+	Message string
+}
+
+// Error returns the error message in English (i18n is handled at UI layer).
+func (e *ConfigError) Error() string {
+	return "Config error [" + e.Field + "]: " + e.Message
 }
