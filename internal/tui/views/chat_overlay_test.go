@@ -893,3 +893,350 @@ func TestUpdateViewportContent(t *testing.T) {
 
 // Note: getParticipantName is a private method and cannot be tested directly.
 // It is tested indirectly through renderMessage tests.
+
+// ==========================================================================
+// Story 3-7: Epic 3 Integration Tests
+// ==========================================================================
+
+// TestIntegration_ChatFlow tests the complete chat flow from enter to exit.
+// Story 3-7 AC1: Test chat room enter/exit flow (integration).
+func TestIntegration_ChatFlow(t *testing.T) {
+	m := NewChatOverlayModel()
+
+	// Verify initial state
+	if m.active {
+		t.Error("ChatOverlay should be inactive initially")
+	}
+
+	// Create participants
+	participants := []ChatParticipant{
+		NewChatParticipant("player", "玩家", true, manager.DefaultEmotionState()),
+		NewChatParticipant("npc1", "Alice", false, manager.NewEmotionState(70, 20, 30)),
+		NewChatParticipant("npc2", "Bob", false, manager.NewEmotionState(50, 40, 50)),
+	}
+
+	// AC1: Enter chat
+	m.Enter("player", participants, "Kitchen")
+
+	// Verify chat is active
+	if !m.active {
+		t.Fatal("Chat should be active after Enter()")
+	}
+	if len(m.participants) != 3 {
+		t.Errorf("Expected 3 participants, got %d", len(m.participants))
+	}
+	if m.location != "Kitchen" {
+		t.Errorf("Expected location 'Kitchen', got '%s'", m.location)
+	}
+	if len(m.messages) != 1 {
+		t.Errorf("Expected 1 system message after Enter(), got %d", len(m.messages))
+	}
+
+	// AC2: Send player messages and verify display
+	m.AddMessage(NewChatMessage("msg1", "player", "Hello everyone!", ChatMessageNormal))
+	m.AddMessage(NewChatMessage("msg2", "Alice", "Hi there!", ChatMessageNormal))
+	m.AddMessage(NewChatMessage("msg3", "Bob", "Good morning!", ChatMessageNormal))
+
+	if len(m.messages) != 4 {
+		t.Errorf("Expected 4 messages total, got %d", len(m.messages))
+	}
+
+	// Verify message content
+	if m.messages[1].Content != "Hello everyone!" {
+		t.Errorf("Message 1 content mismatch: %s", m.messages[1].Content)
+	}
+	if m.messages[1].Speaker != "player" {
+		t.Errorf("Message 1 speaker should be 'player', got '%s'", m.messages[1].Speaker)
+	}
+
+	// AC3: Modify participant emotions and verify list updates
+	m.UpdateParticipantEmotion("npc1", manager.NewEmotionState(80, 15, 25))
+
+	participant := m.GetParticipant("npc1")
+	if participant == nil {
+		t.Fatal("GetParticipant('npc1') returned nil")
+	}
+	if participant.Emotion.Trust != 80 {
+		t.Errorf("Expected Trust=80 after update, got %d", participant.Emotion.Trust)
+	}
+
+	// AC3: Remove participant and verify
+	m.RemoveParticipant("npc2")
+
+	activeCount, totalCount := m.GetParticipantCount()
+	if activeCount != 2 {
+		t.Errorf("Expected 2 active participants after removal, got %d", activeCount)
+	}
+	if totalCount != 3 {
+		t.Errorf("Expected 3 total participants, got %d", totalCount)
+	}
+
+	// AC4: Test chat turns tracking
+	initialTurns := m.GetChatTurns()
+	m.chatTurns = 5
+	if m.GetChatTurns() != 5 {
+		t.Errorf("Chat turns should be 5, got %d", m.GetChatTurns())
+	}
+
+	// AC1: Exit chat
+	session := m.Exit()
+
+	// Verify chat is inactive
+	if m.active {
+		t.Error("Chat should be inactive after Exit()")
+	}
+
+	// Verify session data
+	if session == nil {
+		t.Fatal("Exit() should return a ChatSession")
+	}
+	if session.SessionID == "" {
+		t.Error("Session should have a valid ID")
+	}
+	if session.Initiator != "player" {
+		t.Errorf("Expected initiator 'player', got '%s'", session.Initiator)
+	}
+	if len(session.Messages) != 4 {
+		t.Errorf("Session should have 4 messages, got %d", len(session.Messages))
+	}
+	if session.Location != "Kitchen" {
+		t.Errorf("Expected session location 'Kitchen', got '%s'", session.Location)
+	}
+	if session.TurnsSpent != 5 {
+		t.Errorf("Expected 5 turns spent, got %d", session.TurnsSpent)
+	}
+
+	// Verify state reset after exit
+	if initialTurns == m.GetChatTurns() {
+		// Chat turns should remain set (not reset) for history tracking
+		t.Log("Chat turns preserved for history: OK")
+	}
+}
+
+// TestIntegration_MessageDisplayWithFlags tests message rendering with various flags.
+// Story 3-7 AC2: Test message display correctness (integration).
+func TestIntegration_MessageDisplayWithFlags(t *testing.T) {
+	m := NewChatOverlayModel()
+
+	participants := []ChatParticipant{
+		NewChatParticipant("player", "玩家", true, manager.DefaultEmotionState()),
+		NewChatParticipant("npc1", "Alice", false, manager.DefaultEmotionState()),
+	}
+
+	m.Enter("player", participants, "TestRoom")
+
+	// Add messages with different types and flags
+	testMessages := []struct {
+		speaker string
+		content string
+		msgType ChatMessageType
+		flags   []ChatFlag
+	}{
+		{"player", "I saw something strange", ChatMessageNormal, []ChatFlag{ChatFlagHallucination}},
+		{"Alice", "Don't trust him!", ChatMessageNormal, []ChatFlag{ChatFlagHostile}},
+		{"player", "I know the secret", ChatMessageWhisper, []ChatFlag{ChatFlagRevelation}},
+		{"system", "The door creaks open", ChatMessageSystem, nil},
+		{"Alice", "runs to the exit", ChatMessageAction, nil},
+	}
+
+	for i, tm := range testMessages {
+		msg := &ChatMessage{
+			ID:        fmt.Sprintf("msg_%d", i),
+			Speaker:   tm.speaker,
+			Content:   tm.content,
+			Type:      tm.msgType,
+			Flags:     tm.flags,
+			Timestamp: m.sessionStart,
+		}
+		m.AddMessage(msg)
+	}
+
+	// Verify all messages were added
+	if len(m.messages) != len(testMessages)+1 { // +1 for system entrance message
+		t.Errorf("Expected %d messages, got %d", len(testMessages)+1, len(m.messages))
+	}
+
+	// Verify message types are preserved
+	for i, tm := range testMessages {
+		actualMsg := m.messages[i+1] // Skip first system message
+		if actualMsg.Type != tm.msgType {
+			t.Errorf("Message %d: expected type %s, got %s", i, tm.msgType, actualMsg.Type)
+		}
+		if len(actualMsg.Flags) != len(tm.flags) {
+			t.Errorf("Message %d: expected %d flags, got %d", i, len(tm.flags), len(actualMsg.Flags))
+		}
+	}
+
+	// Test rendering doesn't panic with various message types
+	for i := 1; i < len(m.messages); i++ {
+		rendered := m.renderMessage(m.messages[i])
+		if rendered == "" {
+			t.Errorf("Message %d rendered to empty string", i)
+		}
+	}
+
+	m.Exit()
+}
+
+// TestIntegration_ParticipantManagement tests participant lifecycle.
+// Story 3-7 AC3: Test participant list correctness (integration).
+func TestIntegration_ParticipantManagement(t *testing.T) {
+	m := NewChatOverlayModel()
+
+	participants := []ChatParticipant{
+		NewChatParticipant("player", "玩家", true, manager.DefaultEmotionState()),
+		NewChatParticipant("npc1", "Alice", false, manager.NewEmotionState(60, 30, 40)),
+	}
+
+	m.Enter("player", participants, "Hall")
+
+	// Add a late participant
+	lateParticipant := NewChatParticipant("npc2", "Bob", false, manager.NewEmotionState(50, 50, 50))
+	m.AddParticipant(lateParticipant)
+
+	active, total := m.GetParticipantCount()
+	if active != 3 || total != 3 {
+		t.Errorf("Expected 3 active, 3 total; got %d active, %d total", active, total)
+	}
+
+	// Update emotions for all NPCs
+	m.UpdateParticipantEmotion("npc1", manager.NewEmotionState(80, 10, 20))
+	m.UpdateParticipantEmotion("npc2", manager.NewEmotionState(40, 60, 70))
+
+	// Verify emotion updates
+	alice := m.GetParticipant("npc1")
+	if alice.Emotion.Trust != 80 || alice.Emotion.Fear != 10 {
+		t.Errorf("Alice emotion update failed: Trust=%d, Fear=%d", alice.Emotion.Trust, alice.Emotion.Fear)
+	}
+
+	bob := m.GetParticipant("npc2")
+	if bob.Emotion.Trust != 40 || bob.Emotion.Fear != 60 {
+		t.Errorf("Bob emotion update failed: Trust=%d, Fear=%d", bob.Emotion.Trust, bob.Emotion.Fear)
+	}
+
+	// Remove one participant
+	m.RemoveParticipant("npc1")
+
+	active, total = m.GetParticipantCount()
+	if active != 2 || total != 3 {
+		t.Errorf("After removal: expected 2 active, 3 total; got %d active, %d total", active, total)
+	}
+
+	// Verify removed participant is inactive
+	alice = m.GetParticipant("npc1")
+	if alice.IsActive {
+		t.Error("Removed participant should be inactive")
+	}
+
+	// Get active participants list
+	activeList := m.GetActiveParticipants()
+	if len(activeList) != 2 {
+		t.Errorf("Expected 2 participants in active list, got %d", len(activeList))
+	}
+
+	// Verify rendering doesn't panic
+	rendering := m.renderParticipantsList()
+	if rendering == "" {
+		t.Error("Participant list rendering returned empty string")
+	}
+
+	m.Exit()
+}
+
+// TestIntegration_InputAndUIUpdates tests input handling and UI synchronization.
+// Story 3-7 AC4: Test input handling and UI updates (integration).
+func TestIntegration_InputAndUIUpdates(t *testing.T) {
+	m := NewChatOverlayModel()
+
+	participants := []ChatParticipant{
+		NewChatParticipant("player", "玩家", true, manager.DefaultEmotionState()),
+		NewChatParticipant("npc1", "TestNPC", false, manager.DefaultEmotionState()),
+	}
+
+	m.Enter("player", participants, "TestLocation")
+	initialMessageCount := len(m.messages)
+
+	// Simulate sending multiple messages
+	messages := []string{
+		"Hello, how are you?",
+		"This is a test message",
+		"Let's talk about the mystery",
+	}
+
+	for _, content := range messages {
+		msg := NewChatMessage(
+			fmt.Sprintf("msg_%d", len(m.messages)),
+			"player",
+			content,
+			ChatMessageNormal,
+		)
+		m.AddMessage(msg)
+		m.chatTurns++
+	}
+
+	// Verify messages were added
+	expectedCount := initialMessageCount + len(messages)
+	if len(m.messages) != expectedCount {
+		t.Errorf("Expected %d messages, got %d", expectedCount, len(m.messages))
+	}
+
+	// Verify chat turns incremented
+	if m.GetChatTurns() != len(messages) {
+		t.Errorf("Expected %d chat turns, got %d", len(messages), m.GetChatTurns())
+	}
+
+	// Add system message
+	m.AddSystemMessage("An ominous feeling fills the air")
+
+	// Find the system message
+	systemMsgFound := false
+	for _, msg := range m.messages {
+		if msg.Type == ChatMessageSystem && msg.Content == "An ominous feeling fills the air" {
+			systemMsgFound = true
+			break
+		}
+	}
+	if !systemMsgFound {
+		t.Error("System message was not added correctly")
+	}
+
+	// Add NPC message
+	m.AddNPCMessage("npc1", "I sense danger nearby", nil)
+
+	// Verify NPC message
+	npcMsgFound := false
+	for _, msg := range m.messages {
+		if msg.Speaker == "npc1" && msg.Content == "I sense danger nearby" {
+			npcMsgFound = true
+			break
+		}
+	}
+	if !npcMsgFound {
+		t.Error("NPC message was not added correctly")
+	}
+
+	// Test viewport update (should not panic)
+	m.updateViewportContent()
+
+	// Verify message retrieval
+	allMessages := m.GetMessages()
+	if len(allMessages) != len(m.messages) {
+		t.Errorf("GetMessages() returned %d messages, expected %d", len(allMessages), len(m.messages))
+	}
+
+	// Exit and verify session
+	session := m.Exit()
+	if session == nil {
+		t.Fatal("Exit() returned nil session")
+	}
+
+	// Verify session contains all messages
+	if len(session.Messages) != len(allMessages) {
+		t.Errorf("Session has %d messages, expected %d", len(session.Messages), len(allMessages))
+	}
+
+	// Verify session metadata
+	if session.TurnsSpent != len(messages) {
+		t.Errorf("Session turns spent: got %d, want %d", session.TurnsSpent, len(messages))
+	}
+}

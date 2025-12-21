@@ -466,50 +466,8 @@ func TestChatBubble_SetMessage(t *testing.T) {
 	}
 }
 
-// TestGetMessageTypePrefix tests message type prefix generation.
-// Story 3-5 AC3: Type-specific prefixes.
-func TestGetMessageTypePrefix(t *testing.T) {
-	tests := []struct {
-		msgType  ChatMessageType
-		expected string
-	}{
-		{ChatMessageNormal, ""},
-		{ChatMessageSystem, ""},
-		{ChatMessageWhisper, "（小聲）"},
-		{ChatMessageThought, "（心想）"},
-		{ChatMessageAction, "*"},
-	}
-
-	for _, tt := range tests {
-		result := GetMessageTypePrefix(tt.msgType)
-		if result != tt.expected {
-			t.Errorf("For type %s, expected prefix '%s', got '%s'",
-				tt.msgType.String(), tt.expected, result)
-		}
-	}
-}
-
-// TestFormatMessageWithPrefix tests message formatting with prefix.
-func TestFormatMessageWithPrefix(t *testing.T) {
-	tests := []struct {
-		content  string
-		msgType  ChatMessageType
-		expected string
-	}{
-		{"Hello", ChatMessageNormal, "Hello"},
-		{"Whisper", ChatMessageWhisper, "（小聲） Whisper"},
-		{"Thinking", ChatMessageThought, "（心想） Thinking"},
-		{"runs away", ChatMessageAction, "*runs away*"},
-	}
-
-	for _, tt := range tests {
-		result := FormatMessageWithPrefix(tt.content, tt.msgType)
-		if result != tt.expected {
-			t.Errorf("For content '%s' with type %s, expected '%s', got '%s'",
-				tt.content, tt.msgType.String(), tt.expected, result)
-		}
-	}
-}
+// Note: Message type prefix functions were removed in favor of pure visual styling.
+// Story 3-5 AC3 is now implemented through getContentStyle() using color, italic, etc.
 
 // TestChatBubble_EmptyContent tests rendering with empty content.
 func TestChatBubble_EmptyContent(t *testing.T) {

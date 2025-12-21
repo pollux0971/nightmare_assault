@@ -1,283 +1,915 @@
-# Sprint Status - Nightmare Assault v2.0
-# generated: 2025-12-14
-# project: nightmare-assault
-# version: 2.0.0
-# tracking_system: file-system
-# story_location: docs/epics-and-stories.md
+# Sprint Status - Nightmare Assault 2.0 Upgrade (New Architecture)
+# Generated: 2025-12-21
+# Project: nightmare-assault
+# Based on: my_proposal/00-overview.md ~ 07-implementation-plan.md
+# Version: 2.0.0-alpha (New Proposal)
 
-# ============================================================================
+# ==============================================================================
+# 專案願景
+# ==============================================================================
+# 將 Nightmare Assault 從「回合制選項遊戲」升級為「沉浸式互動敘事體驗」
+#
+# 核心升級：
+# 1. 敘事動量系統 — 減少碎片化詢問，讓故事連續流暢
+# 2. NPC 管理系統 — 賦予角色深度、三維情感與漸進揭露的個性
+# 3. 資訊隔離引擎 — 讓每個 NPC 擁有獨立認知，創造真實的社交動態
+# 4. 聊天室模式 — 即時與 NPC 互動，影響故事走向
+#
+# ==============================================================================
 # STATUS DEFINITIONS
-# ============================================================================
+# ==============================================================================
 # Epic Status:
-#   - backlog: Epic not yet started (待辦)
-#   - in-progress: Epic actively being worked on (進行中)
-#   - done: All stories in epic completed (已完成)
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
 #
 # Story Status:
-#   - backlog: Story only exists in epic file (待辦)
-#   - drafted: Story file created, AC defined (已起草)
-#   - ready-for-dev: Draft approved, ready for implementation (準備開發)
-#   - in-progress: Developer actively working (開發中)
-#   - review: Implementation complete, ready for code review (審查中)
-#   - done: Story completed and merged (已完成)
+#   - backlog: Story only exists in epic file
+#   - drafted: Story file created in stories folder
+#   - ready-for-dev: Draft approved and story context created
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review
+#   - done: Story completed
 #
 # Retrospective Status:
-#   - optional: Can be completed but not required (可選)
-#   - completed: Retrospective has been done (已完成)
-#
-# ============================================================================
-# v2.0 ARCHITECTURE OVERVIEW
-# ============================================================================
-# Phase 1: Core Architecture Foundation (Epic 1)
-# Phase 2: Logic Engine Layer (Epic 2, 3, 4, 5 - Parallel)
-# Phase 3: Agent Layer (Epic 6)
-# Phase 4: Game Mechanics & Persistence (Epic 7, 8)
-# Phase 5: Enhanced Features (Epic 9)
-# Phase 6: Quality & Polish (Epic 10)
-#
-# Total: 10 Epics, 58 Stories
-#
-# ============================================================================
-# DEPENDENCY GRAPH
-# ============================================================================
-# Epic 1 (Core) -> Epic 2, 3, 4, 5 (Logic Layer)
-# Epic 2, 3, 4, 5 -> Epic 6 (Agent Layer)
-# Epic 6 -> Epic 7 (Game Mechanics)
-# Epic 1, 2 -> Epic 8 (Persistence)
-# Epic 7 -> Epic 9 (Enhanced Features)
-# Epic 10 (Quality) - Can run in parallel with other epics
-#
-# ============================================================================
-# PARALLEL DEVELOPMENT STRATEGY
-# ============================================================================
-# Sprint 1: Epic 1 (Foundation) - MUST complete first
-# Sprint 2: Epic 2, 3, 4, 5 (Logic Layer) - Can parallelize
-# Sprint 3: Epic 6 (Agent Layer) - Sequential after Sprint 2
-# Sprint 4: Epic 7, 8 (Mechanics & Persistence) - Can parallelize
-# Sprint 5: Epic 9 (Enhanced Features) - Sequential after Sprint 4
-# Sprint 6: Epic 10 (Quality & Polish) - Final polish
+#   - optional: Can be completed but not required
+#   - completed: Retrospective has been done
 
-generated: 2025-12-14
+# ==============================================================================
+# METADATA
+# ==============================================================================
+generated: "2025-12-21"
 project: nightmare-assault
-version: 2.0.0
+project_key: na-2.0-alpha
 tracking_system: file-system
-story_location: docs/epics-and-stories.md
+story_location: docs/sprint-artifacts/stories
 
+# ==============================================================================
+# DEVELOPMENT STATUS
+# ==============================================================================
 development_status:
+
   # ============================================================================
-  # SPRINT 1: Core Architecture Foundation
-  # Timeline: Week 1-2
-  # Dependencies: None (Foundation layer)
-  # Parallel: No (All other epics depend on this)
+  # Phase 1: 基礎架構 (2 週)
   # ============================================================================
 
-  # Epic 1: v2.0 Core Architecture Foundation
-  # Goal: 建立 Orchestrator、GameStateV2、三階段流程
-  # Priority: P0 (Must Have)
-  # Stories: 5
+  # Epic 1: NPC 管理系統 - 核心實作 (Week 1)
+  # Goal: 建立 NPCManager、三維情感、特質揭露系統
+  # Priority: P0 (Foundation)
+  # Dependencies: None
+  # Stories: 9
+  # Estimated: 4h+2h+3h+3h+2h+4h+3h+3h+4h = 28 hours
+  # Completed: 2025-12-22 (Test Coverage: 97.0%)
+  # ============================================================================
   epic-1: done
-  1-1-orchestrator-layer: done
-  1-2-gamestatev2-data-model: done
-  1-3-phase1-genesis-flow: done
-  1-4-phase2-gameloop-flow: done
-  1-5-phase3-convergence-flow: done
+
+  # Story 1.1: NPCManager 核心結構
+  # AC1: NPCManager 類別具備 profiles、states、updateMgr、config 欄位
+  # AC2: NewNPCManager() 正確初始化所有欄位與 sync.RWMutex
+  # AC3: 提供 thread-safe 的基本 CRUD 方法
+  # Files: internal/npc/manager/manager.go
+  # Estimate: 4 hours
+  # Completed: 2025-12-22
+  1-1-npc-manager-core: done
+
+  # Story 1.2: EmotionState 三維情感系統
+  # AC1: EmotionState 具備 Trust/Fear/Stress 三個 0-100 整數欄位
+  # AC2: EmotionDelta 定義常見情感變化預設值（friendly_chat, threat, help_npc 等）
+  # AC3: clamp() 函數確保情感值在 0-100 範圍內
+  # Files: internal/npc/manager/emotion.go, internal/npc/manager/types.go
+  # Estimate: 2 hours
+  # Completed: 2025-12-22
+  1-2-emotion-state-3d: done
+
+  # Story 1.3: NPCRuntimeState 執行時狀態
+  # AC1: NPCRuntimeState 包含 Emotion、MentalState、IsAlive、TraitStates、Interactions
+  # AC2: RelationshipType 枚舉 (friendly/neutral/hostile/fearful)
+  # AC3: NPCInteraction 記錄互動歷史與情感影響
+  # Files: internal/npc/manager/state.go
+  # Estimate: 3 hours
+  # Completed: 2025-12-22
+  1-3-npc-runtime-state: done
+
+  # Story 1.4: 情感調整邏輯
+  # AC1: AdjustEmotion() 接受 EmotionDelta 並更新 NPC 情感
+  # AC2: 自動重新計算 Relationship type 與 score
+  # AC3: 觸發心理狀態轉換檢查
+  # AC4: 觸發特質揭露檢查
+  # Files: internal/npc/manager/manager.go
+  # Estimate: 3 hours
+  # Completed: 2025-12-22
+  1-4-emotion-adjustment: done
+
+  # Story 1.5: 心理狀態轉換機制
+  # AC1: checkMentalStateTransition() 根據 Stress/Fear 轉換狀態
+  # AC2: Normal → Anxious (Stress ≥ 60 or Fear ≥ 70)
+  # AC3: Anxious → Corrupted (Stress ≥ 90, 崩潰檢定)
+  # AC4: Anxious → Normal (Stress < 40 and Fear < 50, 恢復)
+  # AC5: rollBreakdown() 實作崩潰機率計算
+  # Files: internal/npc/manager/mental.go
+  # Estimate: 2 hours
+  # Completed: 2025-12-22
+  1-5-mental-state-transitions: done
+
+  # Story 1.6: Trait 特質結構與揭露邏輯
+  # AC1: Trait 結構包含 ID/Content/RevealTier/Triggers/Status/Hints
+  # AC2: TraitStatus 枚舉 (hidden/hinting/revealed)
+  # AC3: TraitTrigger 支援 trust_level/fear_level/stress_level/event/interaction_count/time
+  # AC4: shouldReveal() 檢查觸發條件
+  # AC5: revealTrait() 實作 hidden → hinting → revealed 轉換
+  # AC6: GetHintingTraits() 返回正在暗示的特質
+  # Files: internal/npc/manager/trait.go, internal/npc/manager/reveal.go
+  # Estimate: 4 hours
+  # Completed: 2025-12-22
+  1-6-trait-revelation: done
+
+  # Story 1.7: NPCProfile v2 資料結構
+  # AC1: NPCProfile 包含 ID/Name/Archetype/Appearance/Backstory
+  # AC2: 包含 Skills/Inventory/Secret/SecretTier
+  # AC3: 包含 Traits/LinkedSeeds/DeathBeat/InitialEmotion
+  # AC4: DialogueStyle 包含 Formality/Verbosity/Quirks/Vocabulary
+  # AC5: VisibleNPCProfile 只包含玩家可見資訊
+  # Files: internal/npc/manager/profile.go
+  # Estimate: 3 hours
+  # Completed: 2025-12-22
+  1-7-npc-profile-v2: done
+
+  # Story 1.8: NPC Prompt 建構器
+  # AC1: BuildNPCPrompt() 生成包含基本資訊、已揭露特質的 prompt
+  # AC2: 包含暗示特質（不直接說明）
+  # AC3: 包含當前情緒狀態描述（信任/恐懼/壓力）
+  # AC4: 包含心理狀態描述
+  # AC5: 包含對話風格資訊
+  # AC6: emotionToDescription() 將數值轉換為文字描述
+  # Files: internal/npc/manager/prompt.go
+  # Estimate: 3 hours
+  # Completed: 2025-12-22
+  1-8-npc-prompt-builder: done
+
+  # Story 1.9: Epic 1 單元測試
+  # AC1: NPCManager 基本操作測試 (CRUD)
+  # AC2: 情感調整測試（範圍限制、關係更新）
+  # AC3: 心理狀態轉換測試（所有轉換路徑）
+  # AC4: 特質揭露測試（觸發條件、狀態轉換）
+  # AC5: Prompt 建構測試（格式正確性）
+  # AC6: 測試覆蓋率 > 80%
+  # Files: internal/npc/manager/*_test.go
+  # Estimate: 4 hours
+  # Completed: 2025-12-22 (Coverage: 97.0%)
+  1-9-epic1-unit-tests: done
+
   epic-1-retrospective: optional
 
   # ============================================================================
-  # SPRINT 2: Logic Engine Layer (4 Epics in Parallel)
-  # Timeline: Week 3-5
-  # Dependencies: Epic 1 completed
-  # Parallel: Yes (Epic 2, 3, 4, 5 can be developed simultaneously)
+  # Epic 2: 資訊隔離引擎 - 知識系統 (Week 2)
+  # Goal: 實作 UpdateManager、Fact/KnowledgeBase、資訊傳播、矛盾檢測
+  # Priority: P0 (Foundation)
+  # Dependencies: Epic 1 stories 1.1-1.3 (NPCManager basics)
+  # Stories: 9
+  # Estimated: 3h+3h+2h+4h+4h+3h+3h+4h+4h = 30 hours
+  # Completed: Stories 2.1, 2.2, 2.3 (Test Coverage: 98.6%)
   # ============================================================================
-
-  # Epic 2: Dual-Layer Seed System
-  # Goal: 實作 Global/Local Seeds 與生命週期管理
-  # Priority: P0 (Must Have)
-  # Stories: 5
   epic-2: in-progress
-  2-1-global-seed-model-generation: review
-  2-2-global-seed-clue-planting: review
-  2-3-local-seed-model-management: done
-  2-4-local-seed-urgency-harvest: done
-  2-5-seed-pruner-mechanism: review
+
+  # Story 2.1: UpdateManager 基礎結構
+  # AC1: UpdateManager 類別具備 globalFacts、npcKnowledge、playerKnowledge、roomOccupants
+  # AC2: NewUpdateManager() 正確初始化所有欄位
+  # AC3: UpdateManagerConfig 包含 EnableDistortion/DistortionRate/MaxPropagationDepth
+  # Files: internal/npc/knowledge/manager.go
+  # Estimate: 3 hours
+  # Completed: 2025-12-22
+  2-1-update-manager-core: done
+
+  # Story 2.2: Fact 與 KnowledgeBase 資料結構
+  # AC1: Fact 包含 ID/Content/Type/Source/CreatedAt/Location/Witnesses
+  # AC2: FactType 枚舉 (event/dialogue/discovery/rumor/secret)
+  # AC3: KnowledgeBase 包含 OwnerID/KnownFacts/Beliefs/LastUpdated
+  # AC4: KnownFact 包含 LearnedAt/LearnedFrom/LearnMethod/Confidence/IsDistorted
+  # AC5: LearnMethod 枚舉 (witness/told/overheard/inferred)
+  # AC6: Belief 包含 Content/BasedOn/Confidence
+  # Files: internal/npc/knowledge/fact.go, internal/npc/knowledge/knowledge_base.go
+  # Estimate: 3 hours
+  # Completed: 2025-12-22
+  2-2-fact-knowledge-base: done
+
+  # Story 2.3: 房間管理簡化版
+  # AC1: SetEntityRoom() 設定實體所在房間
+  # AC2: GetEntitiesInRoom() 取得房間中所有實體
+  # AC3: IsInSameRoom() 檢查兩實體是否同房間
+  # AC4: GetNPCsInSameRoom() 取得同房間的 NPC 列表
+  # AC5: roomOccupants map 正確維護實體位置
+  # Files: internal/npc/knowledge/room.go
+  # Estimate: 2 hours
+  # Completed: 2025-12-22
+  2-3-room-management: done
+
+  # Story 2.4: 資訊傳播邏輯
+  # AC1: RegisterFact() 註冊新事實到全域庫
+  # AC2: PropagateEvent() 傳播事件給同房間目擊者
+  # AC3: LearnFromDialogue() 從對話中學習（需同房間）
+  # AC4: TellNPC() 主動告知 NPC 資訊（確信度衰減、傳播深度+1）
+  # AC5: addKnowledge() 添加知識到 KnowledgeBase（防重複）
+  # AC6: 尊重 MaxPropagationDepth 限制
+  # Files: internal/npc/knowledge/propagation.go, propagation_test.go, knowledge_base.go
+  # Estimate: 4 hours
+  # Completed: 2025-12-22 (Test Coverage: 93.0%)
+  2-4-information-propagation: review
+
+  # Story 2.5: 認知矛盾檢測
+  # AC1: CheckContradiction() 檢查新資訊與已知資訊的矛盾
+  # AC2: contradicts() 基於否定關係檢測矛盾（活著/死了、安全/危險等）
+  # AC3: calculateContradictionSeverity() 計算嚴重程度（1-10）
+  # AC4: getContradictionType() 返回 minor/moderate/major
+  # AC5: getSuggestedEmotionDelta() 根據嚴重程度建議情感影響
+  # AC6: getSuggestedReaction() 建議 NPC 反應
+  # Files: internal/npc/knowledge/contradiction.go, contradiction_test.go
+  # Estimate: 4 hours
+  # Completed: 2025-12-22 (Test Coverage: 93.6%)
+  2-5-contradiction-detection: review
+
+  # Story 2.6: GameStateV2 擴充
+  # AC1: GameStateV2 新增 MomentumConfig 欄位
+  # AC2: 新增 NPCManager *NPCManagerState 欄位
+  # AC3: 新增 GlobalFacts []*Fact 欄位
+  # AC4: 新增 ChatSessions []*ChatSession 欄位
+  # AC5: JSON 序列化/反序列化正確
+  # Files: internal/engine/game_state_v2.go, game_state_v2_test.go
+  # Estimate: 3 hours
+  # Completed: 2025-12-22 (Already implemented with comprehensive tests)
+  2-6-gamestatev2-extension: review
+
+  # Story 2.7: NPCManager 與 UpdateManager 整合
+  # AC1: NPCManager 持有 UpdateManager 參考
+  # AC2: ProcessChatMessage() 整合資訊傳播與矛盾檢測
+  # AC3: 矛盾檢測後自動調整 NPC 情感
+  # AC4: BuildFullNPCPrompt() 整合知識庫資訊
+  # AC5: 標記 NPC 不知道的事項
+  # Files: internal/npc/manager/manager.go, internal/npc/manager/prompt.go
+  # Estimate: 3 hours
+  2-7-npc-update-integration: in-progress
+
+  # Story 2.8: Epic 2 單元測試
+  # AC1: UpdateManager 基本操作測試
+  # AC2: Fact/KnowledgeBase 資料結構測試
+  # AC3: 房間管理測試（位置追蹤、同房間判斷）
+  # AC4: 資訊傳播測試（同房間自動獲得、傳播深度、確信度衰減）
+  # AC5: 矛盾檢測測試（檢測準確性、嚴重程度計算）
+  # AC6: 測試覆蓋率 > 80%
+  # Files: internal/npc/knowledge/*_test.go
+  # Estimate: 4 hours
+  2-8-epic2-unit-tests: backlog
+
+  # Story 2.9: Phase 1 整合測試
+  # AC1: NPCManager 與 UpdateManager 聯合測試
+  # AC2: 完整情境測試：NPC 互動 → 情感變化 → 資訊傳播 → 特質揭露
+  # AC3: GameStateV2 序列化包含所有新欄位
+  # AC4: 驗證 Phase 1 所有 AC 通過
+  # Files: internal/orchestrator/phase1_integration_test.go
+  # Estimate: 4 hours
+  2-9-phase1-integration-tests: backlog
+
   epic-2-retrospective: optional
 
-  # Epic 3: Tension Control System
-  # Goal: 實作張力計量與動態敘事調節
-  # Priority: P0 (Must Have)
-  # Stories: 4
+  # ============================================================================
+  # Phase 2: 聊天系統 (3 週)
+  # ============================================================================
+
+  # Epic 3: 聊天室 TUI - 核心實作 (Week 3)
+  # Goal: 建立 ChatOverlay TUI、訊息類型、進入/退出、參與者管理
+  # Priority: P0 (Core Feature)
+  # Dependencies: Epic 1, Epic 2
+  # Stories: 7
+  # Estimated: 6h+2h+3h+2h+4h+3h+4h = 24 hours
+  # Completed: 2025-12-22 (Test Coverage: 50 tests, 100% pass, 43.5% coverage)
+  # ============================================================================
   epic-3: done
-  3-1-tension-state-model: done
-  3-2-tension-delta-calculation: done
-  3-3-tension-directive-generation: done
-  3-4-tension-history-tracking: done
+
+  # Story 3.1: ChatOverlayModel TUI 基礎
+  # AC1: ChatOverlayModel 包含 active/initiator/participants/messages
+  # AC2: 包含 inputField (textinput.Model) 與 viewport (viewport.Model)
+  # AC3: 包含時間控制欄位 (timeScale/tickAccumulator/chatTurns)
+  # AC4: Update() 處理 Tab 鍵切換、訊息輸入
+  # AC5: View() 渲染聊天介面（參與者列表、訊息、輸入欄）
+  # Files: internal/tui/views/chat_overlay.go, internal/tui/views/chat_types.go
+  # Estimate: 6 hours
+  # Completed: 2025-12-22
+  3-1-chat-overlay-tui: done
+
+  # Story 3.2: ChatMessage 類型定義
+  # AC1: ChatMessage 包含 ID/Speaker/Content/Timestamp/Type
+  # AC2: ChatMessageType 枚舉 (normal/system/whisper/thought/action)
+  # AC3: ChatFlag 枚舉 (hallucination/hostile/revelation/persuasion/lie/contradiction)
+  # AC4: ChatMessage 包含 Flags/EmotionEffects
+  # Files: internal/tui/views/chat_types.go
+  # Estimate: 2 hours
+  # Completed: 2025-12-22 (Test Coverage: 94.6%)
+  3-2-chat-message-types: done
+
+  # Story 3.3: 聊天室進入/退出邏輯
+  # AC1: Enter() 初始化聊天室狀態、設定參與者
+  # AC2: Enter() 取得同房間 NPC 作為參與者
+  # AC3: 如果 NPC 發起，生成開場白
+  # AC4: Exit() 生成聊天摘要
+  # AC5: Exit() 儲存 ChatSession
+  # Files: internal/tui/views/chat_overlay.go, internal/tui/views/chat_types.go
+  # Estimate: 3 hours
+  # Completed: 2025-12-22
+  3-3-chat-enter-exit: done
+
+  # Story 3.4: 參與者管理系統
+  # AC1: ChatParticipant 包含 ID/Name/IsPlayer/Emotion/IsActive
+  # AC2: 參與者列表顯示每個 NPC 的當前情緒狀態
+  # AC3: 支援參與者動態加入/離開
+  # AC4: UI 顯示參與者狀態（active/inactive）
+  # Files: internal/tui/views/chat_overlay.go, internal/tui/views/chat_overlay_test.go
+  # Estimate: 2 hours
+  # Completed: 2025-12-22 (Test Coverage: comprehensive unit tests)
+  3-4-participant-management: done
+
+  # Story 3.5: ChatBubble 訊息渲染元件
+  # AC1: ChatBubble 組件渲染單條訊息
+  # AC2: 根據 speaker 區分玩家/NPC/系統訊息樣式
+  # AC3: 支援 ChatMessageType 不同類型的視覺樣式
+  # AC4: 顯示時間戳記
+  # AC5: 支援 Flag 標記顯示（幻覺、敵意等）
+  # Files: internal/tui/views/chat_bubble.go, internal/tui/views/chat_bubble_test.go
+  # Estimate: 4 hours
+  # Completed: 2025-12-22 (Test Coverage: 90%+, 25 comprehensive unit tests)
+  3-5-chat-bubble-component: done
+
+  # Story 3.6: 基本輸入處理
+  # AC1: 玩家輸入訊息後按 Enter 發送
+  # AC2: ESC 清空當前輸入
+  # AC3: Tab 鍵退出聊天室
+  # AC4: 訊息添加到 messages 列表
+  # AC5: viewport 自動捲動到最新訊息
+  # Files: internal/tui/views/chat_overlay.go, internal/tui/views/chat_overlay_test.go
+  # Estimate: 3 hours
+  # Completed: 2025-12-22
+  3-6-chat-input-handling: done
+
+  # Story 3.7: Epic 3 整合測試
+  # AC1: 測試聊天室進入/退出流程
+  # AC2: 測試訊息顯示正確性
+  # AC3: 測試參與者列表正確性
+  # AC4: 測試輸入處理與 UI 更新
+  # Files: internal/tui/views/chat_overlay_test.go
+  # Estimate: 4 hours
+  # Completed: 2025-12-22 (4 integration tests, 100% pass, coverage: 43.5%)
+  3-7-epic3-integration-tests: done
+
   epic-3-retrospective: optional
 
-  # Epic 4: Template Library System
-  # Goal: 建立 YAML 模板驅動的規則/場景/NPC 系統
-  # Priority: P0 (Must Have)
-  # Stories: 5
-  epic-4: done
-  4-1-yaml-template-loader: done
-  4-2-rule-template-structure: done
-  4-3-scene-template-structure: done
-  4-4-npc-archetype-template: done
-  4-5-template-library-management: done
-  epic-4-retrospective: completed
+  # ============================================================================
+  # Epic 4: 聊天判定與回應 (Week 4)
+  # Goal: JudgeAgent 聊天判定、ChatProcessor、NPC 回應生成
+  # Priority: P0 (Core Logic)
+  # Dependencies: Epic 3
+  # Stories: 7
+  # Estimated: 4h+4h+6h+4h+2h+3h+3h = 26 hours
+  # ============================================================================
+  epic-4: backlog
 
-  # Epic 5: Context Management & Optimization
-  # Goal: 實作滑動窗口與 Token 優化
-  # Priority: P0 (Must Have)
-  # Stories: 5
-  epic-5: done
-  5-1-context-window-structure: done
-  5-2-sliding-window-mechanism: done
-  5-3-smart-summary-generation: done
-  5-4-token-counting-optimization: done
-  5-5-context-assembly-interface: done
+  # Story 4.1: JudgeAgent.JudgeChat() 實作
+  # AC1: JudgeAgent 新增 JudgeChat() 方法
+  # AC2: 接受 PlayerMessage/Participants/ConversationContext
+  # AC3: 返回 JudgeChatResult 包含 Flags 陣列
+  # AC4: 使用 LLM 判斷訊息是否包含 hallucination/hostile/revelation/contradiction
+  # AC5: Prompt 包含參與者情感狀態與對話歷史
+  # Files: internal/orchestrator/agents/judge_agent.go
+  # Estimate: 4 hours
+  4-1-judge-agent-chat: backlog
+
+  # Story 4.2: ChatProcessor 核心邏輯
+  # AC1: ChatProcessor 包含 npcManager/updateMgr/judgeAgent/llmClient
+  # AC2: ProcessPlayerMessage() 處理玩家訊息
+  # AC3: 呼叫 JudgeAgent.JudgeChat() 進行判定
+  # AC4: 傳播資訊到 UpdateManager
+  # AC5: 返回 ProcessResult 包含 NPCResponses/EmotionChanges/Flags
+  # Files: internal/chat/processor.go
+  # Estimate: 4 hours
+  4-2-chat-processor: backlog
+
+  # Story 4.3: 聊天判定處理 (各 Flag)
+  # AC1: handleHallucination() 處理幻覺標記（降低信任）
+  # AC2: handleHostility() 處理敵意標記（增加恐懼/壓力）
+  # AC3: handleRevelation() 處理揭露標記（傳播新資訊）
+  # AC4: handleContradiction() 處理矛盾標記（呼叫 UpdateManager）
+  # AC5: handlePersuasion() 處理說服標記（情感變化）
+  # AC6: handleLie() 處理謊言標記（後續揭穿時懲罰）
+  # Files: internal/chat/handlers.go
+  # Estimate: 6 hours
+  4-3-chat-flag-handlers: backlog
+
+  # Story 4.4: NPC 回應生成系統
+  # AC1: generateNPCResponse() 使用 LLM 生成 NPC 回應
+  # AC2: Prompt 包含 NPC 完整檔案（BuildFullNPCPrompt）
+  # AC3: Prompt 包含近期對話歷史（最近 5-10 條）
+  # AC4: Prompt 包含判定 Flags（影響回應態度）
+  # AC5: 回應包含適當的情感反應
+  # AC6: 使用 Reactive/Rapid 模型（< 2 秒延遲）
+  # Files: internal/chat/npc_response.go
+  # Estimate: 4 hours
+  4-4-npc-response-generation: backlog
+
+  # Story 4.5: 回退對話機制
+  # AC1: LLM 失敗時使用模板回應
+  # AC2: 模板回應根據 NPC 個性與情感狀態選擇
+  # AC3: 模板庫包含常見情境（同意、拒絕、困惑、恐懼等）
+  # AC4: 確保遊戲不會因 API 失敗而卡住
+  # Files: internal/chat/fallback.go, internal/chat/templates/
+  # Estimate: 2 hours
+  4-5-fallback-dialogue: backlog
+
+  # Story 4.6: 情感更新整合
+  # AC1: ProcessResult 包含每個 NPC 的情感變化
+  # AC2: ChatOverlay 收到 ProcessResult 後應用情感變化
+  # AC3: 參與者情感即時更新（UI 顯示）
+  # AC4: 情感變化記錄到 NPCInteraction
+  # Files: internal/tui/views/chat_overlay.go
+  # Estimate: 3 hours
+  4-6-emotion-update-integration: backlog
+
+  # Story 4.7: 知識傳播整合
+  # AC1: 玩家訊息自動傳播給同房間 NPC
+  # AC2: NPC 回應自動傳播給其他參與者
+  # AC3: 矛盾檢測整合到對話流程
+  # AC4: 矛盾觸發時 NPC 回應包含質疑
+  # Files: internal/chat/processor.go
+  # Estimate: 3 hours
+  4-7-knowledge-propagation-integration: backlog
+
+  epic-4-retrospective: optional
+
+  # ============================================================================
+  # Epic 5: 聊天時間流與摘要 (Week 5)
+  # Goal: 時間流控制、事件機制、摘要生成、完整整合
+  # Priority: P0 (Core Feature Completion)
+  # Dependencies: Epic 4
+  # Stories: 8
+  # Estimated: 4h+4h+3h+4h+3h+2h+4h+4h = 28 hours
+  # ============================================================================
+  epic-5: backlog
+
+  # Story 5.1: 聊天時間流控制
+  # AC1: chatTurns 追蹤聊天回合數
+  # AC2: chatTurnsPerBeat = 10 (預設)
+  # AC3: tickAccumulator 累積時間流
+  # AC4: 每 10 聊天回合觸發 1 主時間回合事件
+  # AC5: timeScale = 0.1 視覺化指示
+  # Files: internal/tui/views/chat_overlay.go
+  # Estimate: 4 hours
+  5-1-chat-time-flow: backlog
+
+  # Story 5.2: 待處理事件機制
+  # AC1: PendingChatEvent 資料結構
+  # AC2: pendingEvents 佇列儲存待觸發事件
+  # AC3: backgroundEvents 佇列儲存背景事件
+  # AC4: 時間流到達時觸發事件
+  # Files: internal/tui/views/chat_types.go
+  # Estimate: 4 hours
+  5-2-pending-events: backlog
+
+  # Story 5.3: 事件中斷邏輯
+  # AC1: 重大事件可中斷聊天
+  # AC2: 顯示系統訊息通知事件發生
+  # AC3: AllowInterrupts 配置開關
+  # AC4: 中斷後自動退出聊天或繼續（視事件嚴重性）
+  # Files: internal/tui/views/chat_overlay.go
+  # Estimate: 3 hours
+  5-3-event-interruption: backlog
+
+  # Story 5.4: 聊天摘要生成
+  # AC1: generateSummary() 使用 LLM 生成對話摘要
+  # AC2: ChatSummary 包含 MainTopics/KeyDecisions/RelationChanges
+  # AC3: 包含 FactsShared/Flags/NarrativeImpact
+  # AC4: 摘要提取重要資訊與情感變化
+  # AC5: 摘要長度適中（200-400 字元）
+  # Files: internal/chat/summary.go
+  # Estimate: 4 hours
+  5-4-chat-summary-generation: backlog
+
+  # Story 5.5: 摘要注入主敘事
+  # AC1: ChatSummary 注入到 NarrationAgent context
+  # AC2: 下一回合敘事提及對話結果
+  # AC3: 情感變化影響後續 NPC 行為
+  # AC4: FactsShared 影響 NPC 知識庫
+  # Files: internal/orchestrator/orchestrator.go
+  # Estimate: 3 hours
+  5-5-summary-injection: backlog
+
+  # Story 5.6: ChatSession 儲存
+  # AC1: ChatSession 包含完整對話記錄
+  # AC2: 儲存到 GameStateV2.ChatSessions
+  # AC3: JSON 序列化正確
+  # AC4: 支援讀取歷史對話
+  # Files: internal/engine/game_state_v2.go, internal/chat/session.go
+  # Estimate: 2 hours
+  5-6-chat-session-storage: backlog
+
+  # Story 5.7: Phase 2 完整整合測試
+  # AC1: 完整聊天流程測試（進入 → 對話 → 判定 → 回應 → 退出 → 摘要）
+  # AC2: 時間流測試（10 聊天回合 = 1 主回合）
+  # AC3: 事件中斷測試
+  # AC4: 情感變化與知識傳播測試
+  # AC5: NPC 行為一致性測試
+  # Files: internal/orchestrator/chat_integration_test.go
+  # Estimate: 4 hours
+  5-7-phase2-integration-tests: backlog
+
+  # Story 5.8: 聊天系統效能優化
+  # AC1: NPC 回應延遲 < 2 秒（90th percentile）
+  # AC2: Token 消耗監控與優化
+  # AC3: 快取常見回應模式
+  # AC4: 並行處理多個 NPC 回應
+  # Files: internal/chat/optimization.go
+  # Estimate: 4 hours
+  5-8-chat-performance-optimization: backlog
+
   epic-5-retrospective: optional
 
   # ============================================================================
-  # SPRINT 3: Agent Layer
-  # Timeline: Week 6-8
-  # Dependencies: Epic 1, 2, 3, 4, 5 completed
-  # Parallel: No (Sequential, requires all logic components)
+  # Phase 3: 敘事動量 (2 週)
   # ============================================================================
 
-  # Epic 6: Multi-Agent System
-  # Goal: 實作 Narration/Seed/Choice/Judge/NPC Agent
-  # Priority: P0 (Must Have)
-  # Stories: 8
-  epic-6: in-progress
-  6-1-base-agent-abstraction: completed
-  6-2-narration-agent-skeleton-mode: done
-  6-3-narration-agent-content-mode: done
-  6-4-narration-agent-opening-ending: done
-  6-5-seed-agent-dual-mode: review
-  6-6-choice-agent-generation-risk: review
-  6-7-judge-agent-ruling-routing: review
-  6-8-npc-agent-generation-dialogue: review
+  # Epic 6: 敘事動量 - 核心實作 (Week 6)
+  # Goal: MomentumController、風險評估、劇情點檢測
+  # Priority: P0 (Game Flow Enhancement)
+  # Dependencies: Epic 1, Epic 2, Epic 5
+  # Stories: 7
+  # Estimated: 4h+2h+4h+4h+3h+3h+4h = 24 hours
+  # ============================================================================
+  epic-6: backlog
+
+  # Story 6.1: MomentumController 基礎結構
+  # AC1: MomentumController 包含 config/riskEvaluator/plotDetector/narrationAgent
+  # AC2: NewMomentumController() 正確初始化
+  # AC3: ShouldPauseForChoice() 決定是否暫停詢問玩家
+  # AC4: 檢查 NPC 對話、重大事件、劇情點、風險等級、最大自動回合
+  # Files: internal/engine/momentum/controller.go
+  # Estimate: 4 hours
+  6-1-momentum-controller-core: backlog
+
+  # Story 6.2: MomentumConfig 資料結構
+  # AC1: MomentumConfig 包含 Frequency (High/Medium/Low)
+  # AC2: 包含 AutoResolve/MaxAutoBeats/PauseOnRisk/PauseOnPlot/PauseOnNPC/PauseOnEvent
+  # AC3: FrequencyLevel 枚舉 (FrequencyHigh/Medium/Low)
+  # AC4: RiskLevel 枚舉 (RiskNone/Low/Medium/High/Lethal)
+  # AC5: DefaultMomentumConfig() 提供合理預設值
+  # AC6: GetMomentumConfigForDifficulty() 依難度調整
+  # Files: internal/engine/momentum/types.go, internal/engine/momentum/defaults.go
+  # Estimate: 2 hours
+  6-2-momentum-config: backlog
+
+  # Story 6.3: RiskEvaluator 風險評估器
+  # AC1: RiskEvaluator 評估當前場景風險
+  # AC2: EvaluateContext() 返回 RiskAssessment (Level + Factors)
+  # AC3: 考慮 HP/SAN 狀態（HP ≤ 20 → High, ≤ 40 → Medium）
+  # AC4: 考慮啟用規則數量（≥ 5 → High, ≥ 3 → Medium）
+  # AC5: 考慮張力等級（≥ 80 → High, ≥ 50 → Medium）
+  # AC6: 考慮場景危險度
+  # Files: internal/engine/momentum/risk.go
+  # Estimate: 4 hours
+  6-3-risk-evaluator: backlog
+
+  # Story 6.4: PlotDetector 劇情點檢測
+  # AC1: PlotDetector 檢測是否為劇情點
+  # AC2: IsPlotPoint() 返回 (bool, string)
+  # AC3: 檢測接近章節結束
+  # AC4: 檢測種子揭示里程碑（30%, 60%）
+  # AC5: 檢測 NPC 預定死亡時機
+  # AC6: 檢測規則首次違反
+  # Files: internal/engine/momentum/plot.go
+  # Estimate: 4 hours
+  6-4-plot-detector: backlog
+
+  # Story 6.5: ShouldPauseForChoice() 邏輯
+  # AC1: NPC 主動對話 → 進入聊天室（返回 true）
+  # AC2: 重大事件 → 暫停（返回 true）
+  # AC3: 劇情點 → 暫停（返回 true）
+  # AC4: 風險 ≥ PauseOnRisk → 暫停（返回 true）
+  # AC5: 達到 MaxAutoBeats → 暫停（返回 true）
+  # AC6: 根據 Frequency 等級決定（High=總暫停, Medium=中風險暫停, Low=高風險暫停）
+  # Files: internal/engine/momentum/controller.go
+  # Estimate: 3 hours
+  6-5-should-pause-logic: backlog
+
+  # Story 6.6: NarrativeContext 上下文管理
+  # AC1: NarrativeContext 包含 CurrentBeat/CurrentScene/RiskLevel
+  # AC2: 包含 IsPlotPoint/PlotPointType
+  # AC3: 包含 NPCInitiatesConversation/InitiatingNPC
+  # AC4: 包含 PendingEvents/RecentChoices/AutoResolvedBeats
+  # AC5: buildContext() 從 GameStateV2 建構上下文
+  # Files: internal/engine/momentum/context.go
+  # Estimate: 3 hours
+  6-6-narrative-context: backlog
+
+  # Story 6.7: Epic 6 單元測試
+  # AC1: MomentumController 基本功能測試
+  # AC2: RiskEvaluator 各種情境測試（HP/SAN/張力/規則）
+  # AC3: PlotDetector 各種劇情點測試
+  # AC4: ShouldPauseForChoice 決策邏輯測試
+  # AC5: 不同 Frequency 等級測試
+  # AC6: 測試覆蓋率 > 80%
+  # Files: internal/engine/momentum/*_test.go
+  # Estimate: 4 hours
+  6-7-epic6-unit-tests: backlog
+
   epic-6-retrospective: optional
 
   # ============================================================================
-  # SPRINT 4: Game Mechanics & Persistence (2 Epics in Parallel)
-  # Timeline: Week 9-11
-  # Dependencies: Epic 1, 6 for Epic 7; Epic 1, 2 for Epic 8
-  # Parallel: Yes (Epic 7 and 8 can be developed simultaneously)
-  # ============================================================================
-
-  # Epic 7: Enhanced Game Mechanics
-  # Goal: 增強核心遊戲機制 (故事生成、規則、互動、HP/SAN、NPC)
-  # Priority: P0 (Must Have)
+  # Epic 7: 敘事動量 - 自動演繹 (Week 7)
+  # Goal: AutoResolve、連續敘事、遊戲迴圈整合
+  # Priority: P0 (Game Flow Completion)
+  # Dependencies: Epic 6
   # Stories: 8
+  # Estimated: 6h+4h+3h+4h+2h+2h+4h+3h = 28 hours
+  # ============================================================================
   epic-7: backlog
-  7-1-theme-selection-story-init: backlog
-  7-2-hidden-rule-generation-tracking: backlog
-  7-3-dialogue-interaction-system: backlog
-  7-4-hp-san-dual-value-system: backlog
-  7-5-san-buffer-control-deprivation: backlog
-  7-6-npc-generation-personality: backlog
-  7-7-npc-dialogue-behavior: backlog
-  7-8-npc-death-emotion-design: backlog
+
+  # Story 7.1: AutoResolve() 自動演繹實作
+  # AC1: AutoResolve() 自動演繹低風險行動
+  # AC2: 返回 AutoResolveResult (Narratives/BeatsResolved/HPDelta/SANDelta)
+  # AC3: 迴圈生成敘事直到觸發暫停條件
+  # AC4: 每回合調用 NarrationAgent.InvokeAutoContent()
+  # AC5: 更新 GameStateV2 狀態（Beat/HP/SAN）
+  # AC6: 尊重 MaxAutoBeats 上限
+  # AC7: 記錄 StopReason/StopContext
+  # Files: internal/engine/momentum/controller.go, internal/engine/momentum/result.go
+  # Estimate: 6 hours
+  7-1-auto-resolve: backlog
+
+  # Story 7.2: NarrationAgent.InvokeAutoContent()
+  # AC1: NarrationAgent 新增 InvokeAutoContent() 方法
+  # AC2: 接受 GameState/StoryBible/AutoAction/Context
+  # AC3: 生成安全的自動行動敘事（避免致命風險）
+  # AC4: 返回 Narrative/HPDelta/SANDelta/PlantedSeeds/RevealedClues
+  # AC5: Prompt 包含風險提示與安全指引
+  # Files: internal/orchestrator/agents/narration_agent.go
+  # Estimate: 4 hours
+  7-2-auto-content-generation: backlog
+
+  # Story 7.3: 連續敘事顯示
+  # AC1: displayAutoNarratives() 合併多段敘事
+  # AC2: 使用打字機效果顯示（連續段落）
+  # AC3: 段落間暫停 500ms
+  # AC4: 顯示動量指示器（"自動演繹中: 3/5 回合"）
+  # AC5: 允許玩家 PlayerOverride 中斷
+  # Files: internal/tui/views/game_play.go, internal/tui/components/momentum_indicator.go
+  # Estimate: 3 hours
+  7-3-continuous-narrative-display: backlog
+
+  # Story 7.4: 遊戲迴圈重構整合
+  # AC1: RunGameLoop() 每回合調用 MomentumController.AutoResolve()
+  # AC2: 根據 StopReason 路由（NPCChat → ChatOverlay, Risk/Plot → ChoiceAgent）
+  # AC3: AutoResolveResult 顯示後繼續迴圈
+  # AC4: 正確處理 StopReasonEvent
+  # AC5: 保持現有死亡/收斂檢查
+  # Files: internal/orchestrator/orchestrator.go
+  # Estimate: 4 hours
+  7-4-game-loop-integration: backlog
+
+  # Story 7.5: 難度配置整合
+  # AC1: Easy: MaxAutoBeats=3, PauseOnRisk=Low
+  # AC2: Normal: MaxAutoBeats=5, PauseOnRisk=Medium
+  # AC3: Hard: MaxAutoBeats=7, PauseOnRisk=High
+  # AC4: Hell: MaxAutoBeats=10, PauseOnRisk=Lethal
+  # AC5: GameConfig 設定時自動應用難度配置
+  # Files: internal/engine/momentum/defaults.go, internal/game/config.go
+  # Estimate: 2 hours
+  7-5-difficulty-config-integration: backlog
+
+  # Story 7.6: 動量指示器 UI
+  # AC1: MomentumIndicator 元件顯示當前動量狀態
+  # AC2: 自動演繹中顯示 "[自動演繹中: 3/5 回合]"
+  # AC3: 等待輸入顯示 "[等待輸入]"
+  # AC4: 整合到 status bar
+  # Files: internal/tui/components/momentum_indicator.go, internal/tui/components/status_bar.go
+  # Estimate: 2 hours
+  7-6-momentum-indicator-ui: backlog
+
+  # Story 7.7: Phase 3 整合測試
+  # AC1: 完整動量流程測試（評估 → 自動演繹 → 暫停 → 選擇）
+  # AC2: 不同風險等級測試
+  # AC3: 不同 Frequency 等級測試
+  # AC4: NPC 對話觸發聊天室測試
+  # AC5: 劇情點檢測測試
+  # AC6: 連續敘事顯示測試
+  # Files: internal/orchestrator/momentum_integration_test.go
+  # Estimate: 4 hours
+  7-7-phase3-integration-tests: backlog
+
+  # Story 7.8: 平衡調整與優化
+  # AC1: 平均連續敘事長度 ≥ 3 段落
+  # AC2: 自動演繹正確停止率 > 95%
+  # AC3: 玩家介入響應時間 < 100ms
+  # AC4: 調整風險閾值與動量參數
+  # AC5: 用戶體驗測試與回饋收集
+  # Files: 各相關檔案
+  # Estimate: 3 hours
+  7-8-balance-tuning: backlog
+
   epic-7-retrospective: optional
 
-  # Epic 8: Persistence & Integration
-  # Goal: 存檔、API、指令、覆盤、跨平台編譯
-  # Priority: P0 (Must Have)
-  # Stories: 6
+  # ============================================================================
+  # Phase 4: 精細化與優化 (持續)
+  # ============================================================================
+
+  # Epic 8: 進階功能與優化
+  # Goal: 個性漸進揭露、語義矛盾、效能監控、遷移、測試
+  # Priority: P1 (Nice to Have)
+  # Dependencies: Epic 1-7 各自完成後可開始相關 story
+  # Stories: 9
+  # Estimated: 各 story 獨立估算
+  # ============================================================================
   epic-8: backlog
-  8-1-save-system: backlog
-  8-2-load-system: backlog
-  8-3-multi-api-support: backlog
-  8-4-slash-command-system: backlog
-  8-5-death-debrief-system: backlog
-  8-6-cross-platform-compilation: backlog
+
+  # Story 8.1: 個性漸進揭露優化
+  # AC1: 更自然的 Hint 系統（漸進式暗示）
+  # AC2: 多階段揭露（hint_phase_1 → hint_phase_2 → revealed）
+  # AC3: Hint 與 NPC 對話內容整合
+  # AC4: 玩家可透過互動加速揭露
+  # Dependencies: Epic 1 done
+  # Files: internal/npc/manager/reveal.go
+  # Estimate: 4 hours
+  8-1-trait-revelation-optimization: backlog
+
+  # Story 8.2: 認知矛盾深化 (LLM 語義判斷)
+  # AC1: contradicts() 使用 LLM 判斷語義矛盾（而非關鍵字）
+  # AC2: 支援更複雜的矛盾情境
+  # AC3: 矛盾嚴重程度由 LLM 評估
+  # AC4: 效能優化（快取常見矛盾模式）
+  # Dependencies: Epic 2 done
+  # Files: internal/npc/knowledge/contradiction.go
+  # Estimate: 5 hours
+  8-2-semantic-contradiction: backlog
+
+  # Story 8.3: 資訊扭曲優化
+  # AC1: 更智慧的扭曲邏輯（基於 NPC 個性）
+  # AC2: 扭曲程度與傳播深度相關
+  # AC3: 恐懼/壓力高的 NPC 更容易扭曲
+  # AC4: 玩家可透過高信任度獲得準確資訊
+  # Dependencies: Epic 2 done
+  # Files: internal/npc/knowledge/distortion.go
+  # Estimate: 4 hours
+  8-3-distortion-optimization: backlog
+
+  # Story 8.4: 效能監控系統
+  # AC1: Token 消耗追蹤（每個 Agent 調用）
+  # AC2: LLM 延遲監控（p50/p90/p99）
+  # AC3: 聊天回應延遲監控
+  # AC4: 記錄到日誌與指標系統
+  # Dependencies: Epic 5 done
+  # Files: internal/monitoring/metrics.go
+  # Estimate: 4 hours
+  8-4-performance-monitoring: backlog
+
+  # Story 8.5: 存檔遷移 v1 → v2
+  # AC1: 偵測舊版存檔格式
+  # AC2: 自動遷移到新格式（添加 NPCManager/GlobalFacts/ChatSessions）
+  # AC3: 遷移失敗時提供清晰錯誤訊息
+  # AC4: 備份舊存檔
+  # Dependencies: Epic 2 done
+  # Files: internal/game/savefile/migration.go
+  # Estimate: 5 hours
+  8-5-save-migration: backlog
+
+  # Story 8.6: 無障礙優化
+  # AC1: 螢幕閱讀器支援（ARIA labels）
+  # AC2: 鍵盤導航改進
+  # AC3: 高對比度主題
+  # AC4: 文字大小調整
+  # Dependencies: None
+  # Files: internal/tui/accessibility.go
+  # Estimate: 6 hours
+  8-6-accessibility: backlog
+
+  # Story 8.7: 多語言支援擴充
+  # AC1: 新增簡體中文支援
+  # AC2: 新增英文支援
+  # AC3: i18n 整合到 NPC 對話
+  # AC4: 語言切換不重啟遊戲
+  # Dependencies: None
+  # Files: internal/i18n/*
+  # Estimate: 8 hours
+  8-7-i18n-expansion: backlog
+
+  # Story 8.8: 壓力測試
+  # AC1: 長時間遊戲穩定性測試（4+ 小時）
+  # AC2: 記憶體洩漏檢測
+  # AC3: 大量 NPC 對話壓力測試
+  # AC4: 連續自動演繹壓力測試
+  # Dependencies: Epic 1-7 done
+  # Files: test/stress/*
+  # Estimate: 6 hours
+  8-8-stress-testing: backlog
+
+  # Story 8.9: 用戶測試與回饋收集
+  # AC1: 招募測試玩家（5-10 人）
+  # AC2: 收集體驗回饋
+  # AC3: NPC 行為一致性評估 (目標 ≥ 90%)
+  # AC4: 玩家沉浸感評分 (目標 ≥ 4/5)
+  # AC5: 整理改進建議
+  # Dependencies: Epic 1-7 done
+  # Files: docs/user-testing-report.md
+  # Estimate: 12 hours (測試時間)
+  8-9-user-testing: backlog
+
   epic-8-retrospective: optional
 
-  # ============================================================================
-  # SPRINT 5: Enhanced Features
-  # Timeline: Week 12-14
-  # Dependencies: Epic 7 completed
-  # Parallel: No (Requires game mechanics foundation)
-  # ============================================================================
-
-  # Epic 9: Enhanced Features
-  # Goal: 夢境、BGM/SFX、理智幻覺、主題、打字機效果
-  # Priority: P1 (Should Have)
-  # Stories: 8
-  epic-9: backlog
-  9-1-dream-system-opening: backlog
-  9-2-dream-system-interspersed-review: backlog
-  9-3-bgm-background-music: backlog
-  9-4-sfx-sound-effects: backlog
-  9-5-sanity-hallucination-text-distortion: backlog
-  9-6-sanity-hallucination-fake-options: backlog
-  9-7-theme-switching: backlog
-  9-8-typewriter-effect: backlog
-  epic-9-retrospective: optional
-
-  # ============================================================================
-  # SPRINT 6: Quality & Polish
-  # Timeline: Week 15-16
-  # Dependencies: Epic 9 completed (recommended), but can run in parallel
-  # Parallel: Yes (Can work on quality improvements anytime)
-  # ============================================================================
-
-  # Epic 10: Quality & Polish
-  # Goal: 更新、多語言、日誌、提示、錯誤處理、配置、Debug
-  # Priority: P2 (Nice to Have)
-  # Stories: 8
-  epic-10: backlog
-  10-1-auto-update-check: backlog
-  10-2-custom-bgm: backlog
-  10-3-multi-language-switching: backlog
-  10-4-detailed-log-system: backlog
-  10-5-hint-system: backlog
-  10-6-error-handling-friendly-messages: backlog
-  10-7-config-hot-reload: backlog
-  10-8-debug-logging-system: backlog
-  epic-10-retrospective: optional
-
-# ============================================================================
-# SPRINT SUMMARY
-# ============================================================================
-# Sprint 1 (Week 1-2):  Epic 1 (5 stories)
-# Sprint 2 (Week 3-5):  Epic 2, 3, 4, 5 (19 stories total, parallelizable)
-# Sprint 3 (Week 6-8):  Epic 6 (8 stories)
-# Sprint 4 (Week 9-11): Epic 7, 8 (14 stories total, parallelizable)
-# Sprint 5 (Week 12-14): Epic 9 (8 stories)
-# Sprint 6 (Week 15-16): Epic 10 (8 stories)
+# ==============================================================================
+# PARALLEL DEVELOPMENT STRATEGY (並行開發策略)
+# ==============================================================================
 #
-# Total Stories: 58
-# Estimated Timeline: 16 weeks (4 months)
+# Wave 1 (Weeks 1-2): Foundation - 可部分並行
+#   ├─ Track A: Epic 1 (NPC System)
+#   └─ Track B: Epic 2 (Knowledge System)
+#       ⚠️ Epic 2 需等 Epic 1 的 1.1-1.3 完成才能開始
 #
-# ============================================================================
-# NEXT STEPS
-# ============================================================================
-# 1. Start Epic 1: Core Architecture Foundation
-# 2. Create story files in docs/sprint-artifacts/stories/epic-1/
-# 3. Begin implementation with Story 1.1: Orchestrator Layer
-# 4. Use /bmad:bmm:workflows:dev-story to implement each story
-# 5. Use /bmad:bmm:workflows:code-review after each story completion
-# 6. Update this file as stories progress through statuses
+# Wave 2 (Weeks 3-5): Chat System - 序列進行，內部可並行
+#   ├─ Epic 3 (Core TUI) → Epic 4 (Logic) → Epic 5 (Advanced)
+#   └─ 每個 Epic 內的 stories 可以並行（如果有多位開發者）
 #
-# ============================================================================
-# STORY POINT ESTIMATES (Recommended)
-# ============================================================================
-# Small Story (1-2 points): Simple data models, basic YAML parsing
-# Medium Story (3-5 points): Agent implementation, complex logic
-# Large Story (8-13 points): Multi-component integration, Phase flows
+# Wave 3 (Weeks 6-7): Momentum - 序列進行
+#   └─ Epic 6 (Core) → Epic 7 (Integration)
+#       ⚠️ Epic 7 依賴 Epic 6 完成
 #
-# Epic 1: ~25 points (Large epic, foundation)
-# Epic 2: ~20 points (Medium-Large, dual system)
-# Epic 3: ~15 points (Medium, calculation logic)
-# Epic 4: ~15 points (Medium, YAML templates)
-# Epic 5: ~18 points (Medium-Large, optimization)
-# Epic 6: ~35 points (Very Large, 8 agents)
-# Epic 7: ~30 points (Large, game mechanics)
-# Epic 8: ~20 points (Medium-Large, integration)
-# Epic 9: ~25 points (Large, audio/visual)
-# Epic 10: ~15 points (Medium, polish)
+# Wave 4 (Ongoing): Refinement - 完全獨立，可任意順序
+#   └─ Epic 8 stories 相互獨立，可依優先級挑選
 #
-# Total Estimated: ~218 story points
-# ============================================================================
+# ==============================================================================
+# DEPENDENCIES GRAPH (依賴關係圖)
+# ==============================================================================
+#
+# Epic 1 (NPC System)
+#   ↓ (1.1-1.3 完成後)
+# Epic 2 (Knowledge System)
+#   ↓ (Epic 1, 2 完成後)
+# Epic 3 (Chat TUI)
+#   ↓
+# Epic 4 (Chat Logic)
+#   ↓
+# Epic 5 (Chat Advanced)
+#   ↓ (Epic 1, 2, 5 完成後)
+# Epic 6 (Momentum Core)
+#   ↓
+# Epic 7 (Momentum Integration)
+#   ↓ (各 Epic 完成後可開始相關 story)
+# Epic 8 (Refinement) - 部分依賴，部分獨立
+#
+# ==============================================================================
+# CRITICAL PATH (關鍵路徑)
+# ==============================================================================
+#
+# Epic 1 → Epic 2 → Epic 3 → Epic 4 → Epic 5 → Epic 6 → Epic 7
+#
+# Total Duration: ~8 週 (不含 Epic 8)
+#
+# ==============================================================================
+# TEAM ALLOCATION SUGGESTIONS (團隊分配建議)
+# ==============================================================================
+#
+# 單人開發：
+#   - 嚴格按照 Epic 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 順序
+#   - 預計 8-10 週完成 Phase 1-3
+#
+# 雙人開發：
+#   - Week 1-2:
+#       Developer A: Epic 1 (stories 1.1-1.6)
+#       Developer B: Epic 1 (stories 1.7-1.9) 在 A 完成 1.1-1.3 後開始 Epic 2
+#   - Week 3-5:
+#       Developer A: Epic 3, Epic 4
+#       Developer B: Epic 5 (可在 Epic 4 進行中開始)
+#   - Week 6-7:
+#       Developer A: Epic 6
+#       Developer B: Epic 7 (在 Epic 6 完成後開始)
+#   - Week 8+:
+#       並行處理 Epic 8 stories
+#
+# ==============================================================================
+# STORY POINT ESTIMATES (故事點估算)
+# ==============================================================================
+#
+# Epic 1: ~28 hours (9 stories)
+# Epic 2: ~30 hours (9 stories)
+# Epic 3: ~24 hours (7 stories)
+# Epic 4: ~26 hours (7 stories)
+# Epic 5: ~28 hours (8 stories)
+# Epic 6: ~24 hours (7 stories)
+# Epic 7: ~28 hours (8 stories)
+# Epic 8: ~54 hours (9 stories, 可選)
+#
+# Total Core (Epic 1-7): ~188 hours (~24 工作天)
+# Total with Epic 8: ~242 hours (~30 工作天)
+#
+# ==============================================================================
+# NEXT STEPS (下一步)
+# ==============================================================================
+#
+# 1. 審查並確認此 sprint plan
+# 2. 開始 Epic 1, Story 1.1: NPCManager 核心結構
+# 3. 使用 BMAD 工作流創建 story 檔案
+# 4. 開始實作第一個 story
+# 5. 定期更新此檔案的 status
+#
+# ==============================================================================
