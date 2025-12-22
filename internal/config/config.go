@@ -35,6 +35,7 @@ type Config struct {
 	Typewriter TypewriterConfig `json:"typewriter"`
 	Debug      DebugConfig      `json:"debug"`
 	Update     UpdateConfig     `json:"update"`   // Auto-update settings
+	Trinity    TrinityConfig    `json:"trinity,omitempty"` // Trinity System configuration (Story 9-3)
 }
 
 // DebugConfig contains debug-related settings.
@@ -92,10 +93,52 @@ type APIConfig struct {
 
 // ProviderSettings contains settings for the active API provider.
 type ProviderSettings struct {
-	ProviderID string `json:"provider_id"`
-	BaseURL    string `json:"base_url,omitempty"`  // Custom base URL (optional, hardcoded in provider.go)
-	Model      string `json:"model"`               // Model name
-	MaxTokens  int    `json:"max_tokens"`          // Max tokens for generation (default: 100000)
+	ProviderID  string  `json:"provider_id"`
+	BaseURL     string  `json:"base_url,omitempty"`  // Custom base URL (optional, hardcoded in provider.go)
+	Model       string  `json:"model"`               // Model name
+	MaxTokens   int     `json:"max_tokens"`          // Max tokens for generation (default: 100000)
+	Temperature float64 `json:"temperature,omitempty"` // Temperature for generation (0.0-1.0)
+}
+
+// TrinityConfig contains Trinity System configuration (Story 9-3).
+type TrinityConfig struct {
+	// Enabled controls whether Trinity System is active.
+	// When false, the system uses the legacy API.Provider configuration.
+	Enabled bool `json:"enabled"`
+
+	// Thinking tier provider (high-quality models for complex reasoning).
+	Thinking ProviderSettings `json:"thinking,omitempty"`
+
+	// Reactive tier provider (balanced models for interactive responses).
+	Reactive ProviderSettings `json:"reactive,omitempty"`
+
+	// Rapid tier provider (fast models for quick responses).
+	Rapid ProviderSettings `json:"rapid,omitempty"`
+
+	// AgentTierOverrides allows users to override the default agent-to-tier mapping.
+	// Keys are agent names (e.g., "JudgeAgent"), values are tier names ("Thinking", "Reactive", "Rapid").
+	AgentTierOverrides map[string]string `json:"agent_tier_overrides,omitempty"`
+
+	// FallbackEnabled enables automatic fallback to lower tiers on failure.
+	FallbackEnabled bool `json:"fallback_enabled"`
+
+	// Guardian contains Guardian Layer configuration for player safety.
+	Guardian GuardianSettings `json:"guardian,omitempty"`
+}
+
+// GuardianSettings contains Guardian Layer configuration.
+type GuardianSettings struct {
+	// Enabled controls whether Guardian Layer is active.
+	Enabled bool `json:"enabled"`
+
+	// LowHPThreshold triggers enhanced model when player HP is below this percentage (0-100).
+	LowHPThreshold int `json:"low_hp_threshold,omitempty"`
+
+	// LowSanThreshold triggers enhanced model when player Sanity is below this percentage (0-100).
+	LowSanThreshold int `json:"low_san_threshold,omitempty"`
+
+	// MaxConsecutiveDeaths triggers enhanced model after this many consecutive deaths.
+	MaxConsecutiveDeaths int `json:"max_consecutive_deaths,omitempty"`
 }
 
 // detectPlatform returns the current platform
@@ -151,7 +194,7 @@ func DefaultConfig() *Config {
 			MasterVolume:     100,
 			BGMEnabled:       true,
 			SFXEnabled:       true,
-			BGMVolume:        70,
+			BGMVolume:        50,
 			SFXVolume:        80,
 			HeartbeatEnabled: true,
 			BGMLoop:          true, // Enable loop by default (Story 10-2 AC7)
@@ -496,6 +539,71 @@ func validateConfig(c *Config) error {
 	// Validate update settings
 	if c.Update.CheckInterval < 1 {
 		return &ConfigError{Field: "update.check_interval", Message: "must be at least 1 hour"}
+	}
+
+	// Validate Trinity configuration (Story 9-3 AC4)
+	if err := ValidateTrinityConfig(&c.Trinity); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateTrinityConfig validates Trinity configuration (Story 9-3 AC4).
+func ValidateTrinityConfig(tc *TrinityConfig) error {
+	if tc == nil || !tc.Enabled {
+		return nil // Trinity disabled, no validation needed
+	}
+
+	// Validate that all three tiers have provider configuration
+	if tc.Thinking.ProviderID == "" {
+		return &ConfigError{Field: "trinity.thinking.provider_id", Message: "Thinking tier provider_id is required when Trinity is enabled"}
+	}
+	if tc.Thinking.Model == "" {
+		return &ConfigError{Field: "trinity.thinking.model", Message: "Thinking tier model is required when Trinity is enabled"}
+	}
+
+	if tc.Reactive.ProviderID == "" {
+		return &ConfigError{Field: "trinity.reactive.provider_id", Message: "Reactive tier provider_id is required when Trinity is enabled"}
+	}
+	if tc.Reactive.Model == "" {
+		return &ConfigError{Field: "trinity.reactive.model", Message: "Reactive tier model is required when Trinity is enabled"}
+	}
+
+	if tc.Rapid.ProviderID == "" {
+		return &ConfigError{Field: "trinity.rapid.provider_id", Message: "Rapid tier provider_id is required when Trinity is enabled"}
+	}
+	if tc.Rapid.Model == "" {
+		return &ConfigError{Field: "trinity.rapid.model", Message: "Rapid tier model is required when Trinity is enabled"}
+	}
+
+	// Validate AgentTierOverrides - values must be valid tier names
+	validTierNames := map[string]bool{
+		"Thinking": true,
+		"Reactive": true,
+		"Rapid":    true,
+	}
+
+	for agentName, tierName := range tc.AgentTierOverrides {
+		if !validTierNames[tierName] {
+			return &ConfigError{
+				Field:   "trinity.agent_tier_overrides." + agentName,
+				Message: "invalid tier name '" + tierName + "', must be one of: Thinking, Reactive, Rapid",
+			}
+		}
+	}
+
+	// Validate Guardian thresholds
+	if tc.Guardian.Enabled {
+		if tc.Guardian.LowHPThreshold < 0 || tc.Guardian.LowHPThreshold > 100 {
+			return &ConfigError{Field: "trinity.guardian.low_hp_threshold", Message: "must be between 0 and 100"}
+		}
+		if tc.Guardian.LowSanThreshold < 0 || tc.Guardian.LowSanThreshold > 100 {
+			return &ConfigError{Field: "trinity.guardian.low_san_threshold", Message: "must be between 0 and 100"}
+		}
+		if tc.Guardian.MaxConsecutiveDeaths < 0 {
+			return &ConfigError{Field: "trinity.guardian.max_consecutive_deaths", Message: "must be non-negative"}
+		}
 	}
 
 	return nil

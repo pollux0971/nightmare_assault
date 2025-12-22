@@ -124,7 +124,7 @@ func TestLogViewFormatEntry(t *testing.T) {
 
 			for _, expected := range tt.contains {
 				// Remove ANSI codes for testing
-				plainText := stripAnsi(formatted)
+				plainText := stripAnsiHelper(formatted)
 				if !strings.Contains(plainText, expected) {
 					t.Errorf("Expected formatted entry to contain '%s', got: %s", expected, plainText)
 				}
@@ -193,7 +193,7 @@ func TestLogViewView(t *testing.T) {
 	lv.ready = true
 	view = lv.View()
 
-	plainView := stripAnsi(view)
+	plainView := stripAnsiHelper(view)
 
 	// Check for header
 	if !strings.Contains(plainView, "遊戲日誌") {
@@ -211,7 +211,7 @@ func TestLogViewView(t *testing.T) {
 }
 
 // stripAnsi removes ANSI escape codes from a string for testing.
-func stripAnsi(str string) string {
+func stripAnsiHelper(str string) string {
 	var result strings.Builder
 	inEscape := false
 

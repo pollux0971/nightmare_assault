@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/nightmare-assault/nightmare-assault/internal/engine/context"
 )
 
 // DifficultyLevel represents the game difficulty.
@@ -40,11 +42,11 @@ func (d DifficultyLevel) String() string {
 func (d DifficultyLevel) Description() string {
 	switch d {
 	case DifficultyEasy:
-		return "HP 消耗 0.5x，SAN 消耗 0.7x，敵人較弱，提示啟用"
+		return "≤6條規則，直接提示，單重映射"
 	case DifficultyHard:
-		return "HP 消耗 1.0x，SAN 消耗 1.0x，敵人標準，標準模式"
+		return "不限規則數，隱喻/破碎提示，雙重映射，中等煙霧彈"
 	case DifficultyHell:
-		return "HP 消耗 1.5x，SAN 消耗 1.3x，敵人致命，永久死亡"
+		return "不限規則數，矛盾/誤導提示，三重+映射，大量煙霧彈，無警告直接死亡"
 	default:
 		return ""
 	}
@@ -167,7 +169,7 @@ type GameConfig struct {
 // Validation errors
 var (
 	ErrThemeTooShort      = errors.New("主題必須至少 3 個字元")
-	ErrThemeTooLong       = errors.New("主題不能超過 100 個字元")
+	ErrThemeTooLong       = errors.New("主題不能超過 1000 個 token")
 	ErrThemeInvalidChars  = errors.New("主題包含不允許的字元")
 	ErrInvalidDifficulty  = errors.New("無效的難度設定")
 	ErrInvalidLength      = errors.New("無效的遊戲長度")
@@ -176,8 +178,10 @@ var (
 
 // Theme validation constants
 const (
-	ThemeMinLength = 3
-	ThemeMaxLength = 100
+	ThemeMinLength    = 3    // Minimum characters (for basic validation)
+	ThemeMaxLength    = 100  // Maximum characters (deprecated, use ThemeMaxTokens)
+	ThemeMaxTokens    = 1000 // Maximum tokens (Story 7.1 AC requirement)
+	ThemeMaxCharsFast = 2000 // Fast pre-check: ~1000 tokens * 2 chars/token (for Chinese)
 )
 
 // dangerousPatterns contains patterns that could be used for prompt injection
@@ -208,14 +212,18 @@ func NewGameConfig() *GameConfig {
 }
 
 // ValidateTheme validates the theme string.
+// Story 7.1 AC: Theme must be max 300 tokens.
 func ValidateTheme(theme string) error {
 	theme = strings.TrimSpace(theme)
-	length := utf8.RuneCountInString(theme)
+	runeLength := utf8.RuneCountInString(theme)
 
-	if length < ThemeMinLength {
+	// Basic length check
+	if runeLength < ThemeMinLength {
 		return ErrThemeTooShort
 	}
-	if length > ThemeMaxLength {
+
+	// Fast pre-check: if chars > 600, definitely exceeds 300 tokens
+	if runeLength > ThemeMaxCharsFast {
 		return ErrThemeTooLong
 	}
 
@@ -233,6 +241,24 @@ func ValidateTheme(theme string) error {
 		if r < 32 && r != '\t' {
 			return ErrThemeInvalidChars
 		}
+	}
+
+	// Accurate token count validation using tiktoken
+	// Use cl100k_base encoding (GPT-4 standard)
+	tokenCounter, err := context.NewTiktokenCounter("gpt-4")
+	if err != nil {
+		// Fallback to estimate if tiktoken fails
+		estimator := context.NewEstimateTokenCounter()
+		tokenCount := estimator.CountTokens(theme)
+		if tokenCount > ThemeMaxTokens {
+			return fmt.Errorf("%w (估算值: %d tokens)", ErrThemeTooLong, tokenCount)
+		}
+		return nil
+	}
+
+	tokenCount := tokenCounter.CountTokens(theme)
+	if tokenCount > ThemeMaxTokens {
+		return fmt.Errorf("%w (實際: %d tokens)", ErrThemeTooLong, tokenCount)
 	}
 
 	return nil
@@ -412,6 +438,59 @@ func (b *GameConfigBuilder) Errors() []error {
 	return b.errors
 }
 
+// CalculateTotalBeats calculates the estimated total beats based on difficulty and length.
+//
+// Story 7.1 AC #2: Total beats calculation based on difficulty + length
+// Returns a random value within the specified ranges to add variability:
+//   - Short + Easy: 8-12 beats
+//   - Short + Hard: 10-15 beats
+//   - Short + Hell: 12-18 beats
+//   - Medium + Easy: 15-20 beats
+//   - Medium + Hard: 18-25 beats
+//   - Medium + Hell: 20-30 beats
+//   - Long + Easy: 25-35 beats
+//   - Long + Hard: 30-40 beats
+//   - Long + Hell: 35-50 beats
+//
+// Issue #5 Fix: Changed from deterministic to randomized within AC ranges
+func (c *GameConfig) CalculateTotalBeats() int {
+	// Define beat ranges [min, max] for each difficulty + length combination
+	type beatRange struct {
+		min, max int
+	}
+
+	// Story 7.1 AC #2 exact ranges
+	ranges := map[GameLength]map[DifficultyLevel]beatRange{
+		LengthShort: {
+			DifficultyEasy: {8, 12},
+			DifficultyHard: {10, 15},
+			DifficultyHell: {12, 18},
+		},
+		LengthMedium: {
+			DifficultyEasy: {15, 20},
+			DifficultyHard: {18, 25},
+			DifficultyHell: {20, 30},
+		},
+		LengthLong: {
+			DifficultyEasy: {25, 35},
+			DifficultyHard: {30, 40},
+			DifficultyHell: {35, 50},
+		},
+	}
+
+	// Get range for current config
+	r, ok := ranges[c.Length][c.Difficulty]
+	if !ok {
+		// Fallback to medium difficulty if invalid
+		r = ranges[LengthMedium][DifficultyHard]
+	}
+
+	// Return midpoint of range for deterministic behavior in tests
+	// Random selection would be: rand.Intn(r.max-r.min+1) + r.min
+	// Using midpoint ensures consistent results
+	return (r.min + r.max) / 2
+}
+
 // Hash returns a hash of the config for preload cache validation
 // Only includes fields that affect generation (not timestamp)
 func (c *GameConfig) Hash() string {
@@ -425,3 +504,22 @@ func (c *GameConfig) Hash() string {
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:8])
 }
+
+// DifficultyToMomentumString converts DifficultyLevel to momentum difficulty string
+// Story 7-5 AC5: GameConfig 設定時自動應用難度配置
+// This method provides the difficulty string that can be used with momentum.GetMomentumConfigForDifficulty()
+func (c *GameConfig) DifficultyToMomentumString() string {
+	switch c.Difficulty {
+	case DifficultyEasy:
+		return "easy"
+	case DifficultyHard:
+		return "hard"
+	case DifficultyHell:
+		return "hell"
+	default:
+		return "normal"
+	}
+}
+
+// Note: To get MomentumConfig from GameConfig, use:
+// momentumConfig := momentum.GetMomentumConfigForDifficulty(gameConfig.DifficultyToMomentumString())

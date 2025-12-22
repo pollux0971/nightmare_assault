@@ -53,9 +53,10 @@ func NewThemeManager() *ThemeManager {
 		themes: make(map[string]*Theme),
 	}
 
-	// Register all built-in themes
-	tm.registerTheme(MidnightTheme())
-	tm.registerTheme(BloodMoonTheme())
+	// Register all built-in themes (Story 9-7 AC1)
+	tm.registerTheme(MidnightTheme())        // Classic Dark
+	tm.registerTheme(BloodMoonTheme())       // Blood Red
+	tm.registerTheme(AbyssBlueTheme())       // Abyss Blue
 	tm.registerTheme(TerminalGreenTheme())
 	tm.registerTheme(SilentHillFogTheme())
 	tm.registerTheme(HighContrastTheme())
@@ -117,8 +118,8 @@ func (tm *ThemeManager) GetAllThemes() []*Theme {
 	defer tm.mu.RUnlock()
 
 	themes := make([]*Theme, 0, len(tm.themes))
-	// Return in consistent order
-	order := []string{"midnight", "blood_moon", "terminal_green", "silent_hill_fog", "high_contrast"}
+	// Return in consistent order (Story 9-7 AC1: highlight main 3 themes first)
+	order := []string{"midnight", "blood_moon", "abyss_blue", "terminal_green", "silent_hill_fog", "high_contrast"}
 	for _, id := range order {
 		if t, ok := tm.themes[id]; ok {
 			themes = append(themes, t)

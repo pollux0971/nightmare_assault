@@ -1,0 +1,162 @@
+version: "1.0"
+category: spatial
+rules:
+  - id: spatial_001
+    name: 房間迴圈規則
+    category: spatial
+    difficulty: medium
+    trigger_medium: 連續進入|重複進入|走回
+    false_clue: 繼續前進就能找到出口
+    survival_rule: 發現房間重複時，必須往反方向或破窗離開，繼續同方向會無限迴圈
+    punishment:
+      san_damage: 25
+      hp_damage: 0
+      effect: 陷入空間迴圈，理智值下降，時間流逝
+    clue_hints:
+      - 牆上的計數刻痕越來越多
+      - 你發現經過這個房間已經三次了
+      - 日記：「同一條走廊走了十次，我快瘋了」
+    tags:
+      - spatial
+      - loop
+      - navigation
+
+  - id: spatial_002
+    name: 門的方向規則
+    category: spatial
+    difficulty: hard
+    trigger_medium: 轉身|回頭|向後
+    false_clue: 原路返回是最安全的
+    survival_rule: 絕對不能回頭或轉身，門會改變位置，只能一直向前
+    punishment:
+      san_damage: 30
+      hp_damage: 20
+      effect: 門突然消失，被困在扭曲的空間中
+    clue_hints:
+      - 牆上警告：「不要回頭」
+      - 地板上的腳印都朝向同一方向
+      - 轉身時感覺到空間在扭曲
+    tags:
+      - spatial
+      - direction
+      - navigation
+
+  - id: spatial_003
+    name: 樓梯計數規則
+    category: spatial
+    difficulty: easy
+    trigger_medium: 數|計算|超過
+    false_clue: 數清楚階梯數量可以避免迷路
+    survival_rule: 上下樓梯時絕對不能數階梯，數到13就會被傳送
+    punishment:
+      san_damage: 20
+      hp_damage: 10
+      effect: 被傳送到異空間，受到輕微傷害
+    clue_hints:
+      - 告示：「不要數樓梯」
+      - 樓梯間沒有數字標記
+      - 聽到有人在數數：「11、12、13...啊！」
+    tags:
+      - spatial
+      - stairs
+      - counting
+
+  - id: spatial_004
+    name: 角落視野規則
+    category: spatial
+    difficulty: hard
+    trigger_medium: 角落|轉角|看向
+    false_clue: 檢查角落可以發現隱藏道具
+    survival_rule: 經過轉角時，必須閉眼或用鏡子確認，直接看會觸發詛咒
+    punishment:
+      san_damage: 35
+      hp_damage: 15
+      effect: 角落的東西看見了你，開始被追蹤
+    clue_hints:
+      - 所有角落都被布簾遮住
+      - 牆上刮痕：「角落有東西」
+      - 鏡子被特意放在轉角處
+    tags:
+      - spatial
+      - corner
+      - vision
+
+  - id: spatial_005
+    name: 對稱空間規則
+    category: spatial
+    difficulty: hell
+    trigger_medium: 對稱|鏡像|左右
+    false_clue: 對稱的房間是安全的標誌
+    survival_rule: 進入完全對稱的房間時，必須破壞對稱性（移動物品），否則會被困住
+    punishment:
+      san_damage: 40
+      hp_damage: 30
+      effect: 被封印在鏡像空間中，持續受到傷害
+    clue_hints:
+      - 房間內所有物品都是成對的
+      - 筆記：「打破對稱就能逃脫」
+      - 地板上有人嘗試移動家具的痕跡
+    tags:
+      - spatial
+      - symmetry
+      - trap
+
+  - id: spatial_006
+    name: 長廊時間規則
+    category: spatial
+    difficulty: medium
+    trigger_medium: 走廊|過久|停留
+    false_clue: 慢慢走可以觀察環境
+    survival_rule: 走廊必須在60秒內通過，停留超過時間會被空間吞噬
+    punishment:
+      san_damage: 30
+      hp_damage: 25
+      effect: 走廊開始扭曲，牆壁逼近造成傷害
+    clue_hints:
+      - 走廊入口有計時器（已損壞）
+      - 地板上有逃跑的痕跡
+      - 感覺走廊越走越長
+    tags:
+      - spatial
+      - corridor
+      - time_limit
+
+  - id: spatial_007
+    name: 電梯樓層規則
+    category: spatial
+    difficulty: hard
+    trigger_medium: 電梯|樓層|按下
+    false_clue: 按任何樓層都能離開
+    survival_rule: 電梯中不能按當前樓層或相鄰樓層，會觸發異常
+    punishment:
+      san_damage: 0
+      hp_damage: 40
+      effect: 電梯失控墜落，造成嚴重傷害
+    clue_hints:
+      - 電梯面板上幾個按鈕被刮花
+      - 告示：「跳樓層移動」
+      - 電梯內有血跡和手印
+    tags:
+      - spatial
+      - elevator
+      - floor
+
+  - id: spatial_008
+    name: 窗外景色規則
+    category: spatial
+    difficulty: easy
+    trigger_medium: 窗外|向外看|風景
+    false_clue: 窗外風景可以判斷方位
+    survival_rule: 不要長時間看窗外，窗外的世界會把你吸進去
+    punishment:
+      san_damage: 25
+      hp_damage: 0
+      effect: 被窗外景色迷惑，理智下降
+    clue_hints:
+      - 所有窗戶都被釘上木板
+      - 日記：「窗外的東西在呼喚我」
+      - 窗邊有抓痕
+    tags:
+      - spatial
+      - window
+      - view

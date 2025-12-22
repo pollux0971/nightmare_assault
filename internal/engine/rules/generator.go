@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/nightmare-assault/nightmare-assault/internal/game"
+	"github.com/nightmare-assault/nightmare-assault/internal/logger"
 )
 
 // Generator creates hidden rules for a game session.
@@ -19,13 +20,102 @@ func NewGenerator() *Generator {
 	return &Generator{}
 }
 
+// DifficultyConfig defines the rule generation parameters for each difficulty level.
+type DifficultyConfig struct {
+	// MaxRules is the maximum number of rules (0 = unlimited)
+	MaxRules int
+	// MappingLayer is the complexity of logic chains
+	MappingLayer MappingLayer
+	// ClueClarity is how clear the clues are
+	ClueClarity ClueClarity
+	// SmokeScreenCount is the number of misleading clues per rule
+	SmokeScreenCount int
+	// InstantDeathAllowed indicates if instant death without warning is allowed
+	InstantDeathAllowed bool
+	// InstantDeathChance is the percentage chance (0-100) of instant death rules
+	InstantDeathChance int
+}
+
+// GetDifficultyConfig returns the configuration for a given difficulty level.
+//
+// AC1 (Easy):
+//   - Max 6 rules
+//   - Single mapping (A→B)
+//   - Direct clues
+//   - No smoke screens
+//   - No instant death
+//
+// AC2 (Hard):
+//   - Unlimited rules
+//   - Double mapping (A→B→C)
+//   - Metaphor/broken clues
+//   - Medium smoke screens (2-3 per rule)
+//   - 10% instant death chance
+//
+// AC3 (Hell):
+//   - Unlimited rules
+//   - Triple+ mapping (A→B→C→D)
+//   - Contradictory/misleading clues
+//   - Heavy smoke screens (4-6 per rule)
+//   - 30% instant death chance, no warning
+func GetDifficultyConfig(difficulty game.DifficultyLevel) DifficultyConfig {
+	switch difficulty {
+	case game.DifficultyEasy:
+		return DifficultyConfig{
+			MaxRules:            6,
+			MappingLayer:        MappingLayerSingle,
+			ClueClarity:         ClueClarityDirect,
+			SmokeScreenCount:    0,
+			InstantDeathAllowed: false,
+			InstantDeathChance:  0,
+		}
+
+	case game.DifficultyHard:
+		return DifficultyConfig{
+			MaxRules:            0, // unlimited
+			MappingLayer:        MappingLayerDouble,
+			ClueClarity:         ClueClarityMetaphor,
+			SmokeScreenCount:    randomInt(2, 3),
+			InstantDeathAllowed: true,
+			InstantDeathChance:  10,
+		}
+
+	case game.DifficultyHell:
+		return DifficultyConfig{
+			MaxRules:            0, // unlimited
+			MappingLayer:        MappingLayerTriple,
+			ClueClarity:         ClueClarityContradictory,
+			SmokeScreenCount:    randomInt(4, 6),
+			InstantDeathAllowed: true,
+			InstantDeathChance:  30,
+		}
+
+	default:
+		// Default to Easy
+		return GetDifficultyConfig(game.DifficultyEasy)
+	}
+}
+
 // GenerateRules creates a set of hidden rules based on difficulty.
 // Per AC1: Easy mode has max 6 rules, Hard/Hell have unlimited (typically 8-15).
 func (g *Generator) GenerateRules(difficulty game.DifficultyLevel) *RuleSet {
+	// Story 10-8 AC1: Log rule generation
+	logger.Debug("Rule generation started", map[string]interface{}{
+		"difficulty": difficulty,
+	})
+
 	rs := NewRuleSet()
+	config := GetDifficultyConfig(difficulty)
 
 	// Determine rule count based on difficulty (AC1)
 	ruleCount := g.getRuleCount(difficulty)
+
+	logger.Debug("Rule count determined", map[string]interface{}{
+		"rule_count": ruleCount,
+		"mapping_layer": config.MappingLayer,
+		"clue_clarity": config.ClueClarity,
+		"instant_death_allowed": config.InstantDeathAllowed,
+	})
 
 	// Generate rules with type distribution (AC2)
 	typeDistribution := g.calculateTypeDistribution(ruleCount)
@@ -33,7 +123,7 @@ func (g *Generator) GenerateRules(difficulty game.DifficultyLevel) *RuleSet {
 	ruleIndex := 0
 	for ruleType, count := range typeDistribution {
 		for i := 0; i < count; i++ {
-			rule := g.generateRule(ruleIndex, ruleType, difficulty)
+			rule := g.generateRuleWithDifficulty(ruleIndex, ruleType, difficulty, config)
 			rs.Add(rule)
 			ruleIndex++
 		}
@@ -41,6 +131,11 @@ func (g *Generator) GenerateRules(difficulty game.DifficultyLevel) *RuleSet {
 
 	// Assign priorities to avoid conflicts
 	g.assignPriorities(rs)
+
+	// Story 10-8 AC1: Log completed rules
+	logger.Debug("Rule generation completed", map[string]interface{}{
+		"total_rules": rs.Count(),
+	})
 
 	return rs
 }
@@ -112,6 +207,57 @@ func (g *Generator) generateRule(index int, ruleType RuleType, difficulty game.D
 		rule.MaxViolations = 1
 	case game.DifficultyHell:
 		rule.MaxViolations = 0 // Immediate consequence
+	}
+
+	return rule
+}
+
+// generateRuleWithDifficulty creates a difficulty-aware rule with logic chains and smoke screens.
+//
+// Story 7.2: This method extends generateRule with:
+//   - Logic chains based on mapping layer (single/double/triple)
+//   - Clue clarity (direct/metaphor/contradictory)
+//   - Smoke screens (misleading clues)
+//   - Instant death configuration for Hell mode
+func (g *Generator) generateRuleWithDifficulty(
+	index int,
+	ruleType RuleType,
+	difficulty game.DifficultyLevel,
+	config DifficultyConfig,
+) *Rule {
+	// Start with base rule generation
+	rule := g.generateRule(index, ruleType, difficulty)
+
+	// Apply difficulty-aware enhancements
+	rule.MappingLayer = config.MappingLayer
+	rule.ClueClarity = config.ClueClarity
+
+	// Generate logic chain based on mapping layer
+	rule.LogicChain = g.generateLogicChain(ruleType, config.MappingLayer)
+
+	// Separate true clues from all clues
+	rule.TrueClues = rule.Clues
+
+	// Transform clues based on clarity
+	rule.Clues = g.transformCluesByClarity(rule.Clues, config.ClueClarity)
+
+	// Generate smoke screens (misleading clues)
+	if config.SmokeScreenCount > 0 {
+		rule.SmokeScreens = g.generateSmokeScreens(ruleType, config.SmokeScreenCount)
+		// Mix smoke screens into visible clues
+		rule.Clues = append(rule.Clues, rule.SmokeScreens...)
+		// Shuffle to hide which are real
+		g.shuffleClues(rule.Clues)
+	}
+
+	// Configure instant death for Hell mode
+	if config.InstantDeathAllowed {
+		roll := randomInt(1, 100)
+		if roll <= config.InstantDeathChance {
+			rule.Consequence.Type = ConsequenceInstantDeath
+			rule.InstantDeathOK = true
+			rule.MaxViolations = 0 // No warnings for instant death
+		}
 	}
 
 	return rule
@@ -356,6 +502,169 @@ func (g *Generator) assignPriorities(rs *RuleSet) {
 
 		// Add some randomness within range
 		r.Priority = basePriority + randomInt(-1, 1)
+	}
+}
+
+// generateLogicChain creates a multi-step deduction chain based on mapping layer.
+//
+// Story 7.2: Implements logic chains for different mapping layers:
+//   - Single: Direct mapping (A→B) - "Don't touch mirror"
+//   - Double: Two-step (A→B→C) - "Mirror reflects truth" → "Truth is dangerous" → "Don't touch mirror"
+//   - Triple: Three+ steps (A→B→C→D) - "Midnight" → "Mirror active" → "Reflections come alive" → "Don't look"
+func (g *Generator) generateLogicChain(ruleType RuleType, layer MappingLayer) []string {
+	// Logic chain templates by rule type
+	chains := map[RuleType]map[MappingLayer][]string{
+		RuleTypeScenario: {
+			MappingLayerSingle: {"直接規則：避開這個場景"},
+			MappingLayerDouble: {"這個地方有問題", "有問題的地方很危險", "避開這個場景"},
+			MappingLayerTriple: {"空氣異常沉重", "沉重代表不祥", "不祥之地隱藏陷阱", "陷阱會致命", "避開這個場景"},
+		},
+		RuleTypeTime: {
+			MappingLayerSingle: {"直接規則：特定時間不可行動"},
+			MappingLayerDouble: {"這個時間很特殊", "特殊時間規則改變", "此時不可行動"},
+			MappingLayerTriple: {"鐘聲響起", "鐘聲標誌界限", "界限模糊時它們會出現", "它們會狩獵", "此時不可行動"},
+		},
+		RuleTypeBehavior: {
+			MappingLayerSingle: {"直接規則：禁止此行為"},
+			MappingLayerDouble: {"這個動作會引起注意", "引起注意很危險", "禁止此行為"},
+			MappingLayerTriple: {"聲音會傳播", "傳播會吸引它們", "它們會循聲而來", "被發現即死", "禁止此行為"},
+		},
+		RuleTypeObject: {
+			MappingLayerSingle: {"直接規則：不要碰這個物品"},
+			MappingLayerDouble: {"這個物品被詛咒", "詛咒會傳染", "不要碰這個物品"},
+			MappingLayerTriple: {"物品有靈性", "靈性會甦醒", "甦醒後會佔據", "佔據者失去自我", "不要碰這個物品"},
+		},
+		RuleTypeStatus: {
+			MappingLayerSingle: {"直接規則：維持狀態在安全值"},
+			MappingLayerDouble: {"狀態低落會失控", "失控會帶來危險", "維持狀態在安全值"},
+			MappingLayerTriple: {"理智下降", "下降使感知扭曲", "扭曲讓你看見真相", "真相會摧毀心智", "維持狀態在安全值"},
+		},
+	}
+
+	typeChains, ok := chains[ruleType]
+	if !ok {
+		typeChains = chains[RuleTypeBehavior] // fallback
+	}
+
+	chain, ok := typeChains[layer]
+	if !ok {
+		chain = typeChains[MappingLayerSingle] // fallback
+	}
+
+	return chain
+}
+
+// transformCluesByClarity transforms clues based on clarity level.
+//
+// Story 7.2: Implements clue transformation:
+//   - Direct: Clear, obvious hints
+//   - Metaphor: Poetic, fragmented hints
+//   - Contradictory: Misleading, opposite hints
+func (g *Generator) transformCluesByClarity(clues []string, clarity ClueClarity) []string {
+	transformed := make([]string, len(clues))
+
+	for i, clue := range clues {
+		switch clarity {
+		case ClueClarityDirect:
+			// Keep as is
+			transformed[i] = clue
+
+		case ClueClarityMetaphor:
+			// Make metaphorical/fragmented
+			metaphors := []string{
+				"...好像%s...",
+				"某種意義上，%s",
+				"如果理解正確的話，%s",
+				"隱約感覺到%s",
+				"也許%s？不確定...",
+			}
+			template := metaphors[randomInt(0, len(metaphors)-1)]
+			transformed[i] = fmt.Sprintf(template, clue)
+
+		case ClueClarityContradictory:
+			// Make contradictory/misleading
+			contradictions := []string{
+				"似乎很安全，但%s",
+				"表面上%s，實則相反",
+				"不是%s...還是說是？",
+				"記錄顯示%s（記錄已損毀）",
+				"絕對不是%s",
+			}
+			template := contradictions[randomInt(0, len(contradictions)-1)]
+			transformed[i] = fmt.Sprintf(template, clue)
+		}
+	}
+
+	return transformed
+}
+
+// generateSmokeScreens creates misleading clues (false hints).
+//
+// Story 7.2: Generates fake clues to confuse players.
+func (g *Generator) generateSmokeScreens(ruleType RuleType, count int) []string {
+	smokeScreenTemplates := map[RuleType][]string{
+		RuleTypeScenario: {
+			"這個地方看起來很安全",
+			"牆上的字條寫著'歡迎'",
+			"陽光充足，不會有危險",
+			"之前的生還者都從這裡離開",
+			"地圖標記此處為安全區",
+			"監視器畫面顯示無異常",
+		},
+		RuleTypeTime: {
+			"任何時間都一樣",
+			"時鐘已經停擺，時間無意義",
+			"白天最危險，夜晚反而安全",
+			"整點時刻是安全時段",
+			"時間越晚越安全",
+		},
+		RuleTypeBehavior: {
+			"大聲呼救會引來幫助",
+			"跑得越快越安全",
+			"積極行動總比被動等待好",
+			"勇敢面對就不會有事",
+			"它們害怕大聲的聲音",
+		},
+		RuleTypeObject: {
+			"這個物品可以保護你",
+			"觸摸它會獲得力量",
+			"越多人碰過越安全",
+			"發光的物品都是好的",
+			"它看起來很溫暖",
+		},
+		RuleTypeStatus: {
+			"HP/SAN 越低越不會被發現",
+			"瀕死狀態下會觸發保護機制",
+			"理智歸零後就看不見它們了",
+			"傷得越重，它們越不感興趣",
+		},
+	}
+
+	templates := smokeScreenTemplates[ruleType]
+	if templates == nil {
+		templates = smokeScreenTemplates[RuleTypeBehavior]
+	}
+
+	screens := make([]string, 0, count)
+	used := make(map[int]bool)
+
+	for len(screens) < count && len(used) < len(templates) {
+		idx := randomInt(0, len(templates)-1)
+		if !used[idx] {
+			used[idx] = true
+			screens = append(screens, templates[idx])
+		}
+	}
+
+	return screens
+}
+
+// shuffleClues randomly shuffles a slice of clues in place.
+func (g *Generator) shuffleClues(clues []string) {
+	n := len(clues)
+	for i := n - 1; i > 0; i-- {
+		j := randomInt(0, i)
+		clues[i], clues[j] = clues[j], clues[i]
 	}
 }
 

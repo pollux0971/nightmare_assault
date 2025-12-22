@@ -1,0 +1,286 @@
+# Trinity 性能優化配置範例
+# 展示三種不同優化目標的配置策略
+
+# ============================================
+# 場景 1：低成本優化
+# ============================================
+# 目標：最小化 API 使用成本
+# 策略：使用較便宜的模型，優先使用 Rapid Tier
+# 適合：預算有限、非關鍵遊戲體驗場景
+
+低成本配置 = {
+  "version": "1.0",
+  "language": "zh-TW",
+  "theme": "midnight",
+
+  "trinity": {
+    "enabled": true,
+
+    # Thinking: 使用 Sonnet（而非 Opus）降低成本
+    "thinking": {
+      "provider_id": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",  # 成本約為 Opus 的 1/10
+      "max_tokens": 8000,  # 減少 token 數進一步降低成本
+      "temperature": 0.4
+    },
+
+    # Reactive: 使用 Haiku 或 OpenRouter 便宜方案
+    "reactive": {
+      "provider_id": "openrouter",
+      "model": "anthropic/claude-3.5-haiku",  # 更便宜的選擇
+      "max_tokens": 4000,
+      "temperature": 0.7
+    },
+
+    # Rapid: 使用最便宜的模型
+    "rapid": {
+      "provider_id": "openai",
+      "model": "gpt-4o-mini",  # 目前最便宜的高品質模型
+      "max_tokens": 2000,  # 最小 token 數
+      "temperature": 0.9
+    },
+
+    # 啟用 Fallback 減少重試成本
+    "fallback_enabled": true,
+
+    # Agent 重新分配：將更多 Agent 降至 Rapid
+    "agent_tier_overrides": {
+      # 將 NarrationAgent 降至 Reactive（默認 Reactive，保持不變）
+      # 將 ChoiceAgent 降至 Rapid（加快速度，降低成本）
+      "ChoiceAgent": "Rapid",
+
+      # 將 DreamAgent 保持在 Rapid（默認）
+      "DreamAgent": "Rapid",
+
+      # 保持 JudgeAgent 在 Thinking（關鍵決策不能妥協）
+      "JudgeAgent": "Thinking"
+    },
+
+    "guardian": {
+      "enabled": false  # 關閉以減少額外的 API 調用
+    }
+  }
+}
+
+# 成本節省預估：
+# - Thinking Tier：降低 90% 成本（Opus → Sonnet）
+# - Reactive Tier：降低 50% 成本（Sonnet → Haiku）
+# - Rapid Tier：降低 30% 成本（Haiku → GPT-4o-mini）
+# - 總體成本：約為標準配置的 30-40%
+
+# ============================================
+# 場景 2：低延遲優化
+# ============================================
+# 目標：最小化響應延遲
+# 策略：使用速度最快的模型和 Provider
+# 適合：即時互動、快節奏遊戲場景
+
+低延遲配置 = {
+  "version": "1.0",
+  "language": "zh-TW",
+  "theme": "midnight",
+
+  "trinity": {
+    "enabled": true,
+
+    # Thinking: 使用 Sonnet（Opus 太慢）
+    "thinking": {
+      "provider_id": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",  # 速度與品質平衡
+      "max_tokens": 6000,  # 減少 token 加快生成
+      "temperature": 0.4
+    },
+
+    # Reactive: 使用 Haiku（極快）
+    "reactive": {
+      "provider_id": "anthropic",
+      "model": "claude-3-haiku-20240307",  # Anthropic 最快模型
+      "max_tokens": 4000,
+      "temperature": 0.7
+    },
+
+    # Rapid: 使用 GPT-4o-mini（OpenAI 速度優勢）
+    "rapid": {
+      "provider_id": "openai",
+      "model": "gpt-4o-mini",  # OpenAI 基礎設施延遲低
+      "max_tokens": 2000,
+      "temperature": 0.9
+    },
+
+    # 禁用 Fallback 避免重試延遲
+    "fallback_enabled": false,
+
+    # Agent 重新分配：將更多 Agent 降至 Rapid/Reactive
+    "agent_tier_overrides": {
+      # 將 NarrationAgent 降至 Reactive
+      "NarrationAgent": "Reactive",
+
+      # 將 NPCAgent 降至 Reactive（犧牲品質換速度）
+      "NPCAgent": "Reactive",
+
+      # 將所有可能的 Agent 降至 Rapid
+      "ChoiceAgent": "Rapid",
+      "DreamAgent": "Rapid",
+      "SummaryAgent": "Rapid"
+    },
+
+    "guardian": {
+      "enabled": false  # 關閉以避免額外的模型調用延遲
+    }
+  },
+
+  # 打字機效果加速
+  "typewriter": {
+    "enabled": true,
+    "speed": 100,  # 提高到 100 字元/秒
+    "show_cursor": true
+  }
+}
+
+# 延遲改善預估：
+# - Thinking Tier：減少 60-70% 延遲（Opus → Sonnet）
+# - Reactive Tier：減少 40-50% 延遲（Sonnet → Haiku）
+# - Rapid Tier：減少 20-30% 延遲（優化 Provider）
+# - 總體響應時間：約為標準配置的 40-50%
+
+# ============================================
+# 場景 3：高品質優化
+# ============================================
+# 目標：最大化輸出品質
+# 策略：使用最強模型，不計成本和延遲
+# 適合：劇情關鍵點、展示演示、品質至上場景
+
+高品質配置 = {
+  "version": "1.0",
+  "language": "zh-TW",
+  "theme": "midnight",
+
+  "trinity": {
+    "enabled": true,
+
+    # Thinking: 使用最強模型 Opus 4.5
+    "thinking": {
+      "provider_id": "anthropic",
+      "model": "claude-opus-4-20250514",  # 最強推理能力
+      "max_tokens": 32000,  # 最大 token 數確保充分表達
+      "temperature": 0.3  # 更低 temperature 提高一致性
+    },
+
+    # Reactive: 提升到 Opus（而非 Sonnet）
+    "reactive": {
+      "provider_id": "anthropic",
+      "model": "claude-opus-4-20250514",  # 全面使用 Opus
+      "max_tokens": 16000,
+      "temperature": 0.6  # 略低 temperature 提高品質
+    },
+
+    # Rapid: 使用 Sonnet（而非 Haiku）
+    "rapid": {
+      "provider_id": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",  # 提升 Rapid tier 品質
+      "max_tokens": 8000,
+      "temperature": 0.8
+    },
+
+    # 啟用 Fallback 確保可用性
+    "fallback_enabled": true,
+
+    # Agent 重新分配：將關鍵 Agent 提升到 Thinking
+    "agent_tier_overrides": {
+      # 將 NarrationAgent 提升到 Thinking（最高品質故事）
+      "NarrationAgent": "Thinking",
+
+      # 將 ChoiceAgent 提升到 Thinking（更有深度的選項）
+      "ChoiceAgent": "Thinking",
+
+      # 將 NPCAgent 保持在 Thinking（默認）
+      "NPCAgent": "Thinking",
+
+      # 將 ContradictionAgent 保持在 Thinking（默認）
+      "ContradictionAgent": "Thinking",
+
+      # 甚至將 DreamAgent 提升到 Reactive（更豐富的夢境）
+      "DreamAgent": "Reactive"
+    },
+
+    "guardian": {
+      "enabled": true,
+      "low_hp_threshold": 30,  # 更早觸發保護
+      "low_san_threshold": 35,
+      "max_consecutive_deaths": 1  # 更積極的保護
+    }
+  },
+
+  # 打字機效果放慢（讓玩家充分體驗高品質內容）
+  "typewriter": {
+    "enabled": true,
+    "speed": 30,  # 降低到 30 字元/秒
+    "show_cursor": true
+  }
+}
+
+# 品質提升預估：
+# - Thinking Tier：保持最高品質（Opus 4.5）
+# - Reactive Tier：提升 200-300% 品質（Sonnet → Opus）
+# - Rapid Tier：提升 100-150% 品質（Haiku → Sonnet）
+# - 總體品質：約為標準配置的 150-200%
+# - 成本：約為標準配置的 400-500%
+
+# ============================================
+# 配置選擇建議
+# ============================================
+#
+# 1. 開發/測試階段：
+#    - 使用「低成本配置」
+#    - 快速迭代，降低開發成本
+#
+# 2. 正式發布（預算有限）：
+#    - 使用「低成本配置」或標準配置
+#    - 在關鍵場景使用「高品質配置」
+#
+# 3. 正式發布（追求體驗）：
+#    - 使用「低延遲配置」+ 部分「高品質配置」
+#    - 在快節奏場景用低延遲，在劇情關鍵點用高品質
+#
+# 4. 展示/演示：
+#    - 使用「高品質配置」
+#    - 不計成本，展現最佳效果
+#
+# 5. 混合策略（推薦）：
+#    - 基礎配置使用「低成本」或「低延遲」
+#    - 關鍵 Agent 使用「高品質」的 tier 覆寫
+#    - 示例：
+#      {
+#        "thinking": "低延遲的 Sonnet",
+#        "reactive": "低成本的 Haiku",
+#        "rapid": "低成本的 GPT-4o-mini",
+#        "agent_tier_overrides": {
+#          "NarrationAgent": "Thinking",  # 關鍵敘述用 Sonnet
+#          "NPCAgent": "Thinking"          # 關鍵 NPC 用 Sonnet
+#        }
+#      }
+
+# ============================================
+# 性能指標參考（實際數據會因網路、負載等因素變化）
+# ============================================
+#
+# 模型速度比較（相對延遲）：
+# - GPT-4o-mini: 1.0x（最快）
+# - Claude Haiku: 1.2x
+# - Claude Sonnet: 1.8x
+# - GPT-4o: 2.0x
+# - Claude Opus: 3.5x（最慢但最強）
+#
+# 模型成本比較（相對成本）：
+# - GPT-4o-mini: 1.0x（最便宜）
+# - Claude Haiku: 1.5x
+# - Claude Sonnet: 8x
+# - GPT-4o: 12x
+# - Claude Opus: 80x（最貴但最強）
+#
+# 模型品質比較（主觀評估）：
+# - Claude Opus: 10/10（最強推理）
+# - Claude Sonnet: 8.5/10（最佳性價比）
+# - GPT-4o: 8/10（速度與品質平衡）
+# - Claude Haiku: 7/10（簡單任務足夠）
+# - GPT-4o-mini: 6.5/10（基礎任務）

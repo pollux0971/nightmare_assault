@@ -11,20 +11,22 @@ import (
 
 // StatusBar displays game status information.
 type StatusBar struct {
-	stats     *game.PlayerStats
-	turnCount int
-	gameMode  string
-	width     int
-	mu        sync.RWMutex
+	stats             *game.PlayerStats
+	turnCount         int
+	gameMode          string
+	width             int
+	mu                sync.RWMutex
+	momentumIndicator *MomentumIndicator // Story 7-6 AC4: Integrate momentum indicator
 }
 
 // NewStatusBar creates a new status bar.
 func NewStatusBar(stats *game.PlayerStats, turnCount int) *StatusBar {
 	return &StatusBar{
-		stats:     stats,
-		turnCount: turnCount,
-		gameMode:  "Playing",
-		width:     80,
+		stats:             stats,
+		turnCount:         turnCount,
+		gameMode:          "Playing",
+		width:             80,
+		momentumIndicator: NewMomentumIndicator(), // Story 7-6 AC4
 	}
 }
 
@@ -56,6 +58,14 @@ func (s *StatusBar) SetWidth(width int) {
 	s.width = width
 }
 
+// GetMomentumIndicator returns the momentum indicator for external updates
+// Story 7-6 AC4: Allow external components to update momentum state
+func (s *StatusBar) GetMomentumIndicator() *MomentumIndicator {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.momentumIndicator
+}
+
 // Height returns the fixed height of the status bar.
 func (s *StatusBar) Height() int {
 	return 3
@@ -76,34 +86,53 @@ func (s *StatusBar) View() string {
 	hpColor := s.getHPColor(s.stats.HP)
 	sanColor := s.getSanityStateColor(s.stats.State)
 
-	// Line 1: HP and SAN bars
+	// Line 1: HP and SAN bars with emoji icons (Story 7.4 AC1)
 	hpBar := s.getHPBar(20)
 	sanBar := s.getSANBar(20)
 
 	hpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(hpColor))
 	sanStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(sanColor))
 
-	line1 := fmt.Sprintf("HP:  %s %3d/100  │  SAN: %s %3d/100",
+	line1 := fmt.Sprintf("HP: ❤️  %s %3d/100  │  SAN: 🧠 %s %3d/100",
 		hpStyle.Render(hpBar),
 		s.stats.HP,
 		sanStyle.Render(sanBar),
 		s.stats.SAN,
 	)
 
-	// Line 2: State and turn info
+	// Line 2: State and turn info with momentum indicator (Story 7-6 AC4)
 	stateText := s.stats.State.String()
-	line2 := fmt.Sprintf("狀態: %s  │  回合: %d  │  模式: %s",
-		sanStyle.Render(stateText),
-		s.turnCount,
-		s.gameMode,
-	)
+	momentumView := ""
+	if s.momentumIndicator != nil {
+		momentumView = s.momentumIndicator.View()
+	}
 
-	// Line 3: Empty spacer
-	line3 := ""
+	if momentumView != "" {
+		line2 := fmt.Sprintf("狀態: %s  │  回合: %d  │  模式: %s  │  %s",
+			sanStyle.Render(stateText),
+			s.turnCount,
+			s.gameMode,
+			momentumView,
+		)
+		// Line 3: Empty spacer
+		line3 := ""
 
-	// Render all lines with bar style
-	content := line1 + "\n" + line2 + "\n" + line3
-	return barStyle.Render(content)
+		// Render all lines with bar style
+		content := line1 + "\n" + line2 + "\n" + line3
+		return barStyle.Render(content)
+	} else {
+		line2 := fmt.Sprintf("狀態: %s  │  回合: %d  │  模式: %s",
+			sanStyle.Render(stateText),
+			s.turnCount,
+			s.gameMode,
+		)
+		// Line 3: Empty spacer
+		line3 := ""
+
+		// Render all lines with bar style
+		content := line1 + "\n" + line2 + "\n" + line3
+		return barStyle.Render(content)
+	}
 }
 
 // getHPColor returns the color code for HP based on value.

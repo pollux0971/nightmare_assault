@@ -1,0 +1,138 @@
+# Trinity 多 Provider 配置範例
+# 展示如何使用不同 Provider 為不同 Tier 提供服務
+# 這種配置可以利用各家 Provider 的優勢
+
+{
+  "version": "1.0",
+  "language": "zh-TW",
+  "theme": "midnight",
+
+  "audio": {
+    "master_volume": 100,
+    "bgm_enabled": true,
+    "sfx_enabled": true,
+    "bgm_volume": 50,
+    "sfx_volume": 80,
+    "heartbeat_enabled": true,
+    "bgm_loop": true
+  },
+
+  # API Keys 配置（支援多個 Provider）
+  "api": {
+    "provider": {
+      "provider_id": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",
+      "max_tokens": 100000
+    },
+    "api_keys": {
+      "anthropic": "your-anthropic-api-key",
+      "openrouter": "your-openrouter-api-key",
+      "openai": "your-openai-api-key"
+    }
+  },
+
+  # Trinity 多 Provider 配置
+  "trinity": {
+    "enabled": true,
+
+    # Thinking Tier - 使用 Anthropic Opus 4.5（最強推理能力）
+    # 適合：關鍵決策、複雜邏輯、戰略規劃
+    "thinking": {
+      "provider_id": "anthropic",
+      "model": "claude-opus-4-20250514",
+      "max_tokens": 16000,
+      "temperature": 0.4
+    },
+
+    # Reactive Tier - 使用 OpenRouter 的 Sonnet（成本優化）
+    # 適合：劇情生成、NPC 對話、動態內容
+    "reactive": {
+      "provider_id": "openrouter",
+      "model": "anthropic/claude-3.5-sonnet",
+      "max_tokens": 8000,
+      "temperature": 0.7
+    },
+
+    # Rapid Tier - 使用 OpenAI GPT-4o-mini（速度優化）
+    # 適合：簡單查詢、快速響應、高頻操作
+    "rapid": {
+      "provider_id": "openai",
+      "model": "gpt-4o-mini",
+      "max_tokens": 4000,
+      "temperature": 0.9
+    },
+
+    # 啟用 Fallback（多 Provider 環境下更重要）
+    "fallback_enabled": true,
+
+    # Agent Tier 覆寫（可選）
+    # 根據 Agent 特性微調其使用的 Tier
+    "agent_tier_overrides": {
+      # 將 NarrationAgent 提升到 Thinking（提高故事品質）
+      "NarrationAgent": "Thinking",
+      # 將 DreamAgent 保持在 Rapid（夢境內容可以簡單些）
+      "DreamAgent": "Rapid"
+    },
+
+    # Guardian 保護系統
+    "guardian": {
+      "enabled": true,
+      # 當玩家 HP 低於 25% 時觸發保護
+      "low_hp_threshold": 25,
+      # 當玩家 SAN 低於 30% 時觸發保護
+      "low_san_threshold": 30,
+      # 連續死亡 2 次後觸發保護
+      "max_consecutive_deaths": 2
+    }
+  },
+
+  "typewriter": {
+    "enabled": true,
+    "speed": 40,
+    "show_cursor": true
+  },
+
+  "debug": {
+    "enabled": false,
+    "log_api_keys": false,
+    "log_requests": false
+  },
+
+  "update": {
+    "enabled": true,
+    "check_interval": 24,
+    "allow_prerelease": false
+  }
+}
+
+# 多 Provider 策略說明：
+#
+# 為什麼使用多 Provider？
+# 1. 成本優化：Thinking 用昂貴模型，Rapid 用便宜模型
+# 2. 速度優化：不同 Provider 在不同地區的延遲不同
+# 3. 容錯性：某個 Provider 故障時其他仍可用
+# 4. 特性利用：利用各家 Provider 的獨特優勢
+#
+# 常見組合：
+#
+# 組合 1（品質優先）：
+# - Thinking: Anthropic Opus 4.5
+# - Reactive: Anthropic Sonnet 3.5
+# - Rapid: Anthropic Haiku 3.5
+#
+# 組合 2（成本優化）：
+# - Thinking: Anthropic Opus 4.5（僅關鍵任務）
+# - Reactive: OpenRouter Sonnet（較便宜）
+# - Rapid: OpenAI GPT-4o-mini（最便宜）
+#
+# 組合 3（速度優化）：
+# - Thinking: Anthropic Opus 4.5
+# - Reactive: OpenAI GPT-4o（快速）
+# - Rapid: OpenAI GPT-4o-mini（最快）
+#
+# 環境變數支援：
+# - ANTHROPIC_API_KEY
+# - OPENROUTER_API_KEY
+# - OPENAI_API_KEY
+# - GOOGLE_API_KEY
+# - COHERE_API_KEY

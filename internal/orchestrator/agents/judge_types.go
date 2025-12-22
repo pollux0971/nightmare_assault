@@ -195,3 +195,179 @@ type LLMJudgeResponse struct {
 	ImpactLevel   string   `json:"impact_level"`
 	Reasoning     string   `json:"reasoning"`
 }
+
+// ==========================================================================
+// Story 7.3: Intent Classification Types
+// ==========================================================================
+
+// IntentClassification represents the parsed intent from free text input
+//
+// Used when player enters free text instead of selecting predefined options.
+// Judge Agent analyzes the text to understand what the player wants to do.
+type IntentClassification struct {
+	// Action is the primary action verb (e.g., "檢查", "攻擊", "逃跑")
+	Action string
+
+	// Target is the object of the action (e.g., "鏡子", "門", "角落")
+	Target string
+
+	// IsAmbiguous indicates if the intent is unclear and needs clarification
+	IsAmbiguous bool
+
+	// Confidence is the confidence level (0.0-1.0) of the classification
+	Confidence float64
+
+	// Keywords are the key terms extracted from the input
+	Keywords []string
+
+	// NormalizedIntent is the standardized form of the intent (for rule matching)
+	NormalizedIntent string
+}
+
+// ClarificationNeeded represents a clarification request for ambiguous input
+//
+// When the player's intent is unclear, Judge Agent requests clarification
+// before proceeding with rule checking.
+type ClarificationNeeded struct {
+	// Reason explains why clarification is needed
+	Reason string
+
+	// SuggestedInterpretations offers possible interpretations
+	SuggestedInterpretations []string
+
+	// Question is the clarification question to ask the player
+	Question string
+}
+
+// JudgeResponseV2 extends JudgeResponse with clarification support
+//
+// Story 7.3 AC2: Support free text interpretation with clarification flow
+type JudgeResponseV2 struct {
+	// Embed original JudgeResponse
+	*JudgeResponse
+
+	// IntentClassification is the parsed intent (if input was free text)
+	IntentClassification *IntentClassification
+
+	// ClarificationNeeded indicates if player input needs clarification
+	ClarificationNeeded *ClarificationNeeded
+}
+
+// LLMIntentResponse is the LLM's raw response for intent classification
+// Used for parsing LLM output (Story 7.3 AC2)
+type LLMIntentResponse struct {
+	Action               string   `json:"action"`
+	Target               string   `json:"target"`
+	IsAmbiguous          bool     `json:"is_ambiguous"`
+	Confidence           float64  `json:"confidence"`
+	Keywords             []string `json:"keywords"`
+	NormalizedIntent     string   `json:"normalized_intent"`
+	ClarificationReason  string   `json:"clarification_reason"`
+	SuggestedInterpret   []string `json:"suggested_interpretations"`
+	ClarificationQuestion string  `json:"clarification_question"`
+}
+
+// ==========================================================================
+// Story 4-1: Chat Judgment Types
+// ==========================================================================
+
+// JudgeChatRequest is the request for judging a player's chat message
+//
+// Story 4-1 AC2: Contains all necessary context for chat message judgment
+type JudgeChatRequest struct {
+	// PlayerMessage is the player's chat message to analyze
+	PlayerMessage string
+
+	// Participants is the list of all chat participants (NPCs and player)
+	Participants []ChatParticipant
+
+	// ConversationHistory is the recent chat message history (5-10 messages)
+	ConversationHistory []ChatMessage
+
+	// GameState is the current game state context
+	GameState *GameStateSnapshot
+
+	// RelevantFacts are the known facts relevant to this conversation
+	RelevantFacts []string
+}
+
+// JudgeChatResult is the result of chat message judgment
+//
+// Story 4-1 AC3: Contains flags, confidence, and reasoning
+type JudgeChatResult struct {
+	// Flags are the detected chat flags (hallucination, hostile, revelation, etc.)
+	Flags []ChatFlag
+
+	// Confidence is the confidence level of the judgment (0.0-1.0)
+	Confidence float64
+
+	// Reasoning is the LLM's explanation for the judgment
+	Reasoning string
+}
+
+// ChatParticipant represents a participant in the chat session
+//
+// Story 4-1 AC2: Contains participant information including emotion state
+type ChatParticipant struct {
+	ID           string       // Unique identifier (npc_id or "player")
+	Name         string       // Display name
+	IsPlayer     bool         // Whether this is the player
+	Emotion      EmotionState // Current emotion state (Trust/Fear/Stress)
+	Relationship string       // Relationship status: "friendly"/"neutral"/"hostile"
+}
+
+// ChatMessage represents a single chat message
+//
+// Story 4-1 AC2: Contains message information for conversation context
+type ChatMessage struct {
+	Speaker   string // Player ID or NPC ID
+	Content   string // Message text content
+	Timestamp string // When the message was sent (can be simplified for judgment)
+}
+
+// EmotionState represents an NPC's emotional state
+//
+// Story 4-1 AC5: Used in prompt to inform judgment
+type EmotionState struct {
+	Trust  int // Trust level (0-100)
+	Fear   int // Fear level (0-100)
+	Stress int // Stress level (0-100)
+}
+
+// ChatFlag represents semantic properties of chat messages
+//
+// Story 4-1 AC4: All possible chat flags for message classification
+type ChatFlag string
+
+const (
+	// FlagHallucination indicates player states something contradicting known facts
+	FlagHallucination ChatFlag = "hallucination"
+
+	// FlagHostile indicates player shows threat or aggression
+	FlagHostile ChatFlag = "hostile"
+
+	// FlagRevelation indicates player shares important new information
+	FlagRevelation ChatFlag = "revelation"
+
+	// FlagContradiction indicates player's statement conflicts with NPCs' knowledge
+	FlagContradiction ChatFlag = "contradiction"
+
+	// FlagPersuasion indicates player attempts to convince NPCs
+	FlagPersuasion ChatFlag = "persuasion"
+
+	// FlagLie indicates player is lying (may be exposed later)
+	FlagLie ChatFlag = "lie"
+)
+
+// String returns the string representation of ChatFlag
+func (f ChatFlag) String() string {
+	return string(f)
+}
+
+// LLMChatJudgeResponse is the LLM's raw response for chat judgment
+// Used for parsing LLM JSON output
+type LLMChatJudgeResponse struct {
+	Flags      []string `json:"flags"`
+	Confidence float64  `json:"confidence"`
+	Reasoning  string   `json:"reasoning"`
+}

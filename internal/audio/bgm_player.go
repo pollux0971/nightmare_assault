@@ -94,6 +94,7 @@ type BGMPlayer struct {
 	loopEnabled   bool
 	lastSwitch    time.Time // For 6.4c anti-frequent-switch
 	audioDir      string    // Path to ~/.nightmare/audio/
+	customBGMMgr  *CustomBGMManager // For custom BGM support (AC 10.2)
 	mu            sync.RWMutex
 	stopChan      chan struct{} // For stopping loop goroutine
 }
@@ -578,9 +579,18 @@ func (p *BGMPlayer) CanSwitch(newMood engine.MoodType) bool {
 	return true
 }
 
+// SetCustomBGMManager sets the custom BGM manager for custom BGM support (AC 10.2)
+func (p *BGMPlayer) SetCustomBGMManager(mgr *CustomBGMManager) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.customBGMMgr = mgr
+	log.Println("[INFO] Custom BGM manager set")
+}
+
 // SwitchByMood switches BGM based on mood type
 // Silently ignores switch if CanSwitch returns false
 // Updates currentMood and lastSwitch even if Crossfade fails (for state tracking)
+// AC 10.2: Checks for custom BGM first, falls back to default if custom fails
 func (p *BGMPlayer) SwitchByMood(mood engine.MoodType) error {
 	if !p.CanSwitch(mood) {
 		return nil // Silently skip
@@ -590,15 +600,40 @@ func (p *BGMPlayer) SwitchByMood(mood engine.MoodType) error {
 	p.mu.Lock()
 	p.currentMood = mood
 	p.lastSwitch = time.Now()
+	customMgr := p.customBGMMgr
 	p.mu.Unlock()
 
-	bgmFile := GetBGMForMood(mood)
+	// AC 10.2: Check for custom BGM first
+	var bgmFile string
+	var isCustom bool
+	if customMgr != nil {
+		bgmFile, isCustom = customMgr.GetMoodBGM(mood)
+	}
+
+	// Fall back to default BGM if no custom BGM configured
+	if !isCustom || bgmFile == "" {
+		bgmFile = GetBGMForMood(mood)
+	}
+
 	if err := p.Crossfade(bgmFile, 2*time.Second); err != nil {
-		// Return error but mood state is already updated
+		// AC 10.2: If custom BGM fails, try fallback to default
+		if isCustom {
+			log.Printf("[WARN] Custom BGM failed, falling back to default: %v", err)
+			defaultBGM := GetBGMForMood(mood)
+			if fallbackErr := p.Crossfade(defaultBGM, 2*time.Second); fallbackErr != nil {
+				return fallbackErr
+			}
+			log.Printf("[INFO] BGM auto-switched to default %s (mood: %s, custom failed)\n", defaultBGM, mood.String())
+			return nil
+		}
 		return err
 	}
 
-	log.Printf("[INFO] BGM auto-switched to %s (mood: %s)\n", bgmFile, mood.String())
+	if isCustom {
+		log.Printf("[INFO] BGM auto-switched to custom %s (mood: %s)\n", bgmFile, mood.String())
+	} else {
+		log.Printf("[INFO] BGM auto-switched to %s (mood: %s)\n", bgmFile, mood.String())
+	}
 	return nil
 }
 

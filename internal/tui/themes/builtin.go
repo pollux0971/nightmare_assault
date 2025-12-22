@@ -102,3 +102,23 @@ func HighContrastTheme() *Theme {
 		},
 	}
 }
+
+// AbyssBlueTheme returns the Abyss Blue theme (Story 9-7 AC1).
+// Deep ocean abyss with mysterious blue tones.
+func AbyssBlueTheme() *Theme {
+	return &Theme{
+		ID:          "abyss_blue",
+		Name:        "深淵藍 (Abyss Blue)",
+		Description: "深海幽暗，神秘藍調",
+		Colors: ThemeColors{
+			Primary:    lipgloss.Color("#A5D8FF"), // Light cyan-blue
+			Secondary:  lipgloss.Color("#5C7CFA"), // Medium blue
+			Accent:     lipgloss.Color("#339AF0"), // Vivid blue
+			Background: lipgloss.Color("#0B1622"), // Very dark blue-black
+			Border:     lipgloss.Color("#1C2841"), // Deep blue-gray
+			Error:      lipgloss.Color("#FA5252"), // Red
+			Success:    lipgloss.Color("#51CF66"), // Green
+			Warning:    lipgloss.Color("#FCC419"), // Yellow
+		},
+	}
+}

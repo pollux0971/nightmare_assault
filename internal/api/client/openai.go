@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/nightmare-assault/nightmare-assault/internal/logger"
 )
 
 // OpenAIClient implements the Provider interface for OpenAI-compatible APIs.
@@ -75,30 +77,32 @@ func (c *OpenAIClient) ModelInfo() ModelInfo {
 
 // TestConnection tests the API connection.
 func (c *OpenAIClient) TestConnection(ctx context.Context) error {
-	// Try to list models as a simple connection test
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/models", nil)
-	if err != nil {
-		return NewAPIError(c.providerID, 0, "無法建立請求", err)
-	}
+	return WithRetry(ctx, DefaultRetryConfig(), func(ctx context.Context) error {
+		// Try to list models as a simple connection test
+		req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/models", nil)
+		if err != nil {
+			return NewAPIError(c.providerID, 0, "無法建立請求", err)
+		}
 
-	c.setHeaders(req)
+		c.setHeaders(req)
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return NewAPIError(c.providerID, 0, ErrNetworkError.Error(), ErrNetworkError)
-	}
-	defer resp.Body.Close()
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return NewAPIError(c.providerID, 0, ErrNetworkError.Error(), ErrNetworkError)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return NewAPIError(c.providerID, resp.StatusCode, ErrInvalidAPIKey.Error(), ErrInvalidAPIKey)
-	}
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return NewAPIError(c.providerID, resp.StatusCode, ErrInvalidAPIKey.Error(), ErrInvalidAPIKey)
+		}
 
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return NewAPIError(c.providerID, resp.StatusCode, string(body), nil)
-	}
+		if resp.StatusCode >= 400 {
+			body, _ := io.ReadAll(resp.Body)
+			return NewAPIError(c.providerID, resp.StatusCode, string(body), nil)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // openAIChatRequest represents the request body for chat completions.
@@ -138,76 +142,128 @@ type openAIChatResponse struct {
 
 // SendMessage sends a message and returns the response.
 func (c *OpenAIClient) SendMessage(ctx context.Context, messages []Message) (*Response, error) {
-	// Convert messages to OpenAI format
-	openAIMessages := make([]openAIChatMessage, len(messages))
-	for i, msg := range messages {
-		openAIMessages[i] = openAIChatMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
+	var result *Response
+
+	// Story 10-8 AC1: Log LLM request
+	logger.Debug("OpenAI API Request", map[string]interface{}{
+		"provider":   c.providerID,
+		"model":      c.model,
+		"max_tokens": c.maxTokens,
+		"num_messages": len(messages),
+	})
+
+	err := WithRetry(ctx, DefaultRetryConfig(), func(ctx context.Context) error {
+		// Convert messages to OpenAI format
+		openAIMessages := make([]openAIChatMessage, len(messages))
+		for i, msg := range messages {
+			openAIMessages[i] = openAIChatMessage{
+				Role:    msg.Role,
+				Content: msg.Content,
+			}
 		}
-	}
 
-	reqBody := openAIChatRequest{
-		Model:     c.model,
-		Messages:  openAIMessages,
-		MaxTokens: c.maxTokens,
-		Stream:    false,
-	}
+		reqBody := openAIChatRequest{
+			Model:     c.model,
+			Messages:  openAIMessages,
+			MaxTokens: c.maxTokens,
+			Stream:    false,
+		}
 
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, NewAPIError(c.providerID, 0, "無法序列化請求", err)
-	}
+		jsonBody, err := json.Marshal(reqBody)
+		if err != nil {
+			logger.Error("Failed to serialize OpenAI request", map[string]interface{}{"error": err.Error()})
+			return NewAPIError(c.providerID, 0, "無法序列化請求", err)
+		}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, NewAPIError(c.providerID, 0, "無法建立請求", err)
-	}
+		// Story 10-8 AC1: Log request details
+		logger.Debug("OpenAI request body", map[string]interface{}{
+			"messages_count": len(openAIMessages),
+		})
 
-	c.setHeaders(req)
-	req.Header.Set("Content-Type", "application/json")
+		req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(jsonBody))
+		if err != nil {
+			logger.Error("Failed to create OpenAI request", map[string]interface{}{"error": err.Error()})
+			return NewAPIError(c.providerID, 0, "無法建立請求", err)
+		}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, NewAPIError(c.providerID, 0, ErrNetworkError.Error(), ErrNetworkError)
-	}
-	defer resp.Body.Close()
+		c.setHeaders(req)
+		req.Header.Set("Content-Type", "application/json")
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, NewAPIError(c.providerID, 0, "無法讀取回應", err)
-	}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			logger.Error("OpenAI network error", map[string]interface{}{"error": err.Error()})
+			return NewAPIError(c.providerID, 0, ErrNetworkError.Error(), ErrNetworkError)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return nil, NewAPIError(c.providerID, resp.StatusCode, ErrInvalidAPIKey.Error(), ErrInvalidAPIKey)
-	}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			logger.Error("Failed to read OpenAI response", map[string]interface{}{"error": err.Error()})
+			return NewAPIError(c.providerID, 0, "無法讀取回應", err)
+		}
 
-	if resp.StatusCode == 429 {
-		return nil, NewAPIError(c.providerID, resp.StatusCode, ErrRateLimited.Error(), ErrRateLimited)
-	}
+		// Story 10-8 AC1: Log response status
+		logger.Debug("OpenAI API Response", map[string]interface{}{
+			"status_code": resp.StatusCode,
+			"body_length": len(body),
+		})
 
-	if resp.StatusCode >= 400 {
-		return nil, NewAPIError(c.providerID, resp.StatusCode, string(body), nil)
-	}
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			logger.Error("OpenAI authentication error", map[string]interface{}{"status_code": resp.StatusCode})
+			return NewAPIError(c.providerID, resp.StatusCode, ErrInvalidAPIKey.Error(), ErrInvalidAPIKey)
+		}
 
-	var chatResp openAIChatResponse
-	if err := json.Unmarshal(body, &chatResp); err != nil {
-		return nil, NewAPIError(c.providerID, 0, "無法解析回應", err)
-	}
+		if resp.StatusCode == 429 {
+			logger.Warn("OpenAI rate limited", map[string]interface{}{"status_code": resp.StatusCode})
+			return NewAPIError(c.providerID, resp.StatusCode, ErrRateLimited.Error(), ErrRateLimited)
+		}
 
-	if len(chatResp.Choices) == 0 {
-		return nil, NewAPIError(c.providerID, 0, ErrEmptyResponse.Error(), ErrEmptyResponse)
-	}
+		if resp.StatusCode >= 400 {
+			logger.Error("OpenAI API error", map[string]interface{}{
+				"status_code": resp.StatusCode,
+				"body": string(body),
+			})
+			return NewAPIError(c.providerID, resp.StatusCode, string(body), nil)
+		}
 
-	return &Response{
-		Content: chatResp.Choices[0].Message.Content,
-		Metadata: map[string]interface{}{
-			"model":             chatResp.Model,
-			"prompt_tokens":     chatResp.Usage.PromptTokens,
+		var chatResp openAIChatResponse
+		if err := json.Unmarshal(body, &chatResp); err != nil {
+			logger.Error("Failed to parse OpenAI response", map[string]interface{}{"error": err.Error()})
+			return NewAPIError(c.providerID, 0, "無法解析回應", err)
+		}
+
+		if len(chatResp.Choices) == 0 {
+			logger.Error("OpenAI empty response", nil)
+			return NewAPIError(c.providerID, 0, ErrEmptyResponse.Error(), ErrEmptyResponse)
+		}
+
+		// Story 10-8 AC1: Log successful response
+		logger.Debug("OpenAI API Success", map[string]interface{}{
+			"model": chatResp.Model,
+			"prompt_tokens": chatResp.Usage.PromptTokens,
 			"completion_tokens": chatResp.Usage.CompletionTokens,
-			"total_tokens":      chatResp.Usage.TotalTokens,
-		},
-	}, nil
+			"total_tokens": chatResp.Usage.TotalTokens,
+			"content_length": len(chatResp.Choices[0].Message.Content),
+		})
+
+		result = &Response{
+			Content: chatResp.Choices[0].Message.Content,
+			Metadata: map[string]interface{}{
+				"model":             chatResp.Model,
+				"prompt_tokens":     chatResp.Usage.PromptTokens,
+				"completion_tokens": chatResp.Usage.CompletionTokens,
+				"total_tokens":      chatResp.Usage.TotalTokens,
+			},
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 // Stream sends a message and streams the response via callback.

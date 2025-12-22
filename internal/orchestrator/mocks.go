@@ -266,6 +266,21 @@ func (m *MockJudgeAgent) Judge(ctx context.Context, req JudgeRequest) (*JudgeRes
 	}, nil
 }
 
+// ClassifyIntent classifies the player's free text input into a normalized intent.
+// Code Review Fix 7-3-1: Mock implementation for testing.
+func (m *MockJudgeAgent) ClassifyIntent(ctx context.Context, freeText string, gameState *agents.GameStateSnapshot) (*agents.IntentClassification, *agents.ClarificationNeeded, error) {
+	// Default mock: return a clear intent with high confidence
+	intent := &agents.IntentClassification{
+		Action:           "examine",
+		Target:           "unknown",
+		IsAmbiguous:      false,
+		Confidence:       0.9,
+		Keywords:         []string{},
+		NormalizedIntent: freeText, // Pass through for mock
+	}
+	return intent, nil, nil
+}
+
 // MockSeedAgent is a placeholder implementation.
 type MockSeedAgent struct{}
 
@@ -318,20 +333,31 @@ func (m *MockSeedAgent) InvokeLocalManage(ctx context.Context, request *agents.L
 	}, nil
 }
 
-// MockNPCAgent is a placeholder implementation.
+// MockNPCAgent is a placeholder implementation (Story 7.6 enhanced).
 type MockNPCAgent struct{}
 
 func NewMockNPCAgent() *MockNPCAgent {
 	return &MockNPCAgent{}
 }
 
+// GenerateProfiles generates NPC profiles with Show-Don't-Tell introductions (Story 7.6)
 func (m *MockNPCAgent) GenerateProfiles(ctx context.Context, req NPCRequest) ([]*NPCProfile, error) {
+	// Story 7.6: Generate NPCs with comprehensive information
+	archetypeNames := []string{"引導者", "知情者", "中立者", "犧牲者"}
+	archetypeIntros := []string{
+		"她快步走來，從背包掏出急救包：「受傷了嗎？先處理一下。」疲憊的臉上仍帶著關切，動作熟練而溫和。",
+		"他靠在牆邊，手中翻著破舊的筆記，頭也不抬：「你來晚了。」指尖劃過書頁上的符號，眼神深邃得像看穿了一切。",
+		"他站在原地，眼神茫然地看著四周：「這...這是哪裡？」雙手不安地摩擦著，像是在確認自己是否還活著。",
+		"她蜷縮在角落，雙手死死抓著沾血的繃帶，眼神不斷飄向門口。「救...救命...」聲音顫抖得幾乎聽不清，身體抖得像秋風中的落葉。",
+	}
+
 	profiles := make([]*NPCProfile, req.Count)
 	for i := 0; i < req.Count; i++ {
+		idx := i % len(archetypeNames)
 		profiles[i] = &NPCProfile{
 			ID:          fmt.Sprintf("NPC%03d", i+1),
-			Name:        fmt.Sprintf("Character %d", i+1),
-			Description: fmt.Sprintf("NPC for %s theme", req.Skeleton.MainTheme),
+			Name:        fmt.Sprintf("%s-%d", archetypeNames[idx], i+1),
+			Description: archetypeIntros[idx], // Show-Don't-Tell introduction
 		}
 	}
 	return profiles, nil

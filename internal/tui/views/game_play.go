@@ -18,6 +18,7 @@ import (
 	"github.com/nightmare-assault/nightmare-assault/internal/game/commands"
 	"github.com/nightmare-assault/nightmare-assault/internal/i18n"
 	"github.com/nightmare-assault/nightmare-assault/internal/logger"
+	"github.com/nightmare-assault/nightmare-assault/internal/tui/components"
 	"github.com/nightmare-assault/nightmare-assault/internal/tui/themes"
 )
 
@@ -87,6 +88,15 @@ type GamePlayModel struct {
 
 	// Pregenerated content
 	pregenerated  *PregeneratedContent
+
+	// Story 7-3: Auto-resolve display (敘事動量系統)
+	autoResolveActive    bool   // Whether auto-resolve is currently playing
+	autoNarratives       []string // Queue of narratives to display
+	currentNarrativeIdx  int    // Current narrative being displayed
+	narrativePauseTimer  *time.Timer // Timer for pause between narratives
+	playerInterrupted    bool   // Whether player pressed a key to interrupt
+	momentumIndicator    *components.MomentumIndicator // Story 7-3 AC4: Momentum indicator
+	maxAutoBeats         int // Max auto beats for progress display
 }
 
 // NewGamePlayModel creates a new game play model.
@@ -123,18 +133,19 @@ func NewGamePlayModel(
 	}
 
 	m := GamePlayModel{
-		storyEngine:    storyEngine,
-		stats:          stats,
-		gameConfig:     gameConfig,
-		commandReg:     cmdReg,
-		audioManager:   audioManager,
-		config:         config,
-		viewport:       vp,
-		textInput:      ti,
-		choices:        make([]string, 0),
-		selectedChoice: 0,
-		turnCount:      0,
-		pregenerated:   pregenerated,
+		storyEngine:       storyEngine,
+		stats:             stats,
+		gameConfig:        gameConfig,
+		commandReg:        cmdReg,
+		audioManager:      audioManager,
+		config:            config,
+		viewport:          vp,
+		textInput:         ti,
+		choices:           make([]string, 0),
+		selectedChoice:    0,
+		turnCount:         0,
+		pregenerated:      pregenerated,
+		momentumIndicator: components.NewMomentumIndicator(), // Story 7-3 AC4
 	}
 
 	// If we have pregenerated story, apply it immediately
@@ -395,8 +406,24 @@ func (m GamePlayModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Typewriter finished
 		m.isTyping = false
+
+		// Story 7-3: Check if we're in auto-resolve mode
+		if m.autoResolveActive && m.currentNarrativeIdx < len(m.autoNarratives)-1 {
+			// More narratives to display, pause before next one
+			// AC3: 段落間暫停 500ms
+			return m, narrativePauseCmd()
+		}
+
 		m.loading = false // Hide loading overlay
 		return m, nil
+
+	case NarrativePauseCompleteMsg:
+		// Story 7-3: Pause between narratives completed
+		return m, m.handleNarrativePauseComplete()
+
+	case AutoResolveDisplayMsg:
+		// Story 7-3: Start displaying auto-resolved narratives
+		return m, m.displayAutoNarratives(msg.Narratives, msg.BeatsResolved, msg.MaxBeats)
 
 	case GameStoryMsg:
 		// New story segment received (from continuation) - legacy path
@@ -557,6 +584,16 @@ func (m GamePlayModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.viewport.Height > 0 && m.viewport.Width > 0 {
 				m.viewport.GotoBottom()
 			}
+			return m, nil
+		}
+	}
+
+	// Story 7-3 AC5: Allow player to interrupt auto-resolve
+	// Check for any key press during auto-resolve
+	if m.autoResolveActive {
+		// Any key press (except special keys) interrupts auto-resolve
+		if msg.String() != "ctrl+c" { // Allow Ctrl+C for emergency quit
+			m.interruptAutoResolve()
 			return m, nil
 		}
 	}
@@ -956,7 +993,16 @@ func (m GamePlayModel) renderStatusBar() string {
 		m.stats.GetSanityState().String(),
 		m.gameConfig.Difficulty.String())
 
+	// Story 7-3 AC4: Add momentum indicator to status bar
+	var line3 string
+	if m.momentumIndicator != nil {
+		line3 = m.momentumIndicator.View()
+	}
+
 	status := line1 + "\n" + line2
+	if line3 != "" {
+		status += "\n" + line3
+	}
 
 	return statusStyle.Render(status)
 }
@@ -1325,4 +1371,126 @@ func stripHTMLTags(text string) string {
 	}
 
 	return result.String()
+}
+
+// ============================================================================
+// Story 7-3: Auto-Resolve Display (連續敘事顯示)
+// ============================================================================
+
+// AutoResolveDisplayMsg signals that auto-resolve narratives should be displayed
+type AutoResolveDisplayMsg struct {
+	Narratives    []string
+	BeatsResolved int
+	MaxBeats      int
+}
+
+// NarrativePauseCompleteMsg signals that the pause between narratives is complete
+type NarrativePauseCompleteMsg struct{}
+
+// displayAutoNarratives initiates the display of multiple auto-resolved narratives
+// Story 7-3 AC1: displayAutoNarratives() 合併多段敘事
+// Story 7-3 AC2: 使用打字機效果顯示（連續段落）
+// Story 7-3 AC3: 段落間暫停 500ms
+// Story 7-3 AC4: 顯示動量指示器（"自動演繹中: 3/5 回合"）
+func (m *GamePlayModel) displayAutoNarratives(narratives []string, beatsResolved, maxBeats int) tea.Cmd {
+	if len(narratives) == 0 {
+		return nil
+	}
+
+	// AC1: Store narratives for sequential display
+	m.autoResolveActive = true
+	m.autoNarratives = narratives
+	m.currentNarrativeIdx = 0
+	m.playerInterrupted = false
+	m.maxAutoBeats = maxBeats
+
+	// AC4: Update momentum indicator
+	if m.momentumIndicator != nil {
+		m.momentumIndicator.SetState(components.MomentumAutoResolving)
+		m.momentumIndicator.SetProgress(0, maxBeats)
+	}
+
+	// Start displaying first narrative
+	return m.displayNextNarrative()
+}
+
+// displayNextNarrative displays the next narrative in the queue with typewriter effect
+// Story 7-3 AC2: 使用打字機效果顯示（連續段落）
+func (m *GamePlayModel) displayNextNarrative() tea.Cmd {
+	if m.currentNarrativeIdx >= len(m.autoNarratives) {
+		// All narratives displayed, finish auto-resolve
+		m.autoResolveActive = false
+		m.loading = false
+
+		// AC4: Reset momentum indicator
+		if m.momentumIndicator != nil {
+			m.momentumIndicator.SetState(components.MomentumIdle)
+		}
+
+		return nil
+	}
+
+	// AC4: Update momentum indicator progress
+	if m.momentumIndicator != nil {
+		m.momentumIndicator.SetProgress(m.currentNarrativeIdx+1, m.maxAutoBeats)
+	}
+
+	narrative := m.autoNarratives[m.currentNarrativeIdx]
+
+	// AC2: Append narrative to story with separator
+	if m.currentStory != "" {
+		m.currentStory += "\n\n" + narrative
+	} else {
+		m.currentStory = narrative
+	}
+	m.fullText = m.currentStory
+
+	// Start typewriter from the beginning of new content
+	// Calculate where the new content starts
+	previousLength := len([]rune(m.displayText))
+	m.charIndex = previousLength
+
+	// Start typewriter effect
+	m.isTyping = true
+
+	return typewriterTickCmd()
+}
+
+// handleNarrativePauseComplete handles the completion of pause between narratives
+// Story 7-3 AC3: 段落間暫停 500ms
+func (m *GamePlayModel) handleNarrativePauseComplete() tea.Cmd {
+	if m.playerInterrupted {
+		// Player interrupted, stop auto-resolve
+		m.autoResolveActive = false
+		m.loading = false
+		return nil
+	}
+
+	// Move to next narrative
+	m.currentNarrativeIdx++
+	return m.displayNextNarrative()
+}
+
+// narrativePauseCmd returns a command that waits 500ms between narratives
+// Story 7-3 AC3: 段落間暫停 500ms
+func narrativePauseCmd() tea.Cmd {
+	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+		return NarrativePauseCompleteMsg{}
+	})
+}
+
+// interruptAutoResolve allows player to interrupt auto-resolve
+// Story 7-3 AC5: 允許玩家 PlayerOverride 中斷
+func (m *GamePlayModel) interruptAutoResolve() {
+	if m.autoResolveActive {
+		m.playerInterrupted = true
+		m.autoResolveActive = false
+		m.loading = false
+
+		// Stop narrative pause timer if it exists
+		if m.narrativePauseTimer != nil {
+			m.narrativePauseTimer.Stop()
+			m.narrativePauseTimer = nil
+		}
+	}
 }

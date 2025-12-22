@@ -416,6 +416,11 @@ func (e *ErrorJudgeAgent) Judge(ctx context.Context, req JudgeRequest) (*JudgeRe
 	return nil, e.err
 }
 
+// ClassifyIntent implements JudgeAgent interface (Code Review Fix 7-3-1)
+func (e *ErrorJudgeAgent) ClassifyIntent(ctx context.Context, freeText string, gameState *agents.GameStateSnapshot) (*agents.IntentClassification, *agents.ClarificationNeeded, error) {
+	return nil, nil, e.err
+}
+
 type ErrorStateManager struct {
 	err error
 }

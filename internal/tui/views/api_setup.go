@@ -13,6 +13,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/nightmare-assault/nightmare-assault/internal/api"
 	"github.com/nightmare-assault/nightmare-assault/internal/config"
+	"github.com/nightmare-assault/nightmare-assault/internal/errors"
+	"github.com/nightmare-assault/nightmare-assault/internal/i18n"
 )
 
 // APISetupState represents the current state of the API setup wizard.
@@ -310,6 +312,33 @@ func (m *APISetupModel) saveConfig() error {
 }
 
 func (m APISetupModel) getFriendlyError(err error) string {
+	// Try to use the errors package with i18n support
+	translator := i18n.GetGlobal()
+	if translator != nil {
+		// Check if it's already a FriendlyError
+		if errors.IsFriendlyError(err) {
+			return "❌ " + errors.FormatUserError(err, translator)
+		}
+
+		// Wrap the error to get friendly message
+		errStr := err.Error()
+		var friendlyErr error
+		switch {
+		case strings.Contains(errStr, "invalid") || strings.Contains(errStr, "401") || strings.Contains(errStr, "403"):
+			friendlyErr = errors.NewAPIErrorFriendly(m.selectedProvider.Name, 401, "connection test", err)
+		case strings.Contains(errStr, "network") || strings.Contains(errStr, "connection"):
+			friendlyErr = errors.NewNetworkErrorFriendly("connection test", err)
+		case strings.Contains(errStr, "429"):
+			friendlyErr = errors.NewAPIErrorFriendly(m.selectedProvider.Name, 429, "connection test", err)
+		case strings.Contains(errStr, "timeout") || strings.Contains(errStr, "deadline"):
+			friendlyErr = errors.NewAPIErrorFriendly(m.selectedProvider.Name, 0, "connection test", err)
+		default:
+			friendlyErr = errors.NewAPIErrorFriendly(m.selectedProvider.Name, 0, "connection test", err)
+		}
+		return "❌ " + errors.FormatUserError(friendlyErr, translator)
+	}
+
+	// Fallback to hardcoded messages if translator not available
 	errStr := err.Error()
 	switch {
 	case strings.Contains(errStr, "invalid") || strings.Contains(errStr, "401") || strings.Contains(errStr, "403"):

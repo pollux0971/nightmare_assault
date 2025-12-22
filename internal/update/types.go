@@ -70,10 +70,25 @@ type UpdateConfig struct {
 
 // UpdateResult 更新結果
 type UpdateResult struct {
-	Status       UpdateStatus
-	NewVersion   string
+	Status         UpdateStatus
+	NewVersion     string
 	CurrentVersion string
-	ErrorMessage string
-	DownloadURL  string
-	Checksum     string
+	ErrorMessage   string
+	DownloadURL    string
+	Checksum       string
+}
+
+// UpdateManagerInterface 定義更新管理器的介面
+// 用於依賴注入和測試 mock
+type UpdateManagerInterface interface {
+	// CheckForUpdates 檢查是否有新版本可用
+	CheckForUpdates() (*UpdateResult, error)
+	// DownloadUpdate 下載更新
+	DownloadUpdate(result *UpdateResult) (string, error)
+	// InstallUpdate 安裝更新
+	InstallUpdate(downloadedPath string) error
+	// NeedsRestart 檢查是否需要重啟
+	NeedsRestart() bool
+	// RecordUpdateCheck 記錄檢查時間
+	RecordUpdateCheck() error
 }

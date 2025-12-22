@@ -1,0 +1,107 @@
+# Trinity & Guardian 基礎配置範例
+# 這是最小化的配置，適合快速開始使用 Trinity 系統
+
+{
+  "version": "1.0",
+  "language": "zh-TW",
+  "theme": "midnight",
+
+  # 音訊配置（使用默認值）
+  "audio": {
+    "master_volume": 100,
+    "bgm_enabled": true,
+    "sfx_enabled": true,
+    "bgm_volume": 50,
+    "sfx_volume": 80,
+    "heartbeat_enabled": true,
+    "bgm_loop": true
+  },
+
+  # API 配置 - 使用單一 Provider（向後兼容）
+  "api": {
+    "provider": {
+      "provider_id": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",
+      "max_tokens": 100000,
+      "temperature": 0.7
+    },
+    "api_keys": {
+      "anthropic": "your-anthropic-api-key-here"
+    }
+  },
+
+  # Trinity 系統配置 - 基礎設定
+  "trinity": {
+    # 啟用 Trinity 系統（設為 true 才會使用三層模型架構）
+    "enabled": true,
+
+    # Thinking Tier - 最高級推理模型
+    # 用於：複雜推理、戰略決策、關鍵判斷
+    "thinking": {
+      "provider_id": "anthropic",
+      "model": "claude-opus-4-20250514",
+      "max_tokens": 16000,
+      "temperature": 0.4
+    },
+
+    # Reactive Tier - 平衡型模型
+    # 用於：動態內容生成、中等複雜度任務
+    "reactive": {
+      "provider_id": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",
+      "max_tokens": 8000,
+      "temperature": 0.7
+    },
+
+    # Rapid Tier - 快速響應模型
+    # 用於：簡單響應、高頻率操作
+    "rapid": {
+      "provider_id": "anthropic",
+      "model": "claude-3-haiku-20240307",
+      "max_tokens": 4000,
+      "temperature": 0.9
+    },
+
+    # 啟用自動降級機制（當高層級模型失敗時自動切換到低層級）
+    "fallback_enabled": true,
+
+    # Guardian 玩家保護系統（可選）
+    "guardian": {
+      "enabled": false
+    }
+  },
+
+  # 打字機效果配置
+  "typewriter": {
+    "enabled": true,
+    "speed": 40,
+    "show_cursor": true
+  },
+
+  # 除錯配置
+  "debug": {
+    "enabled": false,
+    "log_api_keys": false,
+    "log_requests": false
+  },
+
+  # 自動更新配置
+  "update": {
+    "enabled": true,
+    "check_interval": 24,
+    "allow_prerelease": false
+  }
+}
+
+# 配置說明：
+#
+# 1. Trinity 系統必須設置 "enabled": true 才會啟用
+# 2. 三個 tier 都必須配置 provider_id 和 model
+# 3. API Key 可以通過 "api_keys" 設置，或使用環境變數（更安全）
+# 4. fallback_enabled 建議啟用，提供更好的容錯能力
+# 5. Guardian 系統可選，適合需要玩家保護功能的場景
+#
+# 環境變數（可選，優先級高於配置檔）：
+# - ANTHROPIC_API_KEY: Anthropic API 金鑰
+# - NIGHTMARE_API_PROVIDER: Provider ID
+# - NIGHTMARE_API_MODEL: 模型名稱

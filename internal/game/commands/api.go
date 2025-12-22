@@ -2,8 +2,10 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/nightmare-assault/nightmare-assault/internal/api"
 	"github.com/nightmare-assault/nightmare-assault/internal/config"
@@ -192,11 +194,88 @@ func (c *APICommand) testConnection() CommandResult {
 		}
 	}
 
-	// This would be async in real implementation
+	// Create provider instance
+	provider, err := api.NewProvider(api.ProviderConfig{
+		ProviderID: c.config.API.Provider.ProviderID,
+		APIKey:     apiKey,
+		BaseURL:    c.config.API.Provider.BaseURL,
+		Model:      c.config.API.Provider.Model,
+		MaxTokens:  c.config.API.Provider.MaxTokens,
+	})
+	if err != nil {
+		return CommandResult{
+			Success: false,
+			Message: fmt.Sprintf("❌ 無法建立 API 客戶端: %v", err),
+		}
+	}
+
+	// Test connection with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	startTime := time.Now()
+	err = provider.TestConnection(ctx)
+	latency := time.Since(startTime)
+
+	if err != nil {
+		// Provide detailed error messages
+		return CommandResult{
+			Success: false,
+			Message: c.formatConnectionError(err, latency),
+		}
+	}
+
+	providerInfo := api.GetProviderInfo(c.config.API.Provider.ProviderID)
+	providerName := c.config.API.Provider.ProviderID
+	if providerInfo != nil {
+		providerName = providerInfo.Name
+	}
+
 	return CommandResult{
 		Success: true,
-		Message: "🔄 連線測試中...（使用 API 設定畫面進行完整測試）",
+		Message: fmt.Sprintf("✓ 連線成功\n供應商: %s\n延遲: %dms", providerName, latency.Milliseconds()),
 	}
+}
+
+func (c *APICommand) formatConnectionError(err error, latency time.Duration) string {
+	var b strings.Builder
+	b.WriteString("❌ 連線測試失敗\n\n")
+
+	// Check error type and provide friendly messages
+	errMsg := err.Error()
+
+	if strings.Contains(errMsg, "網路連線失敗") || strings.Contains(errMsg, "network") {
+		b.WriteString("**錯誤**: 網路連線失敗\n")
+		b.WriteString("**建議**:\n")
+		b.WriteString("  • 檢查網路連線\n")
+		b.WriteString("  • 確認防火牆設定\n")
+		b.WriteString("  • 檢查代理伺服器設定\n")
+	} else if strings.Contains(errMsg, "API Key 無效") || strings.Contains(errMsg, "401") || strings.Contains(errMsg, "403") {
+		b.WriteString("**錯誤**: API Key 無效或未授權\n")
+		b.WriteString("**建議**:\n")
+		b.WriteString("  • 檢查 API Key 是否正確\n")
+		b.WriteString("  • 確認 API Key 是否過期\n")
+		b.WriteString("  • 檢查 API Key 權限設定\n")
+	} else if strings.Contains(errMsg, "請求過於頻繁") || strings.Contains(errMsg, "429") {
+		b.WriteString("**錯誤**: 請求過於頻繁（速率限制）\n")
+		b.WriteString("**建議**:\n")
+		b.WriteString("  • 稍後再試\n")
+		b.WriteString("  • 檢查是否有其他程式在使用相同的 API Key\n")
+	} else if strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "超時") {
+		b.WriteString("**錯誤**: 連線超時\n")
+		b.WriteString("**建議**:\n")
+		b.WriteString("  • 檢查網路速度\n")
+		b.WriteString("  • 稍後再試\n")
+		b.WriteString("  • 嘗試切換到其他 API 供應商\n")
+	} else {
+		b.WriteString(fmt.Sprintf("**錯誤**: %s\n", errMsg))
+	}
+
+	if latency > 0 {
+		b.WriteString(fmt.Sprintf("\n嘗試耗時: %dms", latency.Milliseconds()))
+	}
+
+	return b.String()
 }
 
 func (c *APICommand) helpText() string {

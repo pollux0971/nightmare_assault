@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nightmare-assault/nightmare-assault/internal/config"
 	"github.com/nightmare-assault/nightmare-assault/internal/engine"
 )
 
@@ -378,4 +379,112 @@ func contains(s, substr string) bool {
 	return len(s) > 0 && len(substr) > 0 &&
 		(s == substr || len(s) >= len(substr) &&
 		(s[:len(substr)] == substr || contains(s[1:], substr)))
+}
+
+// TestAutoMapCustomFile tests the auto-mapping of custom_<scene> files (AC 10.2)
+func TestAutoMapCustomFile(t *testing.T) {
+	testDir := filepath.Join(os.TempDir(), "test-custom-bgm-automap")
+	defer os.RemoveAll(testDir)
+
+	os.MkdirAll(testDir, 0755)
+
+	// Create test files with custom_<scene> naming
+	testFiles := []string{
+		"custom_explore.mp3",
+		"custom_tension.ogg",
+		"custom_horror.wav",
+		"regular_music.mp3", // Should not be auto-mapped
+	}
+
+	for _, filename := range testFiles {
+		path := filepath.Join(testDir, filename)
+		f, _ := os.Create(path)
+		f.Write([]byte("dummy audio data"))
+		f.Close()
+	}
+
+	manager := NewCustomBGMManager(testDir)
+	err := manager.ScanCustomDirectory()
+	if err != nil {
+		t.Fatalf("ScanCustomDirectory failed: %v", err)
+	}
+
+	// Check auto-mapped moods
+	tests := []struct {
+		mood     engine.MoodType
+		expected bool
+	}{
+		{engine.MoodExploration, true},
+		{engine.MoodTension, true},
+		{engine.MoodHorror, true},
+		{engine.MoodSafe, false},    // Not mapped
+		{engine.MoodMystery, false}, // Not mapped
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.mood.String(), func(t *testing.T) {
+			_, isCustom := manager.GetMoodBGM(tt.mood)
+			if isCustom != tt.expected {
+				t.Errorf("Expected isCustom=%v for mood %s, got %v", tt.expected, tt.mood, isCustom)
+			}
+		})
+	}
+}
+
+// TestAutoMapDoesNotOverrideManual tests that auto-map doesn't override manual settings
+func TestAutoMapDoesNotOverrideManual(t *testing.T) {
+	testDir := filepath.Join(os.TempDir(), "test-custom-bgm-manual")
+	defer os.RemoveAll(testDir)
+
+	os.MkdirAll(testDir, 0755)
+
+	// Create test files
+	testFiles := []string{
+		"custom_explore.mp3",
+		"my_exploration.mp3",
+	}
+
+	for _, filename := range testFiles {
+		path := filepath.Join(testDir, filename)
+		f, _ := os.Create(path)
+		f.Write([]byte("dummy audio data"))
+		f.Close()
+	}
+
+	manager := NewCustomBGMManager(testDir)
+
+	// Manually set before scanning
+	manager.availableFiles = []string{"my_exploration.mp3"}
+	manager.config.MoodToFile[engine.MoodExploration] = "my_exploration.mp3"
+
+	// Scan should not override
+	err := manager.ScanCustomDirectory()
+	if err != nil {
+		t.Fatalf("ScanCustomDirectory failed: %v", err)
+	}
+
+	path, isCustom := manager.GetMoodBGM(engine.MoodExploration)
+	if !isCustom {
+		t.Error("Expected custom BGM to be set")
+	}
+	if !contains(path, "my_exploration.mp3") {
+		t.Errorf("Expected manual setting to be preserved, got %s", path)
+	}
+}
+
+// TestBGMPlayerSetCustomBGMManager tests SetCustomBGMManager
+func TestBGMPlayerSetCustomBGMManager(t *testing.T) {
+	audioDir := t.TempDir()
+	cfg := config.AudioConfig{BGMEnabled: true, BGMVolume: 70}
+	player := NewBGMPlayer(nil, cfg, audioDir)
+
+	customDir := filepath.Join(audioDir, "bgm", "custom")
+	customMgr := NewCustomBGMManager(customDir)
+
+	player.SetCustomBGMManager(customMgr)
+
+	// Verify it was set (internal check via SwitchByMood behavior)
+	if player.customBGMMgr != customMgr {
+		t.Error("CustomBGMManager was not set correctly")
+	}
 }

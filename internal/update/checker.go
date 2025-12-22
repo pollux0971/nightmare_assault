@@ -66,44 +66,63 @@ func (c *Checker) fetchLatestRelease() (*ReleaseInfo, error) {
 
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return nil, fmt.Errorf("創建請求失敗: %w", err)
+		releaseInfo, err := c.doFetchRequest(url)
+		if err == nil {
+			return releaseInfo, nil
 		}
 
-		// 設置User-Agent避免被rate limit
-		req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", c.config.Repo, c.config.CurrentVersion))
-		req.Header.Set("Accept", "application/vnd.github.v3+json")
+		lastErr = err
 
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			lastErr = err
-			time.Sleep(time.Second * time.Duration(i+1)) // 指數退避
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusTooManyRequests {
-			// Rate limited - 等待後重試
-			lastErr = fmt.Errorf("API rate limit exceeded")
-			time.Sleep(time.Minute)
+		// 檢查是否為 rate limit 錯誤
+		if err.Error() == "rate limit exceeded" {
+			// Rate limited - 使用較短等待時間，避免長時間阻塞
+			time.Sleep(time.Second * 10)
 			continue
 		}
 
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			return nil, fmt.Errorf("GitHub API返回錯誤: %d - %s", resp.StatusCode, string(body))
-		}
-
-		var releaseInfo ReleaseInfo
-		if err := json.NewDecoder(resp.Body).Decode(&releaseInfo); err != nil {
-			return nil, fmt.Errorf("解析release資訊失敗: %w", err)
-		}
-
-		return &releaseInfo, nil
+		// 其他錯誤使用指數退避
+		time.Sleep(time.Second * time.Duration(i+1))
 	}
 
 	return nil, fmt.Errorf("重試%d次後仍失敗: %w", maxRetries, lastErr)
+}
+
+// doFetchRequest 執行單次 HTTP 請求並處理回應
+// 將請求邏輯提取出來確保 response body 在每次迭代後正確關閉
+func (c *Checker) doFetchRequest(url string) (*ReleaseInfo, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("創建請求失敗: %w", err)
+	}
+
+	// 設置User-Agent避免被rate limit
+	req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", c.config.Repo, c.config.CurrentVersion))
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("rate limit exceeded")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf("GitHub API返回錯誤: %d (無法讀取回應內容)", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("GitHub API返回錯誤: %d - %s", resp.StatusCode, string(body))
+	}
+
+	var releaseInfo ReleaseInfo
+	if err := json.NewDecoder(resp.Body).Decode(&releaseInfo); err != nil {
+		return nil, fmt.Errorf("解析release資訊失敗: %w", err)
+	}
+
+	return &releaseInfo, nil
 }
 
 // compareVersions 比較版本並返回結果

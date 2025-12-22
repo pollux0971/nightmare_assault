@@ -269,19 +269,73 @@ func (a *NarrationAgent) buildStateSection(req *ContentRequest) string {
 		scene = "未知場景"
 	}
 
+	// Story 7.4 AC4: 添加 SAN 狀態效果到 Prompt
+	// Import game package to use GetSANState and GetNarrativeStyle
+	// Note: This requires adding import but for now we'll use simple thresholds
+	sanStateDesc := getSANStateDescription(san)
+
 	return fmt.Sprintf(`# 當前狀態
 
 - Beat: %d
 - 場景: %s
 - HP: %d / 100
 - SAN: %d / 100
-- 難度: %s`,
+- SAN 狀態: %s
+- 難度: %s
+
+## SAN 狀態敘事風格指示
+%s`,
 		req.Beat,
 		scene,
 		hp,
 		san,
+		sanStateDesc,
 		req.Difficulty,
+		getSANNarrativeGuidance(san),
 	)
+}
+
+// getSANStateDescription returns the SAN state description for prompts
+// Story 7.4 AC4: SAN 狀態效果分級
+func getSANStateDescription(san int) string {
+	switch {
+	case san >= 80:
+		return "清醒 (Clear)"
+	case san >= 50:
+		return "焦慮 (Anxious)"
+	case san >= 20:
+		return "恐慌 (Panic)"
+	case san >= 1:
+		return "崩潰 (Breakdown)"
+	default:
+		return "瘋狂 (Insane)"
+	}
+}
+
+// getSANNarrativeGuidance returns narrative guidance based on SAN state
+// Story 7.4 AC4: 根據 SAN 狀態調整敘事風格
+func getSANNarrativeGuidance(san int) string {
+	switch {
+	case san >= 80:
+		// Clear: 正常描述，無視覺效果
+		return "正常描述，清晰的場景與對話。完整的選項列表。正常的判斷力。"
+
+	case san >= 50:
+		// Anxious: 焦慮效果
+		return "敘事中加入心跳聲、冷汗描述。部分文字顏色變化（微妙的視覺暗示）。選項數量不變但可能有焦慮影響的選項。"
+
+	case san >= 20:
+		// Panic: 恐慌效果
+		return "文字扭曲效果（部分字符替換或模糊）。感官欺騙（看到不存在的東西）。可能出現「恐慌選項」(非理性行為)。顏色飽和度降低。在敘事中加入幻覺與扭曲的感知描述。"
+
+	case san >= 1:
+		// Breakdown: 崩潰效果
+		return "嚴重文字扭曲。幻覺選項混入真實選項（不標記）。可能出現強制行為（失去部分控制權）。螢幕效果嚴重干擾。在敘事中大量融入幻覺、妄想、無法分辨現實與虛幻的描述。"
+
+	default:
+		// Insane: 完全瘋狂
+		return "完全瘋狂。遊戲結束 Bad End (理智崩潰結局)。敘事應描述角色徹底失去理智的狀態。"
+	}
 }
 
 // buildTensionSection builds tension directive information

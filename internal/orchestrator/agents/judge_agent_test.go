@@ -583,8 +583,10 @@ func TestInvokeJudge_LethalViolation(t *testing.T) {
 	assert.NotEmpty(t, response.DeathReason)
 	assert.Contains(t, response.DeathReason, "聲音禁忌")
 
-	// Check state changes (hell difficulty, no warnings for fatal)
-	assert.Equal(t, -120, response.SuggestedStateChanges.HP) // 100 * 1.2
+	// Check state changes (hell difficulty, instant death for fatal rules)
+	// Story 7.2: Hell mode triggers instant death (-100 HP) for fatal rules
+	assert.Equal(t, -100, response.SuggestedStateChanges.HP) // Instant death
+	assert.Equal(t, -100, response.SuggestedStateChanges.SAN) // Complete loss
 }
 
 // TestParseImpactLevel tests impact level string parsing
@@ -929,4 +931,498 @@ func TestInvokeJudge_RegexMatching(t *testing.T) {
 	assert.Equal(t, "R-100", response.RulesViolated[0].RuleID)
 
 	t.Logf("Regex matching test: detected %d violations", len(response.RulesViolated))
+}
+
+// ==========================================================================
+// Story 4-1: JudgeChat Unit Tests
+// ==========================================================================
+
+// TestJudgeChat_Hallucination tests hallucination flag detection
+func TestJudgeChat_Hallucination(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			return `{
+				"flags": ["hallucination"],
+				"confidence": 0.9,
+				"reasoning": "Player claims to have seen something that contradicts known facts"
+			}`, nil
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "I saw a monster in the basement!",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Dr. Chen", IsPlayer: false, Emotion: EmotionState{Trust: 60, Fear: 30, Stress: 40}, Relationship: "friendly"},
+		},
+		ConversationHistory: []ChatMessage{},
+		GameState: &GameStateSnapshot{
+			HP:           100,
+			SAN:          80,
+			CurrentScene: "Library",
+			Difficulty:   "normal",
+		},
+		RelevantFacts: []string{"The basement is locked", "No one has entered the basement today"},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Contains(t, result.Flags, FlagHallucination)
+	assert.Equal(t, 0.9, result.Confidence)
+	assert.NotEmpty(t, result.Reasoning)
+}
+
+// TestJudgeChat_Hostile tests hostile flag detection
+func TestJudgeChat_Hostile(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			return `{
+				"flags": ["hostile"],
+				"confidence": 0.95,
+				"reasoning": "Player shows aggressive and threatening language toward NPC"
+			}`, nil
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "Shut up or I'll make you regret it!",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Sarah", IsPlayer: false, Emotion: EmotionState{Trust: 40, Fear: 60, Stress: 55}, Relationship: "neutral"},
+		},
+		ConversationHistory: []ChatMessage{},
+		GameState: &GameStateSnapshot{
+			HP:           100,
+			SAN:          60,
+			CurrentScene: "Hallway",
+			Difficulty:   "normal",
+		},
+		RelevantFacts: []string{},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Contains(t, result.Flags, FlagHostile)
+	assert.Equal(t, 0.95, result.Confidence)
+}
+
+// TestJudgeChat_Revelation tests revelation flag detection
+func TestJudgeChat_Revelation(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			return `{
+				"flags": ["revelation"],
+				"confidence": 0.85,
+				"reasoning": "Player shares important new information about the key location"
+			}`, nil
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "I found a hidden key in the desk drawer!",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Dr. Chen", IsPlayer: false, Emotion: EmotionState{Trust: 70, Fear: 20, Stress: 30}, Relationship: "friendly"},
+		},
+		ConversationHistory: []ChatMessage{},
+		GameState: &GameStateSnapshot{
+			HP:           100,
+			SAN:          90,
+			CurrentScene: "Office",
+			Difficulty:   "normal",
+		},
+		RelevantFacts: []string{},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Contains(t, result.Flags, FlagRevelation)
+	assert.Greater(t, result.Confidence, 0.8)
+}
+
+// TestJudgeChat_Contradiction tests contradiction flag detection
+func TestJudgeChat_Contradiction(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			return `{
+				"flags": ["contradiction"],
+				"confidence": 0.88,
+				"reasoning": "Player's claim contradicts what NPCs know about the door being locked"
+			}`, nil
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "The door was wide open when I got here",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Sarah", IsPlayer: false, Emotion: EmotionState{Trust: 50, Fear: 40, Stress: 50}, Relationship: "neutral"},
+		},
+		ConversationHistory: []ChatMessage{},
+		GameState: &GameStateSnapshot{
+			HP:           100,
+			SAN:          70,
+			CurrentScene: "Entrance",
+			Difficulty:   "normal",
+		},
+		RelevantFacts: []string{"Sarah locked the door herself 10 minutes ago", "No one else has a key"},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Contains(t, result.Flags, FlagContradiction)
+}
+
+// TestJudgeChat_MultipleFlags tests multiple flags detection
+func TestJudgeChat_MultipleFlags(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			return `{
+				"flags": ["revelation", "persuasion"],
+				"confidence": 0.82,
+				"reasoning": "Player shares new info (revelation) and attempts to convince NPCs to follow (persuasion)"
+			}`, nil
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "I found a safe exit route. Trust me, we should all go this way immediately!",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Dr. Chen", IsPlayer: false, Emotion: EmotionState{Trust: 60, Fear: 50, Stress: 60}, Relationship: "friendly"},
+			{ID: "npc2", Name: "Sarah", IsPlayer: false, Emotion: EmotionState{Trust: 40, Fear: 60, Stress: 70}, Relationship: "neutral"},
+		},
+		ConversationHistory: []ChatMessage{},
+		GameState: &GameStateSnapshot{
+			HP:           80,
+			SAN:          60,
+			CurrentScene: "Corridor",
+			Difficulty:   "normal",
+		},
+		RelevantFacts: []string{},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Len(t, result.Flags, 2)
+	assert.Contains(t, result.Flags, FlagRevelation)
+	assert.Contains(t, result.Flags, FlagPersuasion)
+}
+
+// TestJudgeChat_EmptyMessage tests empty message validation
+func TestJudgeChat_EmptyMessage(t *testing.T) {
+	agent := NewJudgeAgent(AgentConfig{})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Dr. Chen", IsPlayer: false},
+		},
+		GameState: &GameStateSnapshot{
+			HP:  100,
+			SAN: 100,
+		},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "player message cannot be empty")
+}
+
+// TestJudgeChat_NoParticipants tests no participants validation
+func TestJudgeChat_NoParticipants(t *testing.T) {
+	agent := NewJudgeAgent(AgentConfig{})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "Hello",
+		Participants:  []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+		},
+		GameState: &GameStateSnapshot{
+			HP:  100,
+			SAN: 100,
+		},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "must have at least one NPC participant")
+}
+
+// TestJudgeChat_LLMError tests LLM error handling with graceful degradation
+func TestJudgeChat_LLMError(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			return "", assert.AnError
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "Test message",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Dr. Chen", IsPlayer: false},
+		},
+		GameState: &GameStateSnapshot{
+			HP:  100,
+			SAN: 100,
+		},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	// Graceful degradation - should not error, but return empty flags
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Flags)
+	assert.Equal(t, 0.0, result.Confidence)
+	assert.Contains(t, result.Reasoning, "LLM call failed")
+}
+
+// TestJudgeChat_InvalidJSON tests invalid JSON response handling
+func TestJudgeChat_InvalidJSON(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			return "This is not valid JSON at all!", nil
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "Test message",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Dr. Chen", IsPlayer: false},
+		},
+		GameState: &GameStateSnapshot{
+			HP:  100,
+			SAN: 100,
+		},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	// Graceful degradation - should not error, but return empty flags
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Flags)
+	assert.Equal(t, 0.0, result.Confidence)
+	assert.Contains(t, result.Reasoning, "Parse failed")
+}
+
+// TestJudgeChat_WithConversationHistory tests prompt with conversation history
+func TestJudgeChat_WithConversationHistory(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			// Verify prompt includes conversation history
+			assert.Contains(t, prompt, "RECENT CONVERSATION")
+			assert.Contains(t, prompt, "Hello everyone")
+			assert.Contains(t, prompt, "What should we do")
+
+			return `{
+				"flags": ["persuasion"],
+				"confidence": 0.75,
+				"reasoning": "Player attempts to convince group based on previous discussion"
+			}`, nil
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "I think we should stick together and explore the left corridor",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Dr. Chen", IsPlayer: false, Emotion: EmotionState{Trust: 65, Fear: 35, Stress: 40}, Relationship: "friendly"},
+		},
+		ConversationHistory: []ChatMessage{
+			{Speaker: "Dr. Chen", Content: "Hello everyone", Timestamp: "10:00"},
+			{Speaker: "Player", Content: "Hi Dr. Chen", Timestamp: "10:01"},
+			{Speaker: "Dr. Chen", Content: "What should we do next?", Timestamp: "10:02"},
+		},
+		GameState: &GameStateSnapshot{
+			HP:           100,
+			SAN:          80,
+			CurrentScene: "Entrance Hall",
+			Difficulty:   "normal",
+		},
+		RelevantFacts: []string{},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Contains(t, result.Flags, FlagPersuasion)
+}
+
+// TestJudgeChat_PromptIncludesEmotions tests that prompt includes NPC emotions
+func TestJudgeChat_PromptIncludesEmotions(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			// Verify prompt includes emotion state
+			assert.Contains(t, prompt, "Trust: 60")
+			assert.Contains(t, prompt, "Fear: 40")
+			assert.Contains(t, prompt, "Stress: 50")
+			assert.Contains(t, prompt, "Relationship: friendly")
+
+			return `{
+				"flags": [],
+				"confidence": 0.6,
+				"reasoning": "Neutral message with no significant flags"
+			}`, nil
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "How are you feeling?",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Dr. Chen", IsPlayer: false, Emotion: EmotionState{Trust: 60, Fear: 40, Stress: 50}, Relationship: "friendly"},
+		},
+		ConversationHistory: []ChatMessage{},
+		GameState: &GameStateSnapshot{
+			HP:           100,
+			SAN:          90,
+			CurrentScene: "Office",
+			Difficulty:   "normal",
+		},
+		RelevantFacts: []string{},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+// TestJudgeChat_JSONInCodeBlock tests parsing JSON wrapped in markdown code block
+func TestJudgeChat_JSONInCodeBlock(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			return "```json\n{\n  \"flags\": [\"lie\"],\n  \"confidence\": 0.78,\n  \"reasoning\": \"Player appears to be lying based on context\"\n}\n```", nil
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "I definitely locked the door behind me",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Sarah", IsPlayer: false, Emotion: EmotionState{Trust: 45, Fear: 50, Stress: 55}, Relationship: "neutral"},
+		},
+		GameState: &GameStateSnapshot{
+			HP:  100,
+			SAN: 70,
+		},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Contains(t, result.Flags, FlagLie)
+	assert.Equal(t, 0.78, result.Confidence)
+}
+
+// TestJudgeChat_InvalidFlagsFiltered tests that invalid flags are filtered out
+func TestJudgeChat_InvalidFlagsFiltered(t *testing.T) {
+	mockLLM := &MockLLMClient{
+		ResponseFunc: func(ctx context.Context, prompt string, opts map[string]any) (string, error) {
+			return `{
+				"flags": ["hallucination", "invalid_flag", "hostile", "another_invalid"],
+				"confidence": 0.8,
+				"reasoning": "Test with some invalid flags"
+			}`, nil
+		},
+	}
+
+	agent := NewJudgeAgent(AgentConfig{
+		LLMClient: mockLLM,
+	})
+
+	request := &JudgeChatRequest{
+		PlayerMessage: "Test message",
+		Participants: []ChatParticipant{
+			{ID: "player", Name: "Player", IsPlayer: true},
+			{ID: "npc1", Name: "Dr. Chen", IsPlayer: false},
+		},
+		GameState: &GameStateSnapshot{
+			HP:  100,
+			SAN: 100,
+		},
+	}
+
+	ctx := context.Background()
+	result, err := agent.JudgeChat(ctx, request)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	// Should only include valid flags
+	assert.Len(t, result.Flags, 2)
+	assert.Contains(t, result.Flags, FlagHallucination)
+	assert.Contains(t, result.Flags, FlagHostile)
 }

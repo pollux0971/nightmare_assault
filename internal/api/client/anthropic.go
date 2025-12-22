@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/nightmare-assault/nightmare-assault/internal/logger"
 )
 
 // AnthropicClient implements the Provider interface for Anthropic's Claude API.
@@ -88,83 +90,138 @@ type anthropicResponse struct {
 }
 
 func (c *AnthropicClient) TestConnection(ctx context.Context) error {
-	reqBody := anthropicRequest{
-		Model: c.model, MaxTokens: 10,
-		Messages: []anthropicMessage{{Role: "user", Content: "Hi"}},
-	}
-	jsonBody, _ := json.Marshal(reqBody)
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/messages", bytes.NewReader(jsonBody))
-	if err != nil {
-		return NewAPIError("anthropic", 0, "無法建立請求", err)
-	}
-	c.setHeaders(req)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return NewAPIError("anthropic", 0, ErrNetworkError.Error(), ErrNetworkError)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return NewAPIError("anthropic", resp.StatusCode, ErrInvalidAPIKey.Error(), ErrInvalidAPIKey)
-	}
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return NewAPIError("anthropic", resp.StatusCode, string(body), nil)
-	}
-	return nil
+	return WithRetry(ctx, DefaultRetryConfig(), func(ctx context.Context) error {
+		reqBody := anthropicRequest{
+			Model: c.model, MaxTokens: 10,
+			Messages: []anthropicMessage{{Role: "user", Content: "Hi"}},
+		}
+		jsonBody, _ := json.Marshal(reqBody)
+		req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/messages", bytes.NewReader(jsonBody))
+		if err != nil {
+			return NewAPIError("anthropic", 0, "無法建立請求", err)
+		}
+		c.setHeaders(req)
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return NewAPIError("anthropic", 0, ErrNetworkError.Error(), ErrNetworkError)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return NewAPIError("anthropic", resp.StatusCode, ErrInvalidAPIKey.Error(), ErrInvalidAPIKey)
+		}
+		if resp.StatusCode >= 400 {
+			body, _ := io.ReadAll(resp.Body)
+			return NewAPIError("anthropic", resp.StatusCode, string(body), nil)
+		}
+		return nil
+	})
 }
 
 func (c *AnthropicClient) SendMessage(ctx context.Context, messages []Message) (*Response, error) {
-	var systemPrompt string
-	var anthropicMessages []anthropicMessage
-	for _, msg := range messages {
-		if msg.Role == "system" {
-			systemPrompt = msg.Content
-		} else {
-			anthropicMessages = append(anthropicMessages, anthropicMessage{Role: msg.Role, Content: msg.Content})
+	var result *Response
+
+	// Story 10-8 AC1: Log LLM request
+	logger.Debug("Anthropic API Request", map[string]interface{}{
+		"provider":   c.providerID,
+		"model":      c.model,
+		"max_tokens": c.maxTokens,
+		"num_messages": len(messages),
+	})
+
+	err := WithRetry(ctx, DefaultRetryConfig(), func(ctx context.Context) error {
+		var systemPrompt string
+		var anthropicMessages []anthropicMessage
+		for _, msg := range messages {
+			if msg.Role == "system" {
+				systemPrompt = msg.Content
+			} else {
+				anthropicMessages = append(anthropicMessages, anthropicMessage{Role: msg.Role, Content: msg.Content})
+			}
 		}
-	}
-	reqBody := anthropicRequest{Model: c.model, MaxTokens: c.maxTokens, Messages: anthropicMessages, System: systemPrompt}
-	jsonBody, _ := json.Marshal(reqBody)
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/messages", bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, NewAPIError("anthropic", 0, "無法建立請求", err)
-	}
-	c.setHeaders(req)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, NewAPIError("anthropic", 0, ErrNetworkError.Error(), ErrNetworkError)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return nil, NewAPIError("anthropic", resp.StatusCode, ErrInvalidAPIKey.Error(), ErrInvalidAPIKey)
-	}
-	if resp.StatusCode == 429 {
-		return nil, NewAPIError("anthropic", resp.StatusCode, ErrRateLimited.Error(), ErrRateLimited)
-	}
-	if resp.StatusCode >= 400 {
-		return nil, NewAPIError("anthropic", resp.StatusCode, string(body), nil)
-	}
-	var anthropicResp anthropicResponse
-	if err := json.Unmarshal(body, &anthropicResp); err != nil {
-		return nil, NewAPIError("anthropic", 0, "無法解析回應", err)
-	}
-	if len(anthropicResp.Content) == 0 {
-		return nil, NewAPIError("anthropic", 0, ErrEmptyResponse.Error(), ErrEmptyResponse)
-	}
-	var content strings.Builder
-	for _, cnt := range anthropicResp.Content {
-		if cnt.Type == "text" {
-			content.WriteString(cnt.Text)
+		reqBody := anthropicRequest{Model: c.model, MaxTokens: c.maxTokens, Messages: anthropicMessages, System: systemPrompt}
+		jsonBody, _ := json.Marshal(reqBody)
+
+		// Story 10-8 AC1: Log request details
+		logger.Debug("Anthropic request body", map[string]interface{}{
+			"system_prompt_length": len(systemPrompt),
+			"messages_count": len(anthropicMessages),
+		})
+
+		req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/messages", bytes.NewReader(jsonBody))
+		if err != nil {
+			logger.Error("Failed to create Anthropic request", map[string]interface{}{"error": err.Error()})
+			return NewAPIError("anthropic", 0, "無法建立請求", err)
 		}
+		c.setHeaders(req)
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			logger.Error("Anthropic network error", map[string]interface{}{"error": err.Error()})
+			return NewAPIError("anthropic", 0, ErrNetworkError.Error(), ErrNetworkError)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+
+		// Story 10-8 AC1: Log response status
+		logger.Debug("Anthropic API Response", map[string]interface{}{
+			"status_code": resp.StatusCode,
+			"body_length": len(body),
+		})
+
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			logger.Error("Anthropic authentication error", map[string]interface{}{"status_code": resp.StatusCode})
+			return NewAPIError("anthropic", resp.StatusCode, ErrInvalidAPIKey.Error(), ErrInvalidAPIKey)
+		}
+		if resp.StatusCode == 429 {
+			logger.Warn("Anthropic rate limited", map[string]interface{}{"status_code": resp.StatusCode})
+			return NewAPIError("anthropic", resp.StatusCode, ErrRateLimited.Error(), ErrRateLimited)
+		}
+		if resp.StatusCode >= 400 {
+			logger.Error("Anthropic API error", map[string]interface{}{
+				"status_code": resp.StatusCode,
+				"body": string(body),
+			})
+			return NewAPIError("anthropic", resp.StatusCode, string(body), nil)
+		}
+		var anthropicResp anthropicResponse
+		if err := json.Unmarshal(body, &anthropicResp); err != nil {
+			logger.Error("Failed to parse Anthropic response", map[string]interface{}{"error": err.Error()})
+			return NewAPIError("anthropic", 0, "無法解析回應", err)
+		}
+		if len(anthropicResp.Content) == 0 {
+			logger.Error("Anthropic empty response", nil)
+			return NewAPIError("anthropic", 0, ErrEmptyResponse.Error(), ErrEmptyResponse)
+		}
+		var content strings.Builder
+		for _, cnt := range anthropicResp.Content {
+			if cnt.Type == "text" {
+				content.WriteString(cnt.Text)
+			}
+		}
+
+		// Story 10-8 AC1: Log successful response
+		logger.Debug("Anthropic API Success", map[string]interface{}{
+			"model": anthropicResp.Model,
+			"input_tokens": anthropicResp.Usage.InputTokens,
+			"output_tokens": anthropicResp.Usage.OutputTokens,
+			"stop_reason": anthropicResp.StopReason,
+			"content_length": len(content.String()),
+		})
+
+		result = &Response{
+			Content: content.String(),
+			Metadata: map[string]interface{}{
+				"model": anthropicResp.Model, "input_tokens": anthropicResp.Usage.InputTokens,
+				"output_tokens": anthropicResp.Usage.OutputTokens, "stop_reason": anthropicResp.StopReason,
+			},
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
-	return &Response{
-		Content: content.String(),
-		Metadata: map[string]interface{}{
-			"model": anthropicResp.Model, "input_tokens": anthropicResp.Usage.InputTokens,
-			"output_tokens": anthropicResp.Usage.OutputTokens, "stop_reason": anthropicResp.StopReason,
-		},
-	}, nil
+
+	return result, nil
 }
 
 func (c *AnthropicClient) Stream(ctx context.Context, messages []Message, callback func(chunk string)) error {

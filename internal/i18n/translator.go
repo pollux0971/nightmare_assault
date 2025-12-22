@@ -19,11 +19,13 @@ type Translator struct {
 
 var (
 	globalTranslator *Translator
-	once             sync.Once
+	globalMu         sync.RWMutex
+	initOnce         sync.Once
+	initErr          error
 )
 
 // supportedLocales are the locales we support
-var supportedLocales = []string{"zh-TW", "en-US"}
+var supportedLocales = []string{"zh-TW", "zh-CN", "en-US"}
 
 // New creates a new Translator with the specified locale
 func New(locale string) (*Translator, error) {
@@ -46,23 +48,34 @@ func New(locale string) (*Translator, error) {
 	return t, nil
 }
 
-// InitGlobal initializes the global translator
+// InitGlobal initializes the global translator.
+// It uses sync.Once to ensure initialization happens only once.
+// If initialization fails, subsequent calls will return the cached error.
 func InitGlobal(locale string) error {
-	var err error
-	once.Do(func() {
-		globalTranslator, err = New(locale)
+	initOnce.Do(func() {
+		var t *Translator
+		t, initErr = New(locale)
+		if initErr == nil {
+			globalMu.Lock()
+			globalTranslator = t
+			globalMu.Unlock()
+		}
 	})
-	return err
+	return initErr
 }
 
-// GetGlobal returns the global translator instance
+// GetGlobal returns the global translator instance (thread-safe).
 func GetGlobal() *Translator {
+	globalMu.RLock()
+	defer globalMu.RUnlock()
 	return globalTranslator
 }
 
-// SetGlobal sets the global translator instance
+// SetGlobal sets the global translator instance (thread-safe).
 func SetGlobal(t *Translator) {
+	globalMu.Lock()
 	globalTranslator = t
+	globalMu.Unlock()
 }
 
 // loadTranslations loads translation file for a locale
@@ -269,6 +282,9 @@ func DetectSystemLanguage() string {
 	// Map to supported locales
 	if strings.HasPrefix(lang, "zh-TW") || strings.HasPrefix(lang, "zh-HK") {
 		return "zh-TW"
+	}
+	if strings.HasPrefix(lang, "zh-CN") || strings.HasPrefix(lang, "zh-SG") {
+		return "zh-CN"
 	}
 	if strings.HasPrefix(lang, "zh") {
 		return "zh-TW" // Default Chinese to Traditional

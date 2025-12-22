@@ -97,5 +97,13 @@ func (c *LangCommand) Description() string {
 
 // Usage returns the command usage
 func (c *LangCommand) Usage() string {
-	return "/lang [zh-TW|en-US]"
+	return "/lang [zh-TW|zh-CN|en-US]"
+}
+
+// Help returns the command help text
+func (c *LangCommand) Help() string {
+	if c.translator != nil {
+		return c.translator.T("commands.lang_desc")
+	}
+	return "Switch language (/lang zh-TW or /lang zh-CN or /lang en-US)"
 }

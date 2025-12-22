@@ -6,18 +6,44 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nightmare-assault/nightmare-assault/internal/chat"
 	"github.com/nightmare-assault/nightmare-assault/internal/npc/manager"
 )
+
+// ChatFlag is an alias to chat.ChatFlag to avoid import cycles.
+// All ChatFlag functionality is defined in the chat package.
+type ChatFlag = chat.ChatFlag
+
+// Re-export ChatFlag constants for backward compatibility
+const (
+	ChatFlagHallucination = chat.ChatFlagHallucination
+	ChatFlagHostile       = chat.ChatFlagHostile
+	ChatFlagRevelation    = chat.ChatFlagRevelation
+	ChatFlagPersuasion    = chat.ChatFlagPersuasion
+	ChatFlagLie           = chat.ChatFlagLie
+	ChatFlagContradiction = chat.ChatFlagContradiction
+)
+
+// ParseChatFlag converts a string to ChatFlag.
+// Re-exported from chat package for backward compatibility.
+// Returns (flag, true) if valid, or (ChatFlagHallucination, false) if invalid.
+func ParseChatFlag(s string) (ChatFlag, error) {
+	flag, ok := chat.ParseChatFlag(s)
+	if !ok {
+		return ChatFlagHallucination, fmt.Errorf("invalid chat flag: %s", s)
+	}
+	return flag, nil
+}
 
 // ChatMessage represents a single message in a chat session.
 // It contains all necessary information for display, processing, and semantic analysis.
 type ChatMessage struct {
-	ID             string                       `json:"id"`              // Unique message identifier
-	Speaker        string                       `json:"speaker"`         // Player ID or NPC ID
-	Content        string                       `json:"content"`         // Message text content
-	Timestamp      time.Time                    `json:"timestamp"`       // When the message was sent
-	Type           ChatMessageType              `json:"type"`            // Message type (normal, system, etc.)
-	Flags          []ChatFlag                   `json:"flags"`           // Semantic flags detected by JudgeAgent
+	ID             string                           `json:"id"`              // Unique message identifier
+	Speaker        string                           `json:"speaker"`         // Player ID or NPC ID
+	Content        string                           `json:"content"`         // Message text content
+	Timestamp      time.Time                        `json:"timestamp"`       // When the message was sent
+	Type           ChatMessageType                  `json:"type"`            // Message type (normal, system, etc.)
+	Flags          []ChatFlag                       `json:"flags"`           // Semantic flags detected by JudgeAgent
 	EmotionEffects map[string]*manager.EmotionDelta `json:"emotion_effects"` // NPC ID -> Emotion change
 }
 
@@ -95,90 +121,6 @@ func (t *ChatMessageType) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*t = parsed
-	return nil
-}
-
-// ChatFlag marks semantic properties detected by JudgeAgent during chat analysis.
-// These flags indicate potentially important player behaviors that affect NPC responses.
-type ChatFlag int
-
-const (
-	// ChatFlagHallucination indicates the player is claiming something that didn't happen
-	ChatFlagHallucination ChatFlag = iota
-
-	// ChatFlagHostile indicates aggressive or threatening language
-	ChatFlagHostile
-
-	// ChatFlagRevelation indicates sharing important information or secrets
-	ChatFlagRevelation
-
-	// ChatFlagPersuasion indicates attempting to convince or manipulate
-	ChatFlagPersuasion
-
-	// ChatFlagLie indicates the player is deliberately lying
-	ChatFlagLie
-
-	// ChatFlagContradiction indicates information contradicting what NPC knows
-	ChatFlagContradiction
-)
-
-// String returns the string representation of ChatFlag.
-func (f ChatFlag) String() string {
-	switch f {
-	case ChatFlagHallucination:
-		return "hallucination"
-	case ChatFlagHostile:
-		return "hostile"
-	case ChatFlagRevelation:
-		return "revelation"
-	case ChatFlagPersuasion:
-		return "persuasion"
-	case ChatFlagLie:
-		return "lie"
-	case ChatFlagContradiction:
-		return "contradiction"
-	default:
-		return fmt.Sprintf("unknown(%d)", f)
-	}
-}
-
-// ParseChatFlag converts a string to ChatFlag.
-// It performs case-insensitive matching.
-func ParseChatFlag(s string) (ChatFlag, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "hallucination":
-		return ChatFlagHallucination, nil
-	case "hostile":
-		return ChatFlagHostile, nil
-	case "revelation":
-		return ChatFlagRevelation, nil
-	case "persuasion":
-		return ChatFlagPersuasion, nil
-	case "lie":
-		return ChatFlagLie, nil
-	case "contradiction":
-		return ChatFlagContradiction, nil
-	default:
-		return ChatFlagHallucination, fmt.Errorf("invalid chat flag: %s", s)
-	}
-}
-
-// MarshalJSON implements json.Marshaler for ChatFlag.
-func (f ChatFlag) MarshalJSON() ([]byte, error) {
-	return json.Marshal(f.String())
-}
-
-// UnmarshalJSON implements json.Unmarshaler for ChatFlag.
-func (f *ChatFlag) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	parsed, err := ParseChatFlag(s)
-	if err != nil {
-		return err
-	}
-	*f = parsed
 	return nil
 }
 
@@ -273,11 +215,11 @@ func (m *ChatMessage) Copy() *ChatMessage {
 // ChatContext provides all necessary context for initializing a chat session.
 // Used by EnterWithContext() for full NPC/Knowledge integration.
 type ChatContext struct {
-	CurrentRoom    string                 // Current room/location name
-	PlayerID       string                 // Player identifier
-	NPCManager     interface{}            // *npc.Manager (avoid import cycle)
-	UpdateManager  interface{}            // *knowledge.UpdateManager (avoid import cycle)
-	RoomOccupants  map[string][]string    // Room -> Entity IDs mapping
+	CurrentRoom   string              // Current room/location name
+	PlayerID      string              // Player identifier
+	NPCManager    interface{}         // *npc.Manager (avoid import cycle)
+	UpdateManager interface{}         // *knowledge.UpdateManager (avoid import cycle)
+	RoomOccupants map[string][]string // Room -> Entity IDs mapping
 }
 
 // ==========================================================================
@@ -285,12 +227,126 @@ type ChatContext struct {
 // ==========================================================================
 
 // ChatSummary represents a summary of a chat session.
-// Story 5.4 AC2: ChatSummary 包含 MainTopics/KeyDecisions/RelationChanges
+// Story 5.4 AC2, AC3: ChatSummary contains all structured summary information
 type ChatSummary struct {
-	MainTopics       []string                       `json:"main_topics"`       // Main topics discussed
-	KeyDecisions     []string                       `json:"key_decisions"`     // Important decisions made
-	RelationChanges  map[string]*manager.EmotionDelta `json:"relation_changes"`  // Emotion changes per NPC
-	FactsShared      []string                       `json:"facts_shared"`      // Facts that were shared
-	Flags            []ChatFlag                     `json:"flags"`             // Significant flags encountered
-	NarrativeImpact  string                         `json:"narrative_impact"`  // How this chat impacts the story
+	// AC2: Main conversation elements
+	MainTopics      []string          `json:"main_topics"`      // Main topics discussed (2-3 key topics)
+	KeyDecisions    []string          `json:"key_decisions"`    // Important decisions made by player or NPCs
+	RelationChanges map[string]string `json:"relation_changes"` // NPC ID -> relationship change description
+
+	// AC3: Detailed information and narrative impact
+	FactsShared     []string `json:"facts_shared"`     // Facts/information shared during conversation
+	Flags           []string `json:"flags"`            // Special markers (lies, contradictions, revelations, etc.)
+	NarrativeImpact string   `json:"narrative_impact"` // Overall impact on main narrative (200-400 chars)
+
+	// AC4: Emotional and thematic elements
+	EmotionChanges   map[string]string `json:"emotion_changes,omitempty"`   // NPC ID -> emotion change summary
+	UnresolvedIssues []string          `json:"unresolved_issues,omitempty"` // Unresolved tensions or questions
+}
+
+// ==========================================================================
+// Story 5.1: Chat Time Flow Control - ChatConfig
+// ==========================================================================
+
+// ChatConfig provides configuration for chat overlay time flow and behavior.
+// Story 5.1 AC2, AC5: Configuration for time scale and chat turns per beat.
+type ChatConfig struct {
+	TimeScale        float64 `json:"time_scale"`          // Time scaling factor (default 0.1 = 10% of main timeline)
+	ChatTurnsPerBeat int     `json:"chat_turns_per_beat"` // Number of chat turns per main beat (default 10)
+	AllowInterrupts  bool    `json:"allow_interrupts"`    // Whether events can interrupt chat (Story 5.3)
+}
+
+// DefaultChatConfig returns a ChatConfig with default values.
+// AC2: chatTurnsPerBeat = 10 (default)
+// AC5: timeScale = 0.1 (default)
+func DefaultChatConfig() ChatConfig {
+	return ChatConfig{
+		TimeScale:        0.1,  // 10 chat turns = 1 main beat
+		ChatTurnsPerBeat: 10,   // Default cadence
+		AllowInterrupts:  true, // Story 5.3 AC3: Enable interrupts by default
+	}
+}
+
+// ==========================================================================
+// Story 5.2: Pending Events Mechanism - Event Data Structures
+// ==========================================================================
+
+// EventType defines the type of a pending chat event.
+// AC1: PendingChatEvent 包含 Type 欄位
+type EventType string
+
+const (
+	// EventTypeCombat represents combat-related events (attacks, enemy encounters)
+	EventTypeCombat EventType = "combat"
+
+	// EventTypeDiscovery represents discovery events (clues, items, secrets)
+	EventTypeDiscovery EventType = "discovery"
+
+	// EventTypeEnvironmental represents environmental changes (weather, time, location)
+	EventTypeEnvironmental EventType = "environmental"
+
+	// EventTypeSocial represents social events (NPC interactions, relationships)
+	EventTypeSocial EventType = "social"
+
+	// EventTypeDanger represents immediate danger events (traps, hazards)
+	EventTypeDanger EventType = "danger"
+
+	// EventTypeNPCAction represents NPC-initiated actions
+	EventTypeNPCAction EventType = "npc_action"
+
+	// EventTypeRevelation represents narrative revelations (plot twists, revelations)
+	EventTypeRevelation EventType = "revelation"
+)
+
+// String returns the string representation of EventType.
+func (e EventType) String() string {
+	return string(e)
+}
+
+// EventSeverity defines the severity/importance level of an event.
+// AC1: PendingChatEvent 包含 Severity 欄位
+type EventSeverity string
+
+const (
+	// SeverityLow represents low-priority background events
+	SeverityLow EventSeverity = "low"
+
+	// SeverityMedium represents noteworthy events
+	SeverityMedium EventSeverity = "medium"
+
+	// SeverityHigh represents important events
+	SeverityHigh EventSeverity = "high"
+
+	// SeverityCritical represents critical events requiring immediate attention
+	SeverityCritical EventSeverity = "critical"
+)
+
+// String returns the string representation of EventSeverity.
+func (e EventSeverity) String() string {
+	return string(e)
+}
+
+// EventEffects represents the effects of a pending chat event on game state.
+// AC1: PendingChatEvent 包含 Effects 欄位
+type EventEffects struct {
+	HPDelta       int               `json:"hp_delta,omitempty"`        // HP change (positive or negative)
+	SANDelta      int               `json:"san_delta,omitempty"`       // Sanity change (positive or negative)
+	StatusChanges map[string]bool   `json:"status_changes,omitempty"`  // Status effects to add/remove
+	ItemsGained   []string          `json:"items_gained,omitempty"`    // Items gained from event
+	ItemsLost     []string          `json:"items_lost,omitempty"`      // Items lost in event
+	CluesRevealed []string          `json:"clues_revealed,omitempty"`  // Clues revealed by event
+}
+
+// PendingChatEvent represents an event scheduled to trigger during a chat session.
+// AC1: PendingChatEvent 資料結構定義
+// Story 5.2: Complete event data structure with all required fields
+type PendingChatEvent struct {
+	ID             string        `json:"id"`                         // Unique event identifier
+	Type           EventType     `json:"type"`                       // Event type (combat, discovery, etc.)
+	Description    string        `json:"description"`                // Human-readable event description
+	TriggerBeat    int           `json:"trigger_beat"`               // Main timeline beat when event triggers
+	IsInterrupting bool          `json:"is_interrupting"`            // Whether event interrupts chat
+	Severity       EventSeverity `json:"severity"`                   // Event severity/importance
+	RequiredAction string        `json:"required_action,omitempty"`  // Action required from player (if any)
+	Effects        *EventEffects `json:"effects,omitempty"`          // Game state effects
 }

@@ -7,6 +7,9 @@ import (
 	"math/rand"
 	"strings"
 	"time"
+
+	"github.com/nightmare-assault/nightmare-assault/internal/game"
+	"github.com/nightmare-assault/nightmare-assault/internal/logger"
 )
 
 // ==========================================================================
@@ -68,20 +71,37 @@ func NewChoiceAgent(config AgentConfig) *ChoiceAgent {
 //  2. LLM generation (Fast Model, <450ms)
 //  3. Fallback to generic templates
 func (ca *ChoiceAgent) InvokeGenerate(ctx context.Context, request *ChoiceRequest) (*ChoiceResponse, error) {
+	// Story 10-8 AC1: Log agent invocation
+	logger.Debug("ChoiceAgent invoked", map[string]interface{}{
+		"scene_type": request.SceneType,
+		"difficulty": request.Difficulty,
+		"current_san": request.PlayerSAN,
+	})
+
 	// 1. Try template-driven generation (fast path)
 	templateOptions, err := ca.generateFromTemplate(request)
 	if err == nil && len(templateOptions) >= 2 {
+		logger.Debug("ChoiceAgent using template generation", map[string]interface{}{
+			"num_options": len(templateOptions),
+		})
 		return ca.enrichWithRiskAndHints(templateOptions, request), nil
 	}
 
 	// 2. Fall back to LLM generation (Fast Model)
+	logger.Debug("ChoiceAgent falling back to LLM generation", nil)
 	llmOptions, err := ca.generateFromLLM(ctx, request)
 	if err != nil {
+		logger.Warn("ChoiceAgent LLM generation failed, using fallback", map[string]interface{}{
+			"error": err.Error(),
+		})
 		// 3. Double fallback: use generic templates
 		return ca.generateFallbackOptions(request), nil
 	}
 
 	// Enrich with risk assessment and hints
+	logger.Debug("ChoiceAgent completed generation", map[string]interface{}{
+		"num_options": len(llmOptions),
+	})
 	return ca.enrichWithRiskAndHints(llmOptions, request), nil
 }
 
@@ -325,10 +345,13 @@ func (ca *ChoiceAgent) enrichWithRiskAndHints(options []Option, request *ChoiceR
 	}
 
 	// AC #3: Add hallucination option if applicable
-	if ca.shouldAddHallucination(request.PlayerSAN) {
-		halluOpt := ca.generateHallucinationOption(request)
+	// Story 7.5 AC5: Add 1-2 hallucination options when SAN < 20
+	// Code Review Fix 7-5-2: Use ControlLevel as single source of truth
+	halluCount := game.GetControlLevel(request.PlayerSAN).GetHallucinationCount()
+	for i := 0; i < halluCount; i++ {
+		halluOpt := ca.generateHallucinationOption(request, i)
 		response.Options = append(response.Options, halluOpt)
-		response.RiskLevels[halluOpt.Index] = RiskSafe // Hallucinations don't have real risk
+		response.RiskLevels[halluOpt.Index] = RiskLethal // Story 7.5 AC5: Severe consequences
 		response.HallucinationFlags[halluOpt.Index] = true
 	}
 
@@ -510,40 +533,71 @@ func (ca *ChoiceAgent) shouldAddHallucination(san int) bool {
 	}
 }
 
+// getHallucinationCount is deprecated.
+// Code Review Fix 7-5-2: Use game.GetControlLevel(san).GetHallucinationCount() instead.
+// This method is kept for backward compatibility but delegates to the canonical implementation.
+func (ca *ChoiceAgent) getHallucinationCount(san int) int {
+	return game.GetControlLevel(san).GetHallucinationCount()
+}
+
 // generateHallucinationOption generates a hallucination option
 //
-// AC #3: Hallucination types:
-//  - False Safety: Non-existent safe option
+// Story 7.5 AC5: Hallucination options that look reasonable but are dangerous.
+// Types:
+//  - False Safety: Non-existent safe option that looks appealing
 //  - Induced Danger: Follows auditory/visual hallucination
-//  - Absurd Action: Completely unreasonable action
-func (ca *ChoiceAgent) generateHallucinationOption(request *ChoiceRequest) Option {
-	hallucinationTypes := []string{
-		"false_safety",
-		"induced_danger",
-		"absurd_action",
+//  - Absurd Action: Seemingly reasonable but actually dangerous
+//  - Paranoid Defense: Overly defensive action against non-threat
+//
+// Story 7.5 AC5: Hallucinations are NOT marked to player (indistinguishable from real)
+// Story 7.5 AC5: Choosing hallucination causes severe HP/SAN loss
+func (ca *ChoiceAgent) generateHallucinationOption(request *ChoiceRequest, variant int) Option {
+	// Enhanced hallucination templates that look more reasonable
+	hallucinationSets := [][]struct {
+		text string
+		desc string
+	}{
+		// Set 0: False safety
+		{
+			{text: "找到出口離開", desc: "[幻覺] 虛假的出口"},
+			{text: "看到安全的房間", desc: "[幻覺] 不存在的安全區"},
+			{text: "發現救援信號", desc: "[幻覺] 虛假的希望"},
+		},
+		// Set 1: Induced danger
+		{
+			{text: "跟隨呼喊聲", desc: "[幻覺] 幻聽引導"},
+			{text: "追逐熟悉身影", desc: "[幻覺] 視覺欺騙"},
+			{text: "靠近發光物體", desc: "[幻覺] 誘導陷阱"},
+		},
+		// Set 2: Absurd but tempting
+		{
+			{text: "服用地上的藥", desc: "[幻覺] 危險物質"},
+			{text: "相信眼前的人", desc: "[幻覺] 虛假信任"},
+			{text: "打開神秘的盒子", desc: "[幻覺] 未知危險"},
+		},
+		// Set 3: Paranoid defense
+		{
+			{text: "攻擊可疑對象", desc: "[幻覺] 錯誤目標"},
+			{text: "立即逃離現場", desc: "[幻覺] 過度反應"},
+			{text: "砸碎鏡子", desc: "[幻覺] 破壞性行為"},
+		},
 	}
 
-	hType := hallucinationTypes[ca.rng.Intn(len(hallucinationTypes))]
+	// Select set based on scene type and variant
+	setIndex := (int(request.SceneType) + variant) % len(hallucinationSets)
+	optionSet := hallucinationSets[setIndex]
 
-	var text string
-	var desc string
+	// Randomly select from the set
+	option := optionSet[ca.rng.Intn(len(optionSet))]
 
-	switch hType {
-	case "false_safety":
-		text = "找到出口並離開"
-		desc = "[幻覺] 虛假安全"
-	case "induced_danger":
-		text = "跟隨神秘的聲音"
-		desc = "[幻覺] 誘導危險"
-	case "absurd_action":
-		text = "吃掉眼前的物體"
-		desc = "[幻覺] 荒謬行動"
-	}
+	// Generate index that blends with real options
+	// Use a unique but not obviously special index
+	optionIndex := len(request.ActiveRules) + 50 + variant
 
 	return Option{
-		Index:       len(request.ActiveRules) + 99, // Special index
-		Text:        text,
-		Description: desc,
+		Index:       optionIndex,
+		Text:        option.text,
+		Description: option.desc, // Internal only - NOT shown to player
 	}
 }
 

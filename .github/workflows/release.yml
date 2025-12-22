@@ -1,0 +1,170 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Release Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            output: nightmare-linux-amd64
+          - goos: darwin
+            goarch: amd64
+            output: nightmare-darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            output: nightmare-darwin-arm64
+          - goos: windows
+            goarch: amd64
+            output: nightmare-windows-amd64.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git describe
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Install build dependencies (Linux)
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+
+      - name: Extract version info
+        id: version
+        run: |
+          VERSION=$(git describe --tags --always --dirty)
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILD_TIME=$(date -u +"%Y-%m-%d %H:%M:%S")
+          GO_VERSION=$(go version | awk '{print $3}')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+          echo "build_time=$BUILD_TIME" >> $GITHUB_OUTPUT
+          echo "go_version=$GO_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          # CGO only needed for Linux (ALSA), macOS/Windows use purego
+          CGO_ENABLED: ${{ matrix.goos == 'linux' && '1' || '0' }}
+        run: |
+          mkdir -p dist
+          go build \
+            -ldflags="-s -w \
+              -X 'github.com/nightmare-assault/nightmare-assault/internal/version.Version=${{ steps.version.outputs.version }}' \
+              -X 'github.com/nightmare-assault/nightmare-assault/internal/version.Commit=${{ steps.version.outputs.commit }}' \
+              -X 'github.com/nightmare-assault/nightmare-assault/internal/version.BuildTime=${{ steps.version.outputs.build_time }}' \
+              -X 'github.com/nightmare-assault/nightmare-assault/internal/version.GoVersion=${{ steps.version.outputs.go_version }}'" \
+            -o dist/${{ matrix.output }} \
+            ./cmd/nightmare
+
+      - name: Verify binary
+        run: |
+          ls -lh dist/${{ matrix.output }}
+          file dist/${{ matrix.output }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output }}
+          path: dist/${{ matrix.output }}
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: List artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          ls -lh dist/
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Extract release notes
+        id: release_notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Create release notes
+          cat > release_notes.md << EOF
+          ## Nightmare Assault $VERSION
+
+          ### Downloads
+
+          Choose the appropriate binary for your platform:
+
+          - **Windows (64-bit)**: \`nightmare-windows-amd64.exe\`
+          - **macOS (Intel)**: \`nightmare-darwin-amd64\`
+          - **macOS (Apple Silicon)**: \`nightmare-darwin-arm64\`
+          - **Linux (64-bit)**: \`nightmare-linux-amd64\`
+
+          ### Installation
+
+          1. Download the binary for your platform
+          2. Make it executable (macOS/Linux): \`chmod +x nightmare-*\`
+          3. Run: \`./nightmare-*\` or \`nightmare-windows-amd64.exe\`
+
+          ### Verification
+
+          Check the downloaded file against \`checksums.txt\`:
+          \`\`\`bash
+          sha256sum -c checksums.txt
+          \`\`\`
+
+          ### What's Changed
+
+          See commit history for details.
+
+          ---
+
+          **Full Changelog**: https://github.com/nightmare-assault/nightmare-assault/commits/$VERSION
+          EOF
+
+          cat release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/*
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

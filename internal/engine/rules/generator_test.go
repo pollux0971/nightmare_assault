@@ -157,9 +157,15 @@ func TestGenerateRulesClueCount(t *testing.T) {
 	rs := g.GenerateRules(game.DifficultyHard)
 
 	for _, r := range rs.Rules {
-		// Should have 2-4 clues per rule
-		if len(r.Clues) < 2 || len(r.Clues) > 4 {
-			t.Errorf("Rule %s has %d clues, expected 2-4", r.ID, len(r.Clues))
+		// Story 7.2: Hard mode mixes true clues (2-4) with smoke screens (2-3)
+		// So total clues can be 4-7
+		if len(r.Clues) < 2 {
+			t.Errorf("Rule %s has %d clues, expected at least 2", r.ID, len(r.Clues))
+		}
+
+		// Verify true clues count is still 2-4
+		if len(r.TrueClues) < 2 || len(r.TrueClues) > 4 {
+			t.Errorf("Rule %s has %d true clues, expected 2-4", r.ID, len(r.TrueClues))
 		}
 	}
 }
@@ -175,11 +181,18 @@ func TestGenerateRulesMaxViolationsByDifficulty(t *testing.T) {
 		}
 	}
 
-	// Hard mode should have 1 max violation
+	// Hard mode should have 1 max violation (unless instant death)
+	// Story 7.2: Some rules may have instant death (MaxViolations=0)
 	rsHard := g.GenerateRules(game.DifficultyHard)
 	for _, r := range rsHard.Rules {
-		if r.MaxViolations != 1 {
-			t.Errorf("Hard mode rule %s has MaxViolations=%d, expected 1", r.ID, r.MaxViolations)
+		// Allow 0 for instant death rules, 1 for normal rules
+		if r.MaxViolations != 1 && r.MaxViolations != 0 {
+			t.Errorf("Hard mode rule %s has MaxViolations=%d, expected 1 or 0", r.ID, r.MaxViolations)
+		}
+
+		// If instant death, should have MaxViolations=0
+		if r.InstantDeathOK && r.MaxViolations != 0 {
+			t.Errorf("Hard mode instant death rule %s has MaxViolations=%d, expected 0", r.ID, r.MaxViolations)
 		}
 	}
 

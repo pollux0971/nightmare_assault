@@ -48,6 +48,7 @@ const (
 	StateSettings
 	StateThemeSelector
 	StateMaxTokensSettings
+	StateAudioSettings
 	StateGameSetup
 	StateStoryLoading
 	StateParallelLoading // NEW: Parallel generation loading
@@ -64,11 +65,12 @@ type Model struct {
 	prevState       AppState
 	config          *config.Config
 	gameConfig      *game.GameConfig // Game configuration from setup flow
-	apiSetup          views.APISetupModel
+	apiSetup          views.APISetupInterface
 	mainMenu          views.MainMenuModel
 	settingsMenu      views.SettingsMenuModel
 	themeSelector     views.ThemeSelectorModel
 	maxtokensSettings views.MaxTokensSettingsModel
+	audioSettings     views.AudioSettingsModel
 	gameSetup         views.GameSetupModel
 	storyLoading    views.StoryLoadingModel
 	parallelLoading views.ParallelLoadingModel // NEW: Parallel generation UI
@@ -183,6 +185,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				debug.Log("Audio system unavailable: %v (game will run in silent mode)", err)
 			} else {
 				debug.Log("Audio system initialized successfully")
+				// Start menu BGM immediately after initialization
+				if bgmPlayer := m.audioManager.BGMPlayer(); bgmPlayer != nil && bgmPlayer.IsEnabled() {
+					go bgmPlayer.Play(audio.GetBGMFilename(audio.BGMSceneMystery))
+				}
 			}
 
 			// Check for save files (placeholder - returns false for now)
@@ -190,14 +196,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if !cfg.IsConfigured() {
 				m.state = StateAPISetup
-				m.apiSetup = views.NewAPISetupModel(cfg)
+				m.apiSetup = views.NewTrinitySetupModel(cfg)
 				return m, m.apiSetup.Init()
 			} else {
 				m.state = StateMainMenu
 				m.mainMenu = views.NewMainMenuModel(m.version, m.hasSaveFiles)
-				// 只有 manager 初始化時才檢查更新
-				if m.updateManager != nil {
-					return m, checkForUpdates(m.updateManager)
+				// 只有 manager 初始化且配置啟用時才檢查更新
+				if m.updateManager != nil && m.config.Update.Enabled {
+					return m, checkForUpdates(m.updateManager, m.config.Update.CheckInterval)
 				}
 				return m, nil
 			}
@@ -225,6 +231,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case views.MaxTokensSavedMsg:
 		// MaxTokens was saved, go back to settings
+		m.state = StateSettings
+		return m, nil
+
+	case views.AudioSettingsSavedMsg:
+		// Audio settings were saved, go back to settings
 		m.state = StateSettings
 		return m, nil
 
@@ -394,7 +405,7 @@ func (m Model) passWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	switch m.state {
 	case StateAPISetup:
 		apiModel, c := m.apiSetup.Update(msg)
-		m.apiSetup = apiModel.(views.APISetupModel)
+		m.apiSetup = apiModel.(views.APISetupInterface)
 		cmd = c
 	case StateMainMenu:
 		menuModel, c := m.mainMenu.Update(msg)
@@ -414,6 +425,10 @@ func (m Model) passWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 		if m.maxtokensSettings.IsDone() {
 			m.state = StateSettings
 		}
+		cmd = c
+	case StateAudioSettings:
+		audioModel, c := m.audioSettings.Update(msg)
+		m.audioSettings = audioModel.(views.AudioSettingsModel)
 		cmd = c
 	case StateGameSetup:
 		setupModel, c := m.gameSetup.Update(msg)
@@ -440,7 +455,7 @@ func (m Model) updateCurrentState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.state {
 	case StateAPISetup:
 		apiModel, c := m.apiSetup.Update(msg)
-		m.apiSetup = apiModel.(views.APISetupModel)
+		m.apiSetup = apiModel.(views.APISetupInterface)
 		cmd = c
 
 		// Check if setup is done
@@ -468,6 +483,11 @@ func (m Model) updateCurrentState(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StateMaxTokensSettings:
 		maxTokensModel, c := m.maxtokensSettings.Update(msg)
 		m.maxtokensSettings = maxTokensModel.(views.MaxTokensSettingsModel)
+		cmd = c
+
+	case StateAudioSettings:
+		audioModel, c := m.audioSettings.Update(msg)
+		m.audioSettings = audioModel.(views.AudioSettingsModel)
 		cmd = c
 
 	case StateGameSetup:
@@ -542,7 +562,7 @@ func (m Model) handleSettingsSelect(msg views.SettingsSelectMsg) (tea.Model, tea
 	case views.SettingsActionAPI:
 		m.prevState = StateSettings
 		m.state = StateAPISetup
-		m.apiSetup = views.NewAPISetupModel(m.config)
+		m.apiSetup = views.NewTrinitySetupModel(m.config)
 		return m, m.apiSetup.Init()
 
 	case views.SettingsActionMaxTokens:
@@ -552,8 +572,10 @@ func (m Model) handleSettingsSelect(msg views.SettingsSelectMsg) (tea.Model, tea
 		return m, m.maxtokensSettings.Init()
 
 	case views.SettingsActionAudio:
-		// TODO: Audio settings (Epic 6)
-		return m, nil
+		m.prevState = StateSettings
+		m.state = StateAudioSettings
+		m.audioSettings = views.NewAudioSettingsModel(m.config, m.audioManager)
+		return m, m.audioSettings.Init()
 
 	case views.SettingsActionBack:
 		m.state = StateMainMenu
@@ -594,6 +616,9 @@ func (m Model) View() string {
 	case StateMaxTokensSettings:
 		return m.maxtokensSettings.View()
 
+	case StateAudioSettings:
+		return m.audioSettings.View()
+
 	case StateGameSetup:
 		return m.gameSetup.View()
 
@@ -633,7 +658,7 @@ type updateCheckResultMsg struct {
 }
 
 // checkForUpdates 背景檢查更新
-func checkForUpdates(manager *update.Manager) tea.Cmd {
+func checkForUpdates(manager *update.Manager, checkIntervalHours int) tea.Cmd {
 	return func() tea.Msg {
 		if manager == nil {
 			// 無 update manager - 靜默跳過檢查

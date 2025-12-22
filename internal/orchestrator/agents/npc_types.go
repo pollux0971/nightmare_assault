@@ -100,23 +100,31 @@ type GenerateResponse struct {
 //   - Personality: 3-5 personality keywords
 //   - Appearance: 50-100 character description
 //   - Backstory: 100-200 character background
+//   - Skills: NPC skills (Story 7.6)
+//   - Inventory: Items held by NPC (Story 7.6)
+//   - Secret: NPC's hidden secret (Story 7.6)
+//   - Introduction: Show-Don't-Tell introduction (100-200 chars, Story 7.6)
 //   - LinkedSeeds: Linked global seed IDs (0-2)
 //   - DeathTiming: Scheduled death beat (0 = no death)
 //   - Status: Current status (alive/dying/dead)
 //   - DeathBeat: Actual death beat
 //   - DeathReason: Reason for death
 type NPCInstance struct {
-	ID          string
-	Name        string
-	Archetype   NPCArchetype
-	Personality []string // 3-5 keywords
-	Appearance  string   // 50-100 chars
-	Backstory   string   // 100-200 chars
-	LinkedSeeds []string // GlobalSeed IDs (0-2)
-	DeathTiming int      // Scheduled death beat (0 = no death)
-	Status      NPCStatus
-	DeathBeat   int
-	DeathReason string
+	ID           string
+	Name         string
+	Archetype    NPCArchetype
+	Personality  []string // 3-5 keywords
+	Appearance   string   // 50-100 chars
+	Backstory    string   // 100-200 chars
+	Skills       []string // NPC skills (Story 7.6)
+	Inventory    []string // Items held by NPC (Story 7.6)
+	Secret       string   // NPC's hidden secret (Story 7.6)
+	Introduction string   // Show-Don't-Tell introduction (100-200 chars, Story 7.6)
+	LinkedSeeds  []string // GlobalSeed IDs (0-2)
+	DeathTiming  int      // Scheduled death beat (0 = no death)
+	Status       NPCStatus
+	DeathBeat    int
+	DeathReason  string
 }
 
 // DialogueRequest is the request for generating NPC dialogue
@@ -127,12 +135,14 @@ type NPCInstance struct {
 //   - Context: Current scene context
 //   - Tension: Current tension level (0-100)
 //   - CurrentBeat: Current beat number
+//   - NPCSAN: NPC's current SAN value (0-100) - Story 7.7 AC #4
 type DialogueRequest struct {
 	NPC            NPCInstance
 	PlayerQuestion string
 	Context        string
 	Tension        int
 	CurrentBeat    int
+	NPCSAN         int // Story 7.7: NPC SAN state for dialogue adjustment
 }
 
 // DialogueResponse is the response containing generated dialogue
@@ -153,11 +163,37 @@ type LLMGenerateResponse struct {
 	Personality []string `json:"personality"`
 	Appearance  string   `json:"appearance"`
 	Backstory   string   `json:"backstory"`
+	Skills      []string `json:"skills"`      // Story 7.6
+	Inventory   []string `json:"inventory"`   // Story 7.6
+	Secret      string   `json:"secret"`      // Story 7.6
 }
 
 // LLMDialogueResponse is the LLM's raw response for dialogue
 type LLMDialogueResponse struct {
 	Dialogue string `json:"dialogue"`
+}
+
+// IntroductionRequest is the request for generating NPC introduction (Story 7.6)
+//
+// Parameters:
+//   - NPC: The NPC instance (with all base information)
+//   - StoryContext: Current story context
+type IntroductionRequest struct {
+	NPC          NPCInstance
+	StoryContext StoryContext
+}
+
+// IntroductionResponse is the response containing generated introduction (Story 7.6)
+//
+// Contains:
+//   - Introduction: Show-Don't-Tell introduction (100-200 chars)
+type IntroductionResponse struct {
+	Introduction string
+}
+
+// LLMIntroductionResponse is the LLM's raw response for introduction (Story 7.6)
+type LLMIntroductionResponse struct {
+	Introduction string `json:"introduction"`
 }
 
 // ArchetypeInfo contains archetype definition information

@@ -11,10 +11,10 @@ func TestNewThemeManager(t *testing.T) {
 		t.Fatal("Expected non-nil ThemeManager")
 	}
 
-	// Should have 5 themes
+	// Should have 6 themes (Story 9-7 AC1)
 	themes := tm.ListThemes()
-	if len(themes) != 5 {
-		t.Errorf("Expected 5 themes, got %d", len(themes))
+	if len(themes) != 6 {
+		t.Errorf("Expected 6 themes, got %d", len(themes))
 	}
 
 	// Default theme should be midnight
@@ -71,12 +71,12 @@ func TestGetAllThemes(t *testing.T) {
 	tm := NewThemeManager()
 	themes := tm.GetAllThemes()
 
-	if len(themes) != 5 {
-		t.Errorf("Expected 5 themes, got %d", len(themes))
+	if len(themes) != 6 {
+		t.Errorf("Expected 6 themes, got %d", len(themes))
 	}
 
-	// Check order
-	expectedOrder := []string{"midnight", "blood_moon", "terminal_green", "silent_hill_fog", "high_contrast"}
+	// Check order (Story 9-7 AC1: main 3 themes first)
+	expectedOrder := []string{"midnight", "blood_moon", "abyss_blue", "terminal_green", "silent_hill_fog", "high_contrast"}
 	for i, theme := range themes {
 		if theme.ID != expectedOrder[i] {
 			t.Errorf("Expected theme %d to be '%s', got '%s'", i, expectedOrder[i], theme.ID)

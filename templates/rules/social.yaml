@@ -1,0 +1,202 @@
+version: "1.0"
+category: social
+rules:
+  - id: social_001
+    name: 對視禁忌規則
+    category: social
+    difficulty: medium
+    trigger_medium: 對視|眼神|盯著看
+    false_clue: 保持眼神接觸可以確認對方是否安全
+    survival_rule: 絕對不能和NPC對視超過3秒，會被標記為目標
+    punishment:
+      san_damage: 30
+      hp_damage: 15
+      effect: 被標記，NPC開始追蹤你
+    clue_hints:
+      - 所有人都低著頭走路
+      - 筆記：「不要看他們的眼睛」
+      - NPC戴著墨鏡或面具
+    tags:
+      - social
+      - eye_contact
+      - npc
+
+  - id: social_002
+    name: 回應規則
+    category: social
+    difficulty: hard
+    trigger_medium: 回答|應答|回應
+    false_clue: 保持禮貌回應可以獲得幫助
+    survival_rule: 如果NPC問你問題，絕對不能直接回答，必須用問題回應
+    punishment:
+      san_damage: 25
+      hp_damage: 20
+      effect: 話語被竊取，喉嚨受傷
+    clue_hints:
+      - 牆上寫著：「以問作答」
+      - 聽到對話：「你好嗎？」「你覺得呢？」
+      - 日記：「它們用問題偷走你的聲音」
+    tags:
+      - social
+      - conversation
+      - response
+
+  - id: social_003
+    name: 名字規則
+    category: social
+    difficulty: easy
+    trigger_medium: 名字|叫做|稱呼
+    false_clue: 告訴別人你的名字可以建立信任
+    survival_rule: 絕對不能告訴任何人你的真名，會被控制
+    punishment:
+      san_damage: 35
+      hp_damage: 0
+      effect: 真名被知曉，理智大幅下降，部分失去自主權
+    clue_hints:
+      - 告示：「名字即力量」
+      - 所有NPC都用代號相稱
+      - 聽到警告：「別說出你的名字」
+    tags:
+      - social
+      - name
+      - identity
+
+  - id: social_004
+    name: 肢體接觸規則
+    category: social
+    difficulty: medium
+    trigger_medium: 握手|擁抱|觸碰|拍
+    false_clue: 肢體接觸可以安撫恐慌的NPC
+    survival_rule: 不能主動觸碰任何NPC，會傳遞詛咒
+    punishment:
+      san_damage: 20
+      hp_damage: 25
+      effect: 詛咒轉移到你身上，持續受傷
+    clue_hints:
+      - 所有人都保持距離
+      - 告示：「請勿接觸」
+      - NPC說：「不要碰我！」
+    tags:
+      - social
+      - touch
+      - curse
+
+  - id: social_005
+    name: 求救回應規則
+    category: social
+    difficulty: hard
+    trigger_medium: 求救|幫忙|救命
+    false_clue: 回應求救是人性的表現
+    survival_rule: 聽到求救聲時，必須大聲說「我沒聽到」，沉默或幫助都會觸發陷阱
+    punishment:
+      san_damage: 30
+      hp_damage: 30
+      effect: 被拖入陷阱，受到雙重傷害
+    clue_hints:
+      - 牆上寫著：「聽不見」
+      - 日記：「那些去幫忙的人都沒回來」
+      - 聽到遠處有人喊：「我沒聽到！」
+    tags:
+      - social
+      - help
+      - trap
+
+  - id: social_006
+    name: 群體行動規則
+    category: social
+    difficulty: easy
+    trigger_medium: 跟隨|一起|群體
+    false_clue: 人多力量大，跟著群體更安全
+    survival_rule: 看到三人以上群體時，必須遠離，群體中有偽裝者
+    punishment:
+      san_damage: 25
+      hp_damage: 15
+      effect: 混入群體的怪物發動攻擊
+    clue_hints:
+      - 告示：「小心群體」
+      - 地板上有群體襲擊的血跡
+      - 廣播：「獨行者生存率更高」
+    tags:
+      - social
+      - group
+      - danger
+
+  - id: social_007
+    name: 微笑規則
+    category: social
+    difficulty: hell
+    trigger_medium: 微笑|笑|露齒
+    false_clue: 微笑可以緩解緊張氣氛
+    survival_rule: 絕對不能對NPC微笑，也不能回應他們的微笑，會被視為挑釁
+    punishment:
+      san_damage: 40
+      hp_damage: 40
+      effect: 被視為威脅，遭到致命攻擊
+    clue_hints:
+      - 所有NPC都面無表情
+      - 鏡子被打碎（避免看到自己的表情）
+      - 筆記：「笑容是宣戰」
+    tags:
+      - social
+      - expression
+      - smile
+
+  - id: social_008
+    name: 接受禮物規則
+    category: social
+    difficulty: medium
+    trigger_medium: 接受|拿取|收下
+    false_clue: 接受NPC的禮物可以獲得道具
+    survival_rule: 不能接受NPC主動給予的任何物品，會被下咒
+    punishment:
+      san_damage: 30
+      hp_damage: 10
+      effect: 物品被詛咒，持續受到SAN損傷
+    clue_hints:
+      - 告示：「拒絕饋贈」
+      - 地上有被丟棄的禮物盒
+      - NPC說：「請不要拒絕我的好意」（反向提示）
+    tags:
+      - social
+      - gift
+      - curse
+
+  - id: social_009
+    name: 數量確認規則
+    category: social
+    difficulty: hard
+    trigger_medium: 數|幾個|多少人
+    false_clue: 確認人數可以防止走失
+    survival_rule: 不能數NPC的數量，數了就會多出一個
+    punishment:
+      san_damage: 35
+      hp_damage: 20
+      effect: 額外的存在出現，並發動攻擊
+    clue_hints:
+      - 告示：「不要點名」
+      - 聽到：「我們有幾個人？」「不要數！」
+      - 照片上的人數總是模糊的
+    tags:
+      - social
+      - counting
+      - extra
+
+  - id: social_010
+    name: 信任規則
+    category: social
+    difficulty: hell
+    trigger_medium: 相信|信任|依靠
+    false_clue: 建立信任關係可以獲得同伴
+    survival_rule: 不能完全信任任何NPC，必須保持懷疑，信任會被利用
+    punishment:
+      san_damage: 45
+      hp_damage: 35
+      effect: 被信任的NPC背叛，受到嚴重傷害
+    clue_hints:
+      - 日記：「信任是最致命的弱點」
+      - 牆上血字：「懷疑一切」
+      - 聽到慘叫前的話：「我相信你...」
+    tags:
+      - social
+      - trust
+      - betrayal

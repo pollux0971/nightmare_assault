@@ -96,12 +96,13 @@ func NewNarrationAgent(config agents.AgentConfig) *NarrationAgent {
 // 根據 request 的類型分發到不同的模式：
 //   - *SkeletonRequest → InvokeSkeleton
 //   - *ContentRequest → InvokeContent
+//   - *AutoContentRequest → InvokeAutoContent (Story 7-2)
 //   - *OpeningRequest → InvokeOpening (未實現)
 //   - *EndingRequest → InvokeEnding (未實現)
 //
 // 參數：
 //   - ctx: 上下文，用於超時和取消控制
-//   - request: 請求對象，可以是 Skeleton/Content/Opening/Ending 請求
+//   - request: 請求對象，可以是 Skeleton/Content/Auto/Opening/Ending 請求
 //
 // 返回：
 //   - any: 對應模式的響應對象
@@ -112,6 +113,8 @@ func (a *NarrationAgent) Invoke(ctx context.Context, request any) (any, error) {
 		return a.InvokeSkeleton(ctx, req)
 	case *ContentRequest:
 		return a.InvokeContent(ctx, req)
+	case *AutoContentRequest:
+		return a.InvokeAutoContent(ctx, req)
 	default:
 		return nil, &agents.AgentError{
 			AgentName: a.config.Name,

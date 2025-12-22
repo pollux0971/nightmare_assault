@@ -337,7 +337,7 @@ func TestGenerateHallucinationOption(t *testing.T) {
 		PlayerSAN: 10,
 	}
 
-	option := agent.generateHallucinationOption(request)
+	option := agent.generateHallucinationOption(request, 0)
 
 	assert.NotEmpty(t, option.Text)
 	assert.Contains(t, option.Description, "[幻覺]")

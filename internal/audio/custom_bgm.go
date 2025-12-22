@@ -38,7 +38,7 @@ func NewCustomBGMManager(customDir string) *CustomBGMManager {
 	}
 }
 
-// ScanCustomDirectory scans for custom audio files
+// ScanCustomDirectory scans for custom audio files and auto-maps custom_<scene> files
 func (m *CustomBGMManager) ScanCustomDirectory() error {
 	// Create directory if doesn't exist
 	if err := os.MkdirAll(m.customDir, 0755); err != nil {
@@ -77,6 +77,9 @@ func (m *CustomBGMManager) ScanCustomDirectory() error {
 
 			m.availableFiles = append(m.availableFiles, filename)
 			log.Printf("[INFO] Found custom BGM: %s (%s, %.2f MB)", filename, ext, float64(info.Size())/(1024*1024))
+
+			// AC 10.2: Auto-map files with custom_<scene> naming convention
+			m.autoMapCustomFile(filename)
 		} else if ext == ".flac" || ext == ".m4a" {
 			log.Printf("[WARN] Unsupported format: %s (only .mp3, .ogg, .wav supported)", filename)
 		}
@@ -84,6 +87,49 @@ func (m *CustomBGMManager) ScanCustomDirectory() error {
 
 	log.Printf("[INFO] Found %d custom BGM files", len(m.availableFiles))
 	return nil
+}
+
+// autoMapCustomFile automatically maps files with custom_<scene> naming convention
+func (m *CustomBGMManager) autoMapCustomFile(filename string) {
+	// Extract base name without extension
+	baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
+	baseName = strings.ToLower(baseName)
+
+	// Check if it matches custom_<scene> pattern
+	if !strings.HasPrefix(baseName, "custom_") {
+		return
+	}
+
+	// Extract scene name
+	sceneName := strings.TrimPrefix(baseName, "custom_")
+
+	// Map scene name to MoodType
+	var mood engine.MoodType
+	switch sceneName {
+	case "explore", "exploration":
+		mood = engine.MoodExploration
+	case "tension":
+		mood = engine.MoodTension
+	case "safe":
+		mood = engine.MoodSafe
+	case "horror":
+		mood = engine.MoodHorror
+	case "mystery", "puzzle":
+		mood = engine.MoodMystery
+	case "ending":
+		mood = engine.MoodEnding
+	case "chase":
+		mood = engine.MoodTension // Map chase to tension
+	default:
+		log.Printf("[INFO] Unknown scene in custom_%s, skipping auto-map", sceneName)
+		return
+	}
+
+	// Only auto-map if not already set (don't override manual settings)
+	if _, exists := m.config.MoodToFile[mood]; !exists {
+		m.config.MoodToFile[mood] = filename
+		log.Printf("[INFO] Auto-mapped %s to %s mood", filename, mood.String())
+	}
 }
 
 // GetAvailableFiles returns list of available custom BGM files

@@ -179,6 +179,17 @@ func (a *NarrationAgent) buildOpeningPrompt(request OpeningRequest) string {
 	sb.WriteString(a.getDifficultyGuidance(request.Difficulty))
 	sb.WriteString("\n")
 
+	// Story 7.6: NPC 介紹
+	if len(request.NPCs) > 0 {
+		sb.WriteString("## NPC 隊友\n")
+		sb.WriteString("以下 NPC 將在序章中自然地登場，請將他們的介紹融入敘事中：\n\n")
+		for i, npc := range request.NPCs {
+			sb.WriteString(fmt.Sprintf("**NPC %d: %s**\n", i+1, npc.Name))
+			sb.WriteString(fmt.Sprintf("%s\n\n", npc.Introduction))
+		}
+		sb.WriteString("注意：請將 NPC 介紹自然地編織進序章敘事中，不要生硬地羅列。\n\n")
+	}
+
 	// 輸出要求
 	sb.WriteString("## 輸出要求\n")
 	sb.WriteString("請生成一個 JSON 格式的序章，包含以下字段：\n")

@@ -48,9 +48,13 @@ type GameSetupDoneMsg struct {
 // NewGameSetupModel creates a new game setup model.
 func NewGameSetupModel() GameSetupModel {
 	ti := textinput.New()
-	ti.Placeholder = "例如：廢棄醫院、詛咒洋館、末日地鐵站..."
+	ti.Placeholder = "例如：廢棄醫院的午夜值班、日式溫泉旅館的詭異規則..."
 	ti.Focus()
-	ti.CharLimit = 100
+	// Issue #6 Fix: CharLimit increased to allow ~300 tokens
+	// Chinese: 300 tokens ≈ 600 chars (0.5 tokens/char)
+	// English: 300 tokens ≈ 230 chars (1.3 tokens/char)
+	// Set to 600 to accommodate Chinese themes
+	ti.CharLimit = 600
 	ti.Width = 50
 
 	mi := textinput.New()
@@ -406,15 +410,46 @@ func (m GameSetupModel) renderThemeInput(titleStyle, hintStyle, errorStyle lipgl
 	b.WriteString("\n\n")
 	b.WriteString(hintStyle.Render("輸入一個恐怖主題來開始你的惡夢冒險"))
 	b.WriteString("\n")
-	b.WriteString(hintStyle.Render("(3-100 個字元)"))
+	b.WriteString(hintStyle.Render("(最多 300 tokens)"))
 	b.WriteString("\n\n")
 
 	b.WriteString(m.themeInput.View())
+
+	// Issue #6 Fix: Display real-time token count
+	// Use ValidateTheme to get accurate token count
+	currentTheme := m.themeInput.Value()
+	if currentTheme != "" {
+		// Note: ValidateTheme returns error if > 1000 tokens (ThemeMaxTokens)
+		// For display purposes, we estimate tokens
+		// Rough estimate: Chinese ~0.5 tokens/char, English ~1.3 tokens/char
+		// Use simple estimate: len(runes) / 1.5 as average
+		runeCount := len([]rune(currentTheme))
+		estimatedTokens := runeCount * 2 / 3 // Conservative estimate
+
+		tokenInfo := fmt.Sprintf("目前約 %d tokens", estimatedTokens)
+		if estimatedTokens > 300 {
+			b.WriteString("\n")
+			b.WriteString(errorStyle.Render("⚠ " + tokenInfo + " (超過建議上限 300)"))
+		} else {
+			b.WriteString("\n")
+			b.WriteString(hintStyle.Render(tokenInfo))
+		}
+	}
 
 	if m.themeError != "" {
 		b.WriteString("\n\n")
 		b.WriteString(errorStyle.Render("⚠ " + m.themeError))
 	}
+
+	// AC #1: 提供範例主題提示
+	b.WriteString("\n\n")
+	b.WriteString(hintStyle.Render("範例主題:"))
+	b.WriteString("\n")
+	b.WriteString(hintStyle.Render("  • 廢棄醫院的午夜值班"))
+	b.WriteString("\n")
+	b.WriteString(hintStyle.Render("  • 日式溫泉旅館的詭異規則"))
+	b.WriteString("\n")
+	b.WriteString(hintStyle.Render("  • 末日地鐵站的最後一班車"))
 
 	return b.String()
 }

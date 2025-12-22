@@ -200,9 +200,17 @@ type StoryBible struct {
 // 用於 Genesis Phase 生成引人入勝的序章（800-1200 字）：
 //   - StoryBible: 故事骨架（來自 Skeleton Mode）
 //   - Difficulty: 難度等級（影響規則暗示的隱晦程度）
+//   - NPCs: NPC instances with introductions (Story 7.6)
 type OpeningRequest struct {
 	StoryBible *StoryBible
 	Difficulty string // easy/normal/hard/hell
+	NPCs       []NPCInfo // Story 7.6: NPC instances with introductions
+}
+
+// NPCInfo contains NPC information for opening narrative (Story 7.6)
+type NPCInfo struct {
+	Name         string
+	Introduction string // Show-Don't-Tell introduction
 }
 
 // OpeningResponse 是序章生成響應

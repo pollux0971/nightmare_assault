@@ -5,7 +5,7 @@ rules:
     name: 不可直視怪物規則
     category: sensory
     difficulty: medium
-    trigger_medium: 直接用眼睛看見怪物的完整形體
+    trigger_medium: 直視|盯著|凝視|看著|眼睛看
     false_clue: 聽到恐怖的聲音會吸引怪物
     survival_rule: 遇到怪物時必須閉眼或避開視線，只能用餘光觀察
     punishment:
@@ -25,7 +25,7 @@ rules:
     name: 鏡子反射規則
     category: sensory
     difficulty: hard
-    trigger_medium: 通過鏡子間接觀察怪物
+    trigger_medium: 鏡子|照鏡子|看鏡子|鏡中|反射
     false_clue: 打破鏡子可以驅趕怪物
     survival_rule: 絕對不能看鏡子中的怪物，必須背對鏡子或摀住眼睛
     punishment:
@@ -46,7 +46,7 @@ rules:
     name: 聲音引導規則
     category: sensory
     difficulty: easy
-    trigger_medium: 跟隨怪物發出的聲音或呼喊聲
+    trigger_medium: 跟隨|走向|靠近|循聲|聲音
     false_clue: 保持安靜可以避開危險
     survival_rule: 聽到聲音時，必須往反方向逃離，絕不跟隨
     punishment:
@@ -66,7 +66,7 @@ rules:
     name: 黑暗中的呼吸規則
     category: sensory
     difficulty: hard
-    trigger_medium: 在完全黑暗中發出任何聲音（包括呼吸、腳步）
+    trigger_medium: 發出|呼吸|說話|腳步|聲音|喘氣
     false_clue: 使用手電筒可以驅趕黑暗中的東西
     survival_rule: 進入黑暗區域時必須屏住呼吸，不能發出任何聲音
     punishment:
@@ -83,3 +83,83 @@ rules:
       - breathing
       - sensory
       - stealth
+
+  - id: sensory_005
+    name: 觸覺禁忌規則
+    category: sensory
+    difficulty: medium
+    trigger_medium: 觸摸|碰觸|摸|手碰|接觸
+    false_clue: 觸摸牆壁可以感知危險
+    survival_rule: 不要用手直接觸摸任何表面，必須用物品隔開
+    punishment:
+      san_damage: 25
+      hp_damage: 20
+      effect: 觸感被污染，持續受到傷害
+    clue_hints:
+      - 所有人都戴著手套
+      - 告示：「勿觸」
+      - 牆壁上有腐蝕的痕跡
+    tags:
+      - touch
+      - surface
+      - sensory
+
+  - id: sensory_006
+    name: 氣味追蹤規則
+    category: sensory
+    difficulty: easy
+    trigger_medium: 聞|嗅|氣味|味道
+    false_clue: 跟隨香味可以找到食物
+    survival_rule: 聞到甜味時立刻屏住呼吸並離開，那是陷阱
+    punishment:
+      san_damage: 20
+      hp_damage: 15
+      effect: 吸入毒氣，視野模糊
+    clue_hints:
+      - 告示：「甜味即危險」
+      - 防毒面具散落各處
+      - 廣播：「聞到甜味立刻離開」
+    tags:
+      - smell
+      - trap
+      - sensory
+
+  - id: sensory_007
+    name: 溫度感知規則
+    category: sensory
+    difficulty: hard
+    trigger_medium: 冷|溫暖|熱|溫度|靠近熱源
+    false_clue: 溫暖的地方更安全
+    survival_rule: 感到溫暖時要立刻遠離，那是它們的棲息地
+    punishment:
+      san_damage: 30
+      hp_damage: 30
+      effect: 被熱源吸引，遭到伏擊
+    clue_hints:
+      - 日記：「它們喜歡溫暖」
+      - 暖氣全被關閉
+      - 溫暖區域有戰鬥痕跡
+    tags:
+      - temperature
+      - warmth
+      - sensory
+
+  - id: sensory_008
+    name: 平衡感失調規則
+    category: sensory
+    difficulty: hell
+    trigger_medium: 跑|奔跑|快速移動|加速
+    false_clue: 快速移動可以逃離危險
+    survival_rule: 絕對不能跑步，只能緩慢行走，跑步會擾亂空間
+    punishment:
+      san_damage: 40
+      hp_damage: 35
+      effect: 空間扭曲，摔倒並受到嚴重傷害
+    clue_hints:
+      - 地板異常光滑
+      - 告示：「緩行」
+      - 到處都是摔倒的痕跡
+    tags:
+      - movement
+      - balance
+      - sensory

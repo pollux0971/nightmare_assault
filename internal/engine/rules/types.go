@@ -172,6 +172,124 @@ type Condition struct {
 	Threshold int `json:"threshold,omitempty"`
 }
 
+// MappingLayer represents the complexity of logic chain for hidden rules.
+type MappingLayer int
+
+const (
+	// MappingLayerSingle represents single-step deduction (A→B)
+	MappingLayerSingle MappingLayer = iota
+	// MappingLayerDouble represents two-step deduction (A→B→C)
+	MappingLayerDouble
+	// MappingLayerTriple represents three+ step deduction (A→B→C→D)
+	MappingLayerTriple
+)
+
+// String returns the display name of the mapping layer.
+func (m MappingLayer) String() string {
+	switch m {
+	case MappingLayerSingle:
+		return "單重映射"
+	case MappingLayerDouble:
+		return "雙重映射"
+	case MappingLayerTriple:
+		return "三重+映射"
+	default:
+		return "未知"
+	}
+}
+
+// MarshalJSON implements json.Marshaler.
+func (m MappingLayer) MarshalJSON() ([]byte, error) {
+	switch m {
+	case MappingLayerSingle:
+		return json.Marshal("single")
+	case MappingLayerDouble:
+		return json.Marshal("double")
+	case MappingLayerTriple:
+		return json.Marshal("triple")
+	default:
+		return json.Marshal("single")
+	}
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (m *MappingLayer) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	switch s {
+	case "single":
+		*m = MappingLayerSingle
+	case "double":
+		*m = MappingLayerDouble
+	case "triple":
+		*m = MappingLayerTriple
+	default:
+		*m = MappingLayerSingle
+	}
+	return nil
+}
+
+// ClueClarity represents how clear the clues are for a hidden rule.
+type ClueClarity int
+
+const (
+	// ClueClarityDirect represents direct, obvious hints
+	ClueClarityDirect ClueClarity = iota
+	// ClueClarityMetaphor represents metaphorical or fragmented hints
+	ClueClarityMetaphor
+	// ClueClarityContradictory represents contradictory or misleading hints
+	ClueClarityContradictory
+)
+
+// String returns the display name of the clue clarity.
+func (c ClueClarity) String() string {
+	switch c {
+	case ClueClarityDirect:
+		return "直接提示"
+	case ClueClarityMetaphor:
+		return "隱喻/破碎"
+	case ClueClarityContradictory:
+		return "矛盾/誤導"
+	default:
+		return "未知"
+	}
+}
+
+// MarshalJSON implements json.Marshaler.
+func (c ClueClarity) MarshalJSON() ([]byte, error) {
+	switch c {
+	case ClueClarityDirect:
+		return json.Marshal("direct")
+	case ClueClarityMetaphor:
+		return json.Marshal("metaphor")
+	case ClueClarityContradictory:
+		return json.Marshal("contradictory")
+	default:
+		return json.Marshal("direct")
+	}
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (c *ClueClarity) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	switch s {
+	case "direct":
+		*c = ClueClarityDirect
+	case "metaphor":
+		*c = ClueClarityMetaphor
+	case "contradictory":
+		*c = ClueClarityContradictory
+	default:
+		*c = ClueClarityDirect
+	}
+	return nil
+}
+
 // Outcome represents the consequence of triggering a rule.
 type Outcome struct {
 	// Type of consequence
@@ -208,19 +326,134 @@ type Rule struct {
 	Discovered bool `json:"discovered"`
 	// Active indicates if this rule is currently in effect
 	Active bool `json:"active"`
+
+	// Story 7.2: Difficulty-aware fields
+	// MappingLayer defines the complexity of the logic chain (single, double, triple)
+	MappingLayer MappingLayer `json:"mapping_layer"`
+	// ClueClarity defines how clear the clues are (direct, metaphor, contradictory)
+	ClueClarity ClueClarity `json:"clue_clarity"`
+	// SmokeScreens are misleading clues designed to confuse the player
+	SmokeScreens []string `json:"smoke_screens,omitempty"`
+	// TrueClues are the actual valid clues (subset of Clues)
+	TrueClues []string `json:"true_clues,omitempty"`
+	// LogicChain represents the multi-step deduction chain (A→B→C)
+	LogicChain []string `json:"logic_chain,omitempty"`
+	// InstantDeathOK indicates if instant death without warning is allowed (Hell mode)
+	InstantDeathOK bool `json:"instant_death_ok"`
+}
+
+// HiddenRule represents the v2 design hidden rule structure with template integration.
+// Story 7.2: Enhanced rule structure with tiered clue revelation system.
+type HiddenRule struct {
+	// ID is the unique identifier for this rule
+	ID string `json:"id"`
+	// Name is the rule name (e.g., "倒影殺手")
+	Name string `json:"name"`
+	// Category is the rule category (Sensory, Spatial, Social)
+	Category string `json:"category"`
+	// Difficulty is the rule difficulty (easy, medium, hard, hell)
+	Difficulty string `json:"difficulty"`
+
+	// Trigger mechanism
+	// TriggerMedium describes what triggers this rule (e.g., "鏡子、水面")
+	TriggerMedium string `json:"trigger_medium"`
+	// TriggerCondition contains keywords for matching (e.g., "看|盯|凝視")
+	TriggerCondition string `json:"trigger_condition"`
+
+	// Rule content
+	// FalseClue is the misleading hint (smoke screen)
+	FalseClue string `json:"false_clue"`
+	// SurvivalRule is the correct survival method
+	SurvivalRule string `json:"survival_rule"`
+
+	// Punishment defines what happens when violated
+	Punishment HiddenRulePunishment `json:"punishment"`
+
+	// Clue system (Story 7.2: Tiered revelation)
+	// ClueHints contains tiered clues revealed at different beats
+	ClueHints []ClueHint `json:"clue_hints"`
+	// TimesHinted tracks how many times clues have been revealed
+	TimesHinted int `json:"times_hinted"`
+
+	// State tracking
+	// IsViolated indicates if this rule has been triggered
+	IsViolated bool `json:"is_violated"`
+	// RelatedRules lists IDs of related rules
+	RelatedRules []string `json:"related_rules,omitempty"`
+}
+
+// HiddenRulePunishment defines the consequences of violating a hidden rule.
+type HiddenRulePunishment struct {
+	// HPDamage is the HP damage dealt
+	HPDamage int `json:"hp_damage"`
+	// SANDamage is the SAN damage dealt
+	SANDamage int `json:"san_damage"`
+	// IsFatal indicates if this violation causes instant death
+	IsFatal bool `json:"is_fatal"`
+	// CustomEffect describes special effects
+	CustomEffect string `json:"custom_effect,omitempty"`
+}
+
+// ClueHint represents a tiered clue that's revealed at specific beats.
+// Story 7.2: Implements the tiered revelation system (Tier 1/2/3).
+type ClueHint struct {
+	// Tier is the clue level (1=vague, 2=specific, 3=near-truth)
+	Tier int `json:"tier"`
+	// BeatRange defines when this clue can be revealed [start, end]
+	BeatRange [2]int `json:"beat_range"`
+	// Hint is the actual clue text
+	Hint string `json:"hint"`
+	// Revealed tracks if this clue has been shown
+	Revealed bool `json:"revealed"`
+}
+
+// RuleViolation represents the result of violating a hidden rule.
+// Story 7.2: Used by RuleEngine.CheckViolation().
+type RuleViolation struct {
+	// RuleID is the ID of the violated rule
+	RuleID string `json:"rule_id"`
+	// RuleName is the name of the violated rule
+	RuleName string `json:"rule_name"`
+	// HPDamage is the HP damage dealt
+	HPDamage int `json:"hp_damage"`
+	// SANDamage is the SAN damage dealt
+	SANDamage int `json:"san_damage"`
+	// IsFatal indicates if this violation is fatal
+	IsFatal bool `json:"is_fatal"`
+	// ViolationNarrative describes what happened
+	ViolationNarrative string `json:"violation_narrative"`
+}
+
+// ClueToReveal represents a clue that should be revealed at the current beat.
+// Story 7.2: Used by RuleEngine.GetCluesForBeat().
+type ClueToReveal struct {
+	// RuleID is the ID of the rule this clue belongs to
+	RuleID string `json:"rule_id"`
+	// RuleName is the name of the rule
+	RuleName string `json:"rule_name"`
+	// Tier is the clue tier (1/2/3)
+	Tier int `json:"tier"`
+	// Hint is the clue text to reveal
+	Hint string `json:"hint"`
 }
 
 // NewRule creates a new rule with sensible defaults.
 func NewRule(id string, ruleType RuleType) *Rule {
 	return &Rule{
-		ID:            id,
-		Type:          ruleType,
-		Trigger:       Condition{},
-		Consequence:   Outcome{Type: ConsequenceWarning},
-		Clues:         make([]string, 0),
-		Priority:      5, // Default mid-priority
-		MaxViolations: 1, // Default: 1 warning before consequence
-		Active:        true,
+		ID:             id,
+		Type:           ruleType,
+		Trigger:        Condition{},
+		Consequence:    Outcome{Type: ConsequenceWarning},
+		Clues:          make([]string, 0),
+		Priority:       5, // Default mid-priority
+		MaxViolations:  1, // Default: 1 warning before consequence
+		Active:         true,
+		MappingLayer:   MappingLayerSingle,   // Default: simple single-step
+		ClueClarity:    ClueClarityDirect,    // Default: direct hints
+		SmokeScreens:   make([]string, 0),
+		TrueClues:      make([]string, 0),
+		LogicChain:     make([]string, 0),
+		InstantDeathOK: false, // Default: no instant death
 	}
 }
 

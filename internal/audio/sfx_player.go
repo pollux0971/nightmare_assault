@@ -199,7 +199,7 @@ func (p *SFXPlayer) findBestChannel(priority int) int {
 		chPriority := ch.priority
 		ch.mu.RUnlock()
 
-		if chPriority < lowestPriority {
+		if chPriority <= lowestPriority {
 			lowestPriority = chPriority
 			lowestPriorityIndex = i
 		}

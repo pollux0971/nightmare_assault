@@ -1,0 +1,406 @@
+package integration
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/nightmare-assault/nightmare-assault/internal/api/client"
+	"github.com/nightmare-assault/nightmare-assault/internal/trinity"
+)
+
+// TestEpic9_ProviderErrors tests handling of various provider errors
+// 測試 Provider 錯誤：API 超時、rate limit、錯誤響應
+func TestEpic9_ProviderErrors(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name          string
+		providerError error
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:          "API_Timeout",
+			providerError: ErrMockTimeout,
+			expectError:   true,
+			errorContains: "timeout",
+		},
+		{
+			name:          "Rate_Limit",
+			providerError: ErrMockRateLimit,
+			expectError:   true,
+			errorContains: "rate limit",
+		},
+		{
+			name:          "Invalid_Model",
+			providerError: ErrMockInvalidModel,
+			expectError:   true,
+			errorContains: "invalid model",
+		},
+		{
+			name:          "API_Error",
+			providerError: ErrMockAPIError,
+			expectError:   true,
+			errorContains: "API error",
+		},
+		{
+			name:          "Network_Error",
+			providerError: ErrMockNetworkError,
+			expectError:   true,
+			errorContains: "network error",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create router with mock providers
+	thinkingProvider := NewMockProvider("Thinking response")
+	reactiveProvider := NewMockProvider("Reactive response")
+	rapidProvider := NewMockProvider("Rapid response")
+
+	router := trinity.NewTrinityRouterWithProviders(
+		thinkingProvider,
+		reactiveProvider,
+		rapidProvider,
+		true, // fallback enabled
+		make(map[string]trinity.TierLevel), // no overrides
+	)
+
+	ctx := context.Background()
+
+	testCases := []struct {
+		name     string
+		messages []client.Message
+		agent    string
+	}{
+		{
+			name:     "Empty_Messages",
+			messages: []client.Message{},
+			agent:    "judge",
+		},
+		{
+			name: "Empty_Content",
+			messages: []client.Message{
+				{Role: "user", Content: ""},
+			},
+			agent: "choice",
+		},
+		{
+			name: "Very_Long_Message",
+			messages: []client.Message{
+				{Role: "user", Content: strings.Repeat("a", 10000)},
+			},
+			agent: "narration",
+		},
+		{
+			name: "Special_Characters",
+			messages: []client.Message{
+				{Role: "user", Content: "測試中文\n<think>標籤</think>\n特殊符號: !@#$%^&*()"},
+			},
+			agent: "judge",
+		},
+		{
+			name: "Unicode_Emoji",
+			messages: []client.Message{
+				{Role: "user", Content: "Test with emoji 🎮🔥💀👻"},
+			},
+			agent: "dream",
+		},
+		{
+			name: "Newlines_And_Tabs",
+			messages: []client.Message{
+				{Role: "user", Content: "Line 1\nLine 2\tTabbed\r\nWindows line ending"},
+			},
+			agent: "npc",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Request should not panic
+			resp, err := router.Route(ctx, tc.agent, tc.messages)
+
+			// Log result
+			if err != nil {
+				t.Logf("Edge case '%s' resulted in error: %v", tc.name, err)
+			} else {
+				t.Logf("Edge case '%s' handled successfully", tc.name)
+				AssertNotEqual(t, nil, resp, "Response should not be nil on success")
+			}
+
+			// Test should not panic - if we get here, edge case is handled
+		})
+	}
+}
+
+// TestEpic9_RecoveryFromErrors tests system recovery after errors
+// 測試錯誤恢復：系統在錯誤後能否正常恢復
+func TestEpic9_RecoveryFromErrors(t *testing.T) {
+	t.Parallel()
+
+	// Create router with mock providers
+	thinkingProvider := NewMockProvider("Thinking response")
+	reactiveProvider := NewMockProvider("Reactive response")
+	rapidProvider := NewMockProvider("Rapid response")
+
+	router := trinity.NewTrinityRouterWithProviders(
+		thinkingProvider,
+		reactiveProvider,
+		rapidProvider,
+		true, // fallback enabled
+		make(map[string]trinity.TierLevel), // no overrides
+	)
+
+	ctx := context.Background()
+	messages := TestMessages("user", "Test message")
+
+	// Test recovery sequence
+	t.Run("Recovery_Sequence", func(t *testing.T) {
+		// 1. Normal request
+		resp1, err1 := router.Route(ctx, "judge", messages)
+		AssertNoError(t, err1, "First request should succeed")
+		AssertNotEqual(t, nil, resp1, "First response should not be nil")
+
+		// 2. Simulate error (with current mock, can't actually fail)
+		// This documents the expected recovery behavior
+
+		// 3. Recovery - next request should work
+		resp2, err2 := router.Route(ctx, "judge", messages)
+		AssertNoError(t, err2, "Recovery request should succeed")
+		AssertNotEqual(t, nil, resp2, "Recovery response should not be nil")
+
+		// 4. Verify metrics show recovery
+		metrics := router.GetMetricsSummary()
+		t.Logf("Metrics after recovery: Total=%d, Success=%.2f%%",
+			metrics.ThinkingStats.TotalRequests,
+			metrics.ThinkingStats.SuccessRate*100)
+	})
+
+	t.Run("Metrics_Reset_After_Errors", func(t *testing.T) {
+		// Reset metrics
+		router.ResetMetrics()
+
+		// Make requests
+		for i := 0; i < 10; i++ {
+			router.Route(ctx, "choice", messages)
+		}
+
+		// Verify metrics are tracked
+		metrics := router.GetMetricsSummary()
+		AssertTrue(t, metrics.ReactiveStats.TotalRequests == 10,
+			"Should track all requests after reset")
+
+		// Reset again
+		router.ResetMetrics()
+		metricsAfterReset := router.GetMetricsSummary()
+		AssertEqual(t, int64(0), metricsAfterReset.ReactiveStats.TotalRequests,
+			"Metrics should reset to zero")
+	})
+}
+
+// // TestEpic9_RetryMechanism tests the retry mechanism for transient failures
+// // 測試重試機制：暫時性錯誤的重試邏輯
+// func TestEpic9_RetryMechanism(t *testing.T) {
+// 	t.Parallel()
+// 
+// 	// Create retry config
+// 	retryConfig := client.RetryConfig{
+// 		MaxAttempts:     3,
+// 		InitialDelay:    10 * time.Millisecond,
+// 		MaxDelay:        100 * time.Millisecond,
+// 		Multiplier:      2.0,
+// 		RetryableErrors: []error{ErrMockTimeout, ErrMockNetworkError},
+// 	}
+// 
+// 	routerConfig := trinity.RouterConfig{
+// 		ThinkingProvider: trinity.ProviderTierConfig{
+// 			ProviderID:  "mock",
+// 			Model:       "thinking",
+// 			MaxTokens:   16000,
+// 			Temperature: 0.4,
+// 		},
+// 		ReactiveProvider: trinity.ProviderTierConfig{
+// 			ProviderID:  "mock",
+// 			Model:       "reactive",
+// 			MaxTokens:   8000,
+// 			Temperature: 0.7,
+// 		},
+// 		RapidProvider: trinity.ProviderTierConfig{
+// 			ProviderID:  "mock",
+// 			Model:       "rapid",
+// 			MaxTokens:   4000,
+// 			Temperature: 0.9,
+// 		},
+// 		FallbackEnabled:    true,
+// 		AgentTierOverrides: make(map[string]trinity.TierLevel),
+// 		RetryConfig:        retryConfig,
+// 	}
+// 
+// 	router, err := trinity.NewTrinityRouter(routerConfig)
+// 	AssertNoError(t, err, "Failed to create router")
+// 
+// 	ctx := context.Background()
+// 	messages := TestMessages("user", "Retry test message")
+// 
+// 	t.Run("Retry_Success", func(t *testing.T) {
+// 		// With mock providers that don't fail, retry won't be triggered
+// 		// This test documents expected retry behavior
+// 		startTime := time.Now()
+// 		resp, err := router.Route(ctx, "judge", messages)
+// 		duration := time.Since(startTime)
+// 
+// 		AssertNoError(t, err, "Request should succeed")
+// 		AssertNotEqual(t, nil, resp, "Response should not be nil")
+// 		t.Logf("Request completed in %v", duration)
+// 	})
+// 
+// 	t.Run("Max_Retries_Exceeded", func(t *testing.T) {
+// 		// Document expected behavior when max retries exceeded
+// 		t.Log("When all retries fail, should return final error")
+// 	})
+// }
+
+// TestEpic9_GracefulDegradation tests graceful degradation behavior
+// 測試優雅降級：部分功能失敗時系統仍能運作
+func TestEpic9_GracefulDegradation(t *testing.T) {
+	t.Parallel()
+
+	routerConfig := trinity.RouterConfig{
+		ThinkingProvider: trinity.ProviderTierConfig{
+			ProviderID:  "mock",
+			Model:       "thinking",
+			MaxTokens:   16000,
+			Temperature: 0.4,
+		},
+		ReactiveProvider: trinity.ProviderTierConfig{
+			ProviderID:  "mock",
+			Model:       "reactive",
+			MaxTokens:   8000,
+			Temperature: 0.7,
+		},
+		RapidProvider: trinity.ProviderTierConfig{
+			ProviderID:  "mock",
+			Model:       "rapid",
+			MaxTokens:   4000,
+			Temperature: 0.9,
+		},
+		FallbackEnabled:    true,
+		AgentTierOverrides: make(map[string]trinity.TierLevel),
+	}
+
+	router, err := trinity.NewTrinityRouter(routerConfig)
+	AssertNoError(t, err, "Failed to create router")
+
+	ctx := context.Background()
+	messages := TestMessages("user", "Degradation test")
+
+	t.Run("Metrics_Unavailable", func(t *testing.T) {
+		// Even if metrics fail, routing should work
+		resp, err := router.Route(ctx, "judge", messages)
+		AssertNoError(t, err, "Routing should work even if metrics fail")
+		AssertNotEqual(t, nil, resp, "Should get response")
+
+		// Getting metrics should not panic
+		metrics := router.GetMetricsSummary()
+		t.Logf("Metrics available: %+v", metrics)
+	})
+
+	t.Run("ThinkingTags_Extraction_Fails", func(t *testing.T) {
+		// If thinking tag extraction fails, should still return response
+		// Create malformed thinking content
+		malformed := "<think>Unclosed thinking tag\nContent here"
+		messagesWithMalformed := []client.Message{
+			{Role: "user", Content: "test"},
+			{Role: "assistant", Content: malformed},
+		}
+
+		resp, err := router.Route(ctx, "judge", messagesWithMalformed)
+
+		// Should handle gracefully
+		if err != nil {
+			t.Logf("Malformed thinking tags resulted in error: %v", err)
+		} else {
+			t.Log("Malformed thinking tags handled gracefully")
+			AssertNotEqual(t, nil, resp, "Should get response")
+		}
+	})
+}
+
+// TestEpic9_ErrorMessages tests error message clarity
+// 測試錯誤訊息清晰度：確保錯誤訊息有幫助
+func TestEpic9_ErrorMessages(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name             string
+		setupConfig      func() trinity.RouterConfig
+		expectedErrorMsg string
+	}{
+		{
+			name: "Missing_Provider_Config",
+			setupConfig: func() trinity.RouterConfig {
+				return trinity.RouterConfig{
+					// Missing ThinkingProvider
+					ReactiveProvider: trinity.ProviderTierConfig{
+						ProviderID: "mock",
+						Model:      "reactive",
+					},
+					RapidProvider: trinity.ProviderTierConfig{
+						ProviderID: "mock",
+						Model:      "rapid",
+					},
+				}
+			},
+			expectedErrorMsg: "provider",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := tc.setupConfig()
+			_, err := trinity.NewTrinityRouter(config)
+
+			if err != nil {
+				// Verify error message is helpful
+				errorMsg := err.Error()
+				t.Logf("Error message: %s", errorMsg)
+
+				// Error should not be generic
+				AssertFalse(t, errorMsg == "error" || errorMsg == "failed",
+					"Error message should be descriptive")
+
+				// Should contain expected keyword
+				if tc.expectedErrorMsg != "" {
+					containsKeyword := strings.Contains(strings.ToLower(errorMsg),
+						strings.ToLower(tc.expectedErrorMsg))
+					AssertTrue(t, containsKeyword,
+						"Error message should mention: "+tc.expectedErrorMsg)
+				}
+			}
+		})
+	}
+}
+
+// mockErrorProvider simulates a provider that returns specific errors
+type mockErrorProvider struct {
+	err error
+}
+
+func (m *mockErrorProvider) SendMessage(ctx context.Context, messages []client.Message) (*client.Response, error) {
+	return nil, m.err
+}
+
+// newMockErrorProvider creates a provider that always returns the given error
+func newMockErrorProvider(err error) *mockErrorProvider {
+	return &mockErrorProvider{err: err}
+}
+
+// Common errors for testing
+var (
+	errRetryable    = errors.New("retryable error")
+	errNonRetryable = errors.New("non-retryable error")
+	errPermanent    = errors.New("permanent failure")
+)

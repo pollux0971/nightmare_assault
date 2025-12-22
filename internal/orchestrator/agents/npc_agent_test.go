@@ -565,3 +565,437 @@ func TestBuildDialoguePrompt(t *testing.T) {
 
 	t.Logf("Dialogue prompt length: %d", len(prompt))
 }
+
+// ==========================================================================
+// Story 7.7: Performance Test for 500ms Dialogue Generation
+// ==========================================================================
+
+// TestInvokeDialogue_PerformanceRequirement tests that dialogue generation
+// completes within the 500ms requirement (AC #1).
+//
+// Story 7.7 AC #1: "NPC Agent 應該使用 Fast Model 生成對話 (< 500ms)"
+// Note: With template fallback (no LLM), this should complete much faster.
+// The test verifies the timeout mechanism works correctly.
+func TestInvokeDialogue_PerformanceRequirement(t *testing.T) {
+	agent := NewNPCAgent(AgentConfig{
+		LLMClient: nil, // Uses template fallback
+	})
+
+	npc := NPCInstance{
+		ID:          "NPC-PERF",
+		Name:        "測試NPC",
+		Archetype:   NPCArchetypeSacrificial,
+		Personality: []string{"無助", "恐懼"},
+		Status:      NPCStatusAlive,
+	}
+
+	request := &DialogueRequest{
+		NPC:         npc,
+		Context:     "效能測試場景",
+		Tension:     60,
+		CurrentBeat: 5,
+		NPCSAN:      80,
+	}
+
+	// Run multiple iterations to ensure consistent performance
+	iterations := 10
+	var totalDuration time.Duration
+
+	for i := 0; i < iterations; i++ {
+		start := time.Now()
+		response, err := agent.InvokeDialogue(context.Background(), request)
+		duration := time.Since(start)
+		totalDuration += duration
+
+		require.NoError(t, err)
+		require.NotNil(t, response)
+		require.NotEmpty(t, response.Dialogue)
+
+		// Story 7.7 AC #1: Each call should complete within 500ms
+		if duration > 500*time.Millisecond {
+			t.Errorf("Iteration %d: Dialogue generation took %v, exceeds 500ms requirement", i+1, duration)
+		}
+	}
+
+	avgDuration := totalDuration / time.Duration(iterations)
+	t.Logf("Average dialogue generation time over %d iterations: %v", iterations, avgDuration)
+
+	// Average should be well under 500ms (with template fallback, expect <1ms)
+	if avgDuration > 100*time.Millisecond {
+		t.Logf("Warning: Average time %v is higher than expected for template fallback", avgDuration)
+	}
+}
+
+// ==========================================================================
+// Story 7.6: NPC Generation Enhancement Tests
+// ==========================================================================
+
+// TestNPCAgent_GenerateSkills tests the generateSkills method (Story 7.6)
+func TestNPCAgent_GenerateSkills(t *testing.T) {
+	agent := NewNPCAgent(AgentConfig{})
+
+	tests := []struct {
+		name      string
+		archetype NPCArchetype
+		wantMin   int
+	}{
+		{"Sacrificial", NPCArchetypeSacrificial, 1},
+		{"Knowledgeable", NPCArchetypeKnowledgeable, 2},
+		{"Hostile", NPCArchetypeHostile, 1},
+		{"Neutral", NPCArchetypeNeutral, 1},
+		{"Guide", NPCArchetypeGuide, 2},
+		{"Deceiver", NPCArchetypeDeceiver, 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			skills := agent.generateSkills(tt.archetype)
+			assert.GreaterOrEqual(t, len(skills), tt.wantMin,
+				"Should generate at least %d skills", tt.wantMin)
+			for _, skill := range skills {
+				assert.NotEmpty(t, skill, "Skills should not be empty")
+			}
+		})
+	}
+}
+
+// TestNPCAgent_GenerateInventory tests the generateInventory method (Story 7.6)
+func TestNPCAgent_GenerateInventory(t *testing.T) {
+	agent := NewNPCAgent(AgentConfig{})
+
+	tests := []struct {
+		name      string
+		archetype NPCArchetype
+		theme     string
+	}{
+		{"Hospital Sacrificial", NPCArchetypeSacrificial, "hospital"},
+		{"School Knowledgeable", NPCArchetypeKnowledgeable, "school"},
+		{"Village Guide", NPCArchetypeGuide, "village"},
+		{"Default Theme", NPCArchetypeNeutral, "unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inventory := agent.generateInventory(tt.archetype, tt.theme)
+			assert.NotEmpty(t, inventory, "Should generate at least one item")
+			for _, item := range inventory {
+				assert.NotEmpty(t, item, "Items should not be empty")
+			}
+			t.Logf("Generated inventory for %s/%s: %v", tt.archetype, tt.theme, inventory)
+		})
+	}
+}
+
+// TestNPCAgent_GenerateSecret tests the generateSecret method (Story 7.6)
+func TestNPCAgent_GenerateSecret(t *testing.T) {
+	agent := NewNPCAgent(AgentConfig{})
+
+	archetypes := []NPCArchetype{
+		NPCArchetypeSacrificial,
+		NPCArchetypeKnowledgeable,
+		NPCArchetypeHostile,
+		NPCArchetypeNeutral,
+		NPCArchetypeGuide,
+		NPCArchetypeDeceiver,
+	}
+
+	for _, archetype := range archetypes {
+		t.Run(archetype.String(), func(t *testing.T) {
+			secret := agent.generateSecret(archetype, "hospital")
+			assert.NotEmpty(t, secret, "Secret should not be empty")
+			runeCount := len([]rune(secret))
+			assert.GreaterOrEqual(t, runeCount, 20, "Secret should be at least 20 chars")
+			t.Logf("Generated secret for %s: %s", archetype, secret)
+		})
+	}
+}
+
+// TestNPCAgent_ValidateShowDontTell tests Show-Don't-Tell validation (Story 7.6 AC #2)
+func TestNPCAgent_ValidateShowDontTell(t *testing.T) {
+	agent := NewNPCAgent(AgentConfig{})
+
+	tests := []struct {
+		name         string
+		introduction string
+		wantValid    bool
+	}{
+		{
+			name:         "Valid - Action and Dialogue",
+			introduction: "他的手顫抖著，眼神不停閃避，握緊了口袋裡的鏽鑰匙。冷汗從額頭滑落，嘴唇緊抿成一條線，身體微微後退，彷彿隨時準備逃跑。",
+			wantValid:    true,
+		},
+		{
+			name:         "Valid - Showing through Items",
+			introduction: "她冷笑一聲，把染血的繃帶扔在桌上：「又一個不聽勸的。」眼神冷漠地掃過眾人，轉身離開時腳步沉重而堅定，完全不在乎周圍的反應。",
+			wantValid:    true,
+		},
+		{
+			name:         "Invalid - Direct Description '很恐懼'",
+			introduction: "他很恐懼，手中握著鏽鑰匙，不停地顫抖。",
+			wantValid:    false,
+		},
+		{
+			name:         "Invalid - Direct Description '是個'",
+			introduction: "她是個知識淵博的人，手中拿著古老的書籍。",
+			wantValid:    false,
+		},
+		{
+			name:         "Invalid - Too Short",
+			introduction: "他站在那裡。",
+			wantValid:    false,
+		},
+		{
+			name:         "Invalid - Contains '充滿恐懼'",
+			introduction: "他的眼神充滿恐懼，手中緊握著武器，身體不住地顫抖著，完全無法控制自己的情緒。",
+			wantValid:    false,
+		},
+		{
+			name:         "Invalid - Contains '他很'",
+			introduction: "他很冷靜地觀察周圍，手中拿著筆記本記錄著什麼，完全不受外界干擾。",
+			wantValid:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			valid := agent.validateShowDontTell(tt.introduction)
+			assert.Equal(t, tt.wantValid, valid, "Validation result mismatch")
+		})
+	}
+}
+
+// TestNPCAgent_GenerateTemplateIntroduction tests template introduction (Story 7.6 AC #2)
+func TestNPCAgent_GenerateTemplateIntroduction(t *testing.T) {
+	agent := NewNPCAgent(AgentConfig{})
+
+	archetypes := []NPCArchetype{
+		NPCArchetypeSacrificial,
+		NPCArchetypeKnowledgeable,
+		NPCArchetypeHostile,
+		NPCArchetypeNeutral,
+		NPCArchetypeGuide,
+		NPCArchetypeDeceiver,
+	}
+
+	for _, archetype := range archetypes {
+		t.Run(archetype.String(), func(t *testing.T) {
+			npc := NPCInstance{
+				Name:      "測試角色",
+				Archetype: archetype,
+				Inventory: []string{"測試物品", "神秘道具"},
+			}
+
+			request := &IntroductionRequest{
+				NPC: npc,
+				StoryContext: StoryContext{
+					Theme: "hospital",
+					Scene: "廢棄的醫院走廊",
+				},
+			}
+
+			response := agent.generateTemplateIntroduction(request)
+
+			// Check not empty
+			assert.NotEmpty(t, response.Introduction, "Introduction should not be empty")
+
+			// Check length (100-200 chars)
+			runeCount := len([]rune(response.Introduction))
+			assert.GreaterOrEqual(t, runeCount, 50, "Introduction should be at least 50 chars")
+
+			// Check Show-Don't-Tell validation
+			assert.True(t, agent.validateShowDontTell(response.Introduction),
+				"Template introduction should pass Show-Don't-Tell validation: %s",
+				response.Introduction)
+
+			t.Logf("%s introduction: %s", archetype, response.Introduction)
+		})
+	}
+}
+
+// TestNPCAgent_InvokeGenerate_WithNewFields tests NPC generation with Story 7.6 fields
+func TestNPCAgent_InvokeGenerate_WithNewFields(t *testing.T) {
+	agent := NewNPCAgent(AgentConfig{
+		LLMClient: nil, // Will use fallback
+	})
+
+	request := &GenerateRequest{
+		Archetype: NPCArchetypeGuide,
+		StoryContext: StoryContext{
+			Theme: "hospital",
+			Scene: "廢棄醫院的大廳",
+		},
+		GlobalSeeds:   []GlobalSeedInfo{},
+		PlotStructure: PlotStructure{
+			TotalBeats: 20,
+			Act1Range:  [2]int{1, 5},
+			Act2Range:  [2]int{6, 15},
+			Act3Range:  [2]int{16, 20},
+		},
+	}
+
+	ctx := context.Background()
+	response, err := agent.InvokeGenerate(ctx, request)
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+
+	npc := response.NPC
+
+	// AC #1: Check all new fields are populated
+	assert.NotEmpty(t, npc.Skills, "Skills should be populated")
+	assert.NotEmpty(t, npc.Inventory, "Inventory should be populated")
+	assert.NotEmpty(t, npc.Secret, "Secret should be populated")
+
+	// Check basic fields still work
+	assert.NotEmpty(t, npc.Name, "Name should be populated")
+	assert.NotEmpty(t, npc.Personality, "Personality should be populated")
+	assert.NotEmpty(t, npc.Appearance, "Appearance should be populated")
+	assert.NotEmpty(t, npc.Backstory, "Backstory should be populated")
+
+	t.Logf("Generated NPC with new fields:")
+	t.Logf("  Name: %s", npc.Name)
+	t.Logf("  Skills: %v", npc.Skills)
+	t.Logf("  Inventory: %v", npc.Inventory)
+	t.Logf("  Secret: %s", npc.Secret)
+}
+
+// TestNPCAgent_InvokeIntroduction_Fallback tests introduction generation (Story 7.6 AC #2)
+func TestNPCAgent_InvokeIntroduction_Fallback(t *testing.T) {
+	agent := NewNPCAgent(AgentConfig{
+		LLMClient: nil, // Will use fallback
+	})
+
+	npc := NPCInstance{
+		Name:        "李醫師",
+		Archetype:   NPCArchetypeGuide,
+		Personality: []string{"關心", "友善", "提示"},
+		Skills:      []string{"急救", "引導"},
+		Inventory:   []string{"急救包", "手電筒"},
+		Secret:      "曾經失去過重要的人，現在想幫助他人避免同樣的悲劇",
+	}
+
+	request := &IntroductionRequest{
+		NPC: npc,
+		StoryContext: StoryContext{
+			Theme: "hospital",
+			Scene: "廢棄醫院的急診室",
+		},
+	}
+
+	ctx := context.Background()
+	response, err := agent.InvokeIntroduction(ctx, request)
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+
+	// AC #2: Check introduction follows Show-Don't-Tell
+	assert.True(t, agent.validateShowDontTell(response.Introduction),
+		"Introduction should pass Show-Don't-Tell validation: %s",
+		response.Introduction)
+
+	// Check length (50-250 chars, relaxed for fallback)
+	runeCount := len([]rune(response.Introduction))
+	assert.GreaterOrEqual(t, runeCount, 50, "Introduction should be at least 50 chars")
+	assert.LessOrEqual(t, runeCount, 250, "Introduction should be at most 250 chars")
+
+	t.Logf("Generated introduction: %s", response.Introduction)
+}
+
+// TestNPCAgent_BuildIntroductionPrompt tests introduction prompt building (Story 7.6)
+func TestNPCAgent_BuildIntroductionPrompt(t *testing.T) {
+	agent := NewNPCAgent(AgentConfig{})
+
+	npc := NPCInstance{
+		Name:        "王醫生",
+		Archetype:   NPCArchetypeKnowledgeable,
+		Personality: []string{"神秘", "謹慎", "知情"},
+		Skills:      []string{"觀察", "解謎"},
+		Inventory:   []string{"破舊的筆記", "古老的鑰匙"},
+		Secret:      "知道這個地方的核心秘密，但受到某種約束無法直接揭露",
+	}
+
+	request := &IntroductionRequest{
+		NPC: npc,
+		StoryContext: StoryContext{
+			Theme: "hospital",
+			Scene: "醫院地下室",
+		},
+	}
+
+	prompt := agent.buildIntroductionPrompt(request)
+
+	// Check prompt contains key elements
+	assert.Contains(t, prompt, "Show, Don't Tell", "Should mention Show-Don't-Tell")
+	assert.Contains(t, prompt, "王醫生", "Should include NPC name")
+	assert.Contains(t, prompt, "破舊的筆記", "Should include inventory items")
+	assert.Contains(t, prompt, "100-200 字", "Should specify length requirement")
+	assert.Contains(t, prompt, "禁止直接描述", "Should forbid direct descriptions")
+	assert.Contains(t, prompt, "json", "Should request JSON format")
+
+	t.Logf("Introduction prompt length: %d", len(prompt))
+}
+
+// TestNPCAgent_MultipleNPCGeneration tests generating multiple NPCs (Story 7.6 AC #1)
+func TestNPCAgent_MultipleNPCGeneration(t *testing.T) {
+	agent := NewNPCAgent(AgentConfig{
+		LLMClient: nil, // Will use fallback
+	})
+
+	archetypes := []NPCArchetype{
+		NPCArchetypeGuide,
+		NPCArchetypeKnowledgeable,
+		NPCArchetypeNeutral,
+		NPCArchetypeSacrificial,
+	}
+
+	ctx := context.Background()
+
+	for i, archetype := range archetypes {
+		t.Run(archetype.String(), func(t *testing.T) {
+			request := &GenerateRequest{
+				Archetype: archetype,
+				StoryContext: StoryContext{
+					Theme: "hospital",
+					Scene: "廢棄醫院",
+				},
+				GlobalSeeds: []GlobalSeedInfo{
+					{ID: "GS-001", Description: "倒影的秘密"},
+					{ID: "GS-002", Description: "鏡子的真相"},
+				},
+				PlotStructure: PlotStructure{
+					TotalBeats: 20,
+					Act1Range:  [2]int{1, 5},
+					Act2Range:  [2]int{6, 15},
+					Act3Range:  [2]int{16, 20},
+				},
+			}
+
+			response, err := agent.InvokeGenerate(ctx, request)
+			require.NoError(t, err)
+
+			npc := response.NPC
+			assert.NotEmpty(t, npc.Name)
+			assert.NotEmpty(t, npc.Skills)
+			assert.NotEmpty(t, npc.Inventory)
+			assert.NotEmpty(t, npc.Secret)
+
+			// Generate introduction
+			introReq := &IntroductionRequest{
+				NPC:          npc,
+				StoryContext: request.StoryContext,
+			}
+
+			introResp, err := agent.InvokeIntroduction(ctx, introReq)
+			require.NoError(t, err)
+
+			assert.True(t, agent.validateShowDontTell(introResp.Introduction))
+
+			t.Logf("NPC %d (%s):", i+1, archetype)
+			t.Logf("  Name: %s", npc.Name)
+			t.Logf("  Skills: %v", npc.Skills)
+			t.Logf("  Inventory: %v", npc.Inventory)
+			t.Logf("  Secret: %s", npc.Secret)
+			t.Logf("  Introduction: %s", introResp.Introduction)
+		})
+	}
+}

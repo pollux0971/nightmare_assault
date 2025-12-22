@@ -1,0 +1,295 @@
+# Trinity & Guardian 完整配置範例
+# 包含所有可配置項目及詳細說明
+
+{
+  # 配置版本（用於未來的配置遷移）
+  "version": "1.0",
+
+  # 介面語言：zh-TW（繁體中文）、zh-CN（簡體中文）、en-US（英文）
+  "language": "zh-TW",
+
+  # 色彩主題：midnight、classic、solarized 等
+  "theme": "midnight",
+
+  # ============================================
+  # 音訊系統配置
+  # ============================================
+  "audio": {
+    # 主音量（0-100）
+    "master_volume": 100,
+
+    # 背景音樂開關
+    "bgm_enabled": true,
+
+    # 音效開關
+    "sfx_enabled": true,
+
+    # 背景音樂音量（0-100）
+    "bgm_volume": 50,
+
+    # 音效音量（0-100）
+    "sfx_volume": 80,
+
+    # 心跳音效（低生命值時）
+    "heartbeat_enabled": true,
+
+    # BGM 循環播放
+    "bgm_loop": true,
+
+    # 平台檢測（自動）：windows、linux、darwin
+    "platform": "linux",
+
+    # 平台特定音訊優化
+    "platform_settings": {
+      # 音訊緩衝區大小（樣本數）
+      # Windows: 2048, Linux: 1024, macOS: 512
+      "buffer_size": 1024,
+
+      # 採樣率（Hz）
+      "sample_rate": 48000,
+
+      # 聲道數（1=單聲道，2=立體聲）
+      "channel_count": 2,
+
+      # 低延遲模式（Linux/macOS 建議啟用）
+      "low_latency": true
+    }
+  },
+
+  # ============================================
+  # API 配置（向後兼容 + Trinity）
+  # ============================================
+  "api": {
+    # 傳統單一 Provider 配置（向後兼容）
+    # 當 trinity.enabled = false 時使用
+    "provider": {
+      "provider_id": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",
+      "max_tokens": 100000,
+      "temperature": 0.7
+    },
+
+    # API Keys 映射（支援多個 Provider）
+    # 也可以使用環境變數（優先級更高）
+    "api_keys": {
+      "anthropic": "sk-ant-api03-...",
+      "openrouter": "sk-or-v1-...",
+      "openai": "sk-...",
+      "google": "AIza...",
+      "cohere": "..."
+    },
+
+    # 最後測試時間（自動記錄）
+    "last_tested": {
+      "anthropic": "2025-01-15T10:30:00Z",
+      "openrouter": "2025-01-15T10:31:00Z"
+    }
+  },
+
+  # ============================================
+  # Trinity 三層模型系統配置
+  # ============================================
+  "trinity": {
+    # 啟用 Trinity 系統
+    # true: 使用三層模型架構
+    # false: 使用傳統 api.provider 配置
+    "enabled": true,
+
+    # ----------------------------------------
+    # Thinking Tier - 深度推理層
+    # ----------------------------------------
+    # 特性：最強推理能力、最高成本、較慢速度
+    # 用途：關鍵決策、複雜邏輯、戰略規劃
+    # 默認 Agents：JudgeAgent、SeedAgent、NPCAgent、ContradictionAgent
+    "thinking": {
+      # Provider ID：anthropic、openrouter、openai、google、cohere
+      "provider_id": "anthropic",
+
+      # 模型名稱（建議使用最強模型）
+      "model": "claude-opus-4-20250514",
+
+      # 最大生成 Token 數
+      "max_tokens": 16000,
+
+      # Temperature（0.0-1.0，推理任務建議較低）
+      "temperature": 0.4
+    },
+
+    # ----------------------------------------
+    # Reactive Tier - 動態響應層
+    # ----------------------------------------
+    # 特性：平衡性能與成本、中等速度
+    # 用途：劇情生成、NPC 對話、動態內容
+    # 默認 Agents：NarrationAgent、ChoiceAgent、ChatProcessor
+    "reactive": {
+      "provider_id": "anthropic",
+      "model": "claude-3-5-sonnet-20241022",
+      "max_tokens": 8000,
+      "temperature": 0.7
+    },
+
+    # ----------------------------------------
+    # Rapid Tier - 快速響應層
+    # ----------------------------------------
+    # 特性：最快速度、最低成本、簡單任務
+    # 用途：簡單查詢、快速響應、高頻操作
+    # 默認 Agents：DreamAgent、EnvironmentAgent、SummaryAgent
+    "rapid": {
+      "provider_id": "anthropic",
+      "model": "claude-3-haiku-20240307",
+      "max_tokens": 4000,
+      "temperature": 0.9
+    },
+
+    # ----------------------------------------
+    # Agent Tier 覆寫（可選）
+    # ----------------------------------------
+    # 允許用戶自訂特定 Agent 使用的 Tier
+    # 格式：{ "AgentName": "TierName" }
+    # TierName 必須是：Thinking、Reactive、Rapid
+    "agent_tier_overrides": {
+      # 範例：將 NarrationAgent 提升到 Thinking Tier
+      # 效果：提高故事敘述品質，但增加成本
+      "NarrationAgent": "Thinking",
+
+      # 範例：將 ChoiceAgent 降至 Rapid Tier
+      # 效果：加快選項生成速度，但可能降低品質
+      "ChoiceAgent": "Rapid",
+
+      # 範例：將 NPCAgent 保持在 Thinking Tier（默認）
+      "NPCAgent": "Thinking"
+    },
+
+    # ----------------------------------------
+    # Fallback 自動降級機制
+    # ----------------------------------------
+    # 啟用後，當高層級模型失敗時自動切換到低層級
+    # 降級順序：Thinking → Reactive → Rapid
+    #
+    # 優點：
+    # - 提高系統可用性
+    # - 自動處理 API 限流、故障
+    # - 降低因單一模型故障導致的遊戲中斷
+    #
+    # 缺點：
+    # - 可能降低輸出品質
+    # - 增加系統複雜度
+    "fallback_enabled": true,
+
+    # ----------------------------------------
+    # Guardian 玩家體驗保護系統
+    # ----------------------------------------
+    "guardian": {
+      # 啟用 Guardian 保護
+      "enabled": true,
+
+      # 低 HP 閾值（0-100，百分比）
+      # 當玩家 HP 低於此值時觸發增強模型保護
+      # 效果：提升難度調整的智能度，避免玩家過度受挫
+      "low_hp_threshold": 25,
+
+      # 低 SAN 閾值（0-100，百分比）
+      # 當玩家 SAN 低於此值時觸發增強模型保護
+      "low_san_threshold": 30,
+
+      # 最大連續死亡次數
+      # 達到此次數後觸發增強模型保護
+      # 效果：自動降低難度，提供更友善的遊戲體驗
+      "max_consecutive_deaths": 2
+    }
+  },
+
+  # ============================================
+  # 打字機效果配置
+  # ============================================
+  "typewriter": {
+    # 啟用打字機效果
+    "enabled": true,
+
+    # 打字速度（字元/秒，範圍：10-200）
+    "speed": 40,
+
+    # 顯示游標
+    "show_cursor": true
+  },
+
+  # ============================================
+  # 除錯配置
+  # ============================================
+  "debug": {
+    # 啟用除錯模式
+    "enabled": false,
+
+    # 記錄 API Key 資訊（遮罩處理）
+    "log_api_keys": false,
+
+    # 記錄 API 請求/響應
+    "log_requests": false
+  },
+
+  # ============================================
+  # 自動更新配置
+  # ============================================
+  "update": {
+    # 啟用自動更新檢查
+    "enabled": true,
+
+    # 檢查間隔（小時）
+    "check_interval": 24,
+
+    # 允許預發布版本
+    "allow_prerelease": false
+  }
+}
+
+# ============================================
+# 環境變數支援（優先級高於配置檔）
+# ============================================
+#
+# API Keys：
+# - ANTHROPIC_API_KEY: Anthropic API 金鑰
+# - OPENROUTER_API_KEY: OpenRouter API 金鑰
+# - OPENAI_API_KEY: OpenAI API 金鑰
+# - GOOGLE_API_KEY: Google AI API 金鑰
+# - COHERE_API_KEY: Cohere API 金鑰
+#
+# Provider 配置：
+# - NIGHTMARE_API_PROVIDER: Provider ID
+# - NIGHTMARE_API_MODEL: 模型名稱
+# - NIGHTMARE_API_MAX_TOKENS: 最大 Token 數
+# - NIGHTMARE_API_BASE_URL: 自訂 Base URL（可選）
+#
+# 除錯配置：
+# - NIGHTMARE_DEBUG: true/false
+# - NIGHTMARE_LOG_API_KEYS: true/false
+# - NIGHTMARE_LOG_REQUESTS: true/false
+
+# ============================================
+# 配置驗證規則
+# ============================================
+#
+# 1. Trinity 啟用時，三個 Tier 都必須配置：
+#    - provider_id（必填）
+#    - model（必填）
+#    - max_tokens（可選，默認根據 tier）
+#
+# 2. agent_tier_overrides 的值必須是有效的 Tier 名稱：
+#    - Thinking
+#    - Reactive
+#    - Rapid
+#
+# 3. Guardian 閾值範圍：
+#    - low_hp_threshold: 0-100
+#    - low_san_threshold: 0-100
+#    - max_consecutive_deaths: >= 0
+#
+# 4. 音訊配置範圍：
+#    - master_volume: 0-100
+#    - bgm_volume: 0-100
+#    - sfx_volume: 0-100
+#
+# 5. 打字機速度範圍：
+#    - speed: 10-200 字元/秒
+#
+# 6. 更新檢查間隔：
+#    - check_interval: >= 1 小時

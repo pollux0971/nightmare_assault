@@ -123,7 +123,7 @@ func TestChatFlag_String(t *testing.T) {
 		{"Persuasion", ChatFlagPersuasion, "persuasion"},
 		{"Lie", ChatFlagLie, "lie"},
 		{"Contradiction", ChatFlagContradiction, "contradiction"},
-		{"Unknown", ChatFlag(999), "unknown(999)"},
+		{"Unknown", ChatFlag("unknown_test"), "unknown_test"},
 	}
 
 	for _, tt := range tests {
@@ -601,5 +601,357 @@ func TestChatMessage_FlagCombinations(t *testing.T) {
 	}
 	if !msg.HasFlag(ChatFlagContradiction) {
 		t.Error("ChatFlagContradiction should still be present")
+	}
+}
+
+// ==========================================================================
+// Story 5.1: Chat Time Flow Control - ChatConfig Tests
+// ==========================================================================
+
+// TestChatConfig_DefaultValues tests default ChatConfig values.
+// AC2: chatTurnsPerBeat = 10 (預設)
+// AC5: timeScale = 0.1 (預設)
+func TestChatConfig_DefaultValues(t *testing.T) {
+	config := DefaultChatConfig()
+
+	if config.TimeScale != 0.1 {
+		t.Errorf("DefaultChatConfig() TimeScale = %f, want 0.1", config.TimeScale)
+	}
+
+	if config.ChatTurnsPerBeat != 10 {
+		t.Errorf("DefaultChatConfig() ChatTurnsPerBeat = %d, want 10", config.ChatTurnsPerBeat)
+	}
+
+	if config.AllowInterrupts != false {
+		t.Errorf("DefaultChatConfig() AllowInterrupts = %v, want false", config.AllowInterrupts)
+	}
+}
+
+// TestChatConfig_CustomValues tests creating ChatConfig with custom values.
+func TestChatConfig_CustomValues(t *testing.T) {
+	config := ChatConfig{
+		TimeScale:        0.05,
+		ChatTurnsPerBeat: 20,
+		AllowInterrupts:  true,
+	}
+
+	if config.TimeScale != 0.05 {
+		t.Errorf("ChatConfig TimeScale = %f, want 0.05", config.TimeScale)
+	}
+
+	if config.ChatTurnsPerBeat != 20 {
+		t.Errorf("ChatConfig ChatTurnsPerBeat = %d, want 20", config.ChatTurnsPerBeat)
+	}
+
+	if config.AllowInterrupts != true {
+		t.Errorf("ChatConfig AllowInterrupts = %v, want true", config.AllowInterrupts)
+	}
+}
+
+// ==========================================================================
+// Story 5.6 AC3: ChatSession JSON Serialization Tests
+// ==========================================================================
+
+// TestChatSession_JSONSerialization_Complete tests full ChatSession serialization.
+// Story 5.6 AC3: Test complete session with all fields.
+func TestChatSession_JSONSerialization_Complete(t *testing.T) {
+	// Create a complete chat session with all fields populated
+	now := time.Now()
+	original := &ChatSession{
+		ID:           "session_001",
+		Participants: []string{"player", "npc_001", "npc_002"},
+		Messages: []*ChatMessage{
+			{
+				ID:        "msg_001",
+				Speaker:   "player",
+				Content:   "你好，你們是誰？",
+				Timestamp: now,
+				Type:      ChatMessageNormal,
+				Flags:     []ChatFlag{},
+				EmotionEffects: map[string]*manager.EmotionDelta{
+					"npc_001": {Trust: 5, Fear: 0, Stress: 0},
+				},
+			},
+			{
+				ID:        "msg_002",
+				Speaker:   "npc_001",
+				Content:   "我是醫生，你不記得了嗎？",
+				Timestamp: now.Add(time.Second),
+				Type:      ChatMessageNormal,
+				Flags:     []ChatFlag{ChatFlagRevelation},
+				EmotionEffects: make(map[string]*manager.EmotionDelta),
+			},
+		},
+		StartBeat: 10,
+		EndBeat:   12,
+		Summary: &ChatSummary{
+			MainTopics:      []string{"初次見面", "身份確認"},
+			KeyDecisions:    []string{"決定信任醫生"},
+			RelationChanges: map[string]string{
+				"npc_001": "信任增加(+10), 恐懼減少(-5)",
+			},
+			FactsShared:     []string{"醫生聲稱認識玩家"},
+			Flags:           []string{"revelation"},
+			NarrativeImpact: "建立了與醫生的初步信任關係",
+		},
+		Interrupted:     false,
+		InterruptReason: "",
+		CreatedAt:       now,
+
+		// Legacy fields
+		SessionID:    "session_001",
+		Initiator:    "player",
+		ParticipantDetails: []ChatParticipant{
+			{ID: "player", Name: "玩家", IsPlayer: true, IsActive: true},
+			{ID: "npc_001", Name: "醫生", IsPlayer: false, IsActive: true},
+		},
+		StartTime:  now,
+		EndTime:    now.Add(2 * time.Minute),
+		Location:   "病房",
+		TurnsSpent: 20,
+	}
+
+	// Serialize to JSON
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Serialization failed: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("Serialized data should not be empty")
+	}
+
+	// Deserialize from JSON
+	var restored ChatSession
+	err = json.Unmarshal(data, &restored)
+	if err != nil {
+		t.Fatalf("Deserialization failed: %v", err)
+	}
+
+	// Verify core fields
+	if restored.ID != original.ID {
+		t.Errorf("ID = %v, want %v", restored.ID, original.ID)
+	}
+	if len(restored.Participants) != len(original.Participants) {
+		t.Errorf("Participants length = %v, want %v", len(restored.Participants), len(original.Participants))
+	}
+	if restored.StartBeat != original.StartBeat {
+		t.Errorf("StartBeat = %v, want %v", restored.StartBeat, original.StartBeat)
+	}
+	if restored.EndBeat != original.EndBeat {
+		t.Errorf("EndBeat = %v, want %v", restored.EndBeat, original.EndBeat)
+	}
+	if restored.Interrupted != original.Interrupted {
+		t.Errorf("Interrupted = %v, want %v", restored.Interrupted, original.Interrupted)
+	}
+
+	// Verify messages
+	if len(restored.Messages) != 2 {
+		t.Fatalf("Messages length = %v, want 2", len(restored.Messages))
+	}
+	if restored.Messages[0].ID != original.Messages[0].ID {
+		t.Errorf("Message[0].ID = %v, want %v", restored.Messages[0].ID, original.Messages[0].ID)
+	}
+	if restored.Messages[0].Content != original.Messages[0].Content {
+		t.Errorf("Message[0].Content = %v, want %v", restored.Messages[0].Content, original.Messages[0].Content)
+	}
+
+	// Verify message flags
+	if len(restored.Messages[1].Flags) != 1 {
+		t.Errorf("Message[1].Flags length = %v, want 1", len(restored.Messages[1].Flags))
+	}
+	if len(restored.Messages[1].Flags) > 0 && restored.Messages[1].Flags[0] != ChatFlagRevelation {
+		t.Errorf("Message[1].Flags[0] = %v, want %v", restored.Messages[1].Flags[0], ChatFlagRevelation)
+	}
+
+	// Verify summary
+	if restored.Summary == nil {
+		t.Fatal("Summary should not be nil")
+	}
+	if len(restored.Summary.MainTopics) != len(original.Summary.MainTopics) {
+		t.Errorf("Summary.MainTopics length = %v, want %v", len(restored.Summary.MainTopics), len(original.Summary.MainTopics))
+	}
+	if restored.Summary.NarrativeImpact != original.Summary.NarrativeImpact {
+		t.Errorf("Summary.NarrativeImpact = %v, want %v", restored.Summary.NarrativeImpact, original.Summary.NarrativeImpact)
+	}
+}
+
+// TestChatSession_JSONSerialization_Partial tests partial ChatSession serialization.
+// Story 5.6 AC3: Test session without optional fields (no summary, no interruption).
+func TestChatSession_JSONSerialization_Partial(t *testing.T) {
+	now := time.Now()
+	original := &ChatSession{
+		ID:           "session_002",
+		Participants: []string{"player", "npc_003"},
+		Messages: []*ChatMessage{
+			NewChatMessage("msg_001", "player", "快點跑！", ChatMessageNormal),
+		},
+		StartBeat:       15,
+		EndBeat:         16,
+		Summary:         nil, // No summary
+		Interrupted:     false,
+		InterruptReason: "",
+		CreatedAt:       now,
+	}
+
+	// Serialize
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Serialization failed: %v", err)
+	}
+
+	// Deserialize
+	var restored ChatSession
+	err = json.Unmarshal(data, &restored)
+	if err != nil {
+		t.Fatalf("Deserialization failed: %v", err)
+	}
+
+	// Verify
+	if restored.ID != original.ID {
+		t.Errorf("ID = %v, want %v", restored.ID, original.ID)
+	}
+	if restored.StartBeat != original.StartBeat {
+		t.Errorf("StartBeat = %v, want %v", restored.StartBeat, original.StartBeat)
+	}
+	if restored.EndBeat != original.EndBeat {
+		t.Errorf("EndBeat = %v, want %v", restored.EndBeat, original.EndBeat)
+	}
+	if restored.Summary != nil {
+		t.Error("Summary should be nil")
+	}
+	if restored.Interrupted != false {
+		t.Error("Interrupted should be false")
+	}
+	if restored.InterruptReason != "" {
+		t.Errorf("InterruptReason = %v, want empty string", restored.InterruptReason)
+	}
+}
+
+// TestChatSession_JSONSerialization_Interrupted tests interrupted session serialization.
+// Story 5.6 AC3: Test session that was interrupted with reason.
+func TestChatSession_JSONSerialization_Interrupted(t *testing.T) {
+	now := time.Now()
+	original := &ChatSession{
+		ID:              "session_003",
+		Participants:    []string{"player", "npc_004"},
+		Messages:        []*ChatMessage{},
+		StartBeat:       20,
+		EndBeat:         20,
+		Summary:         nil,
+		Interrupted:     true,
+		InterruptReason: "怪物突然出現",
+		CreatedAt:       now,
+	}
+
+	// Serialize
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Serialization failed: %v", err)
+	}
+
+	// Deserialize
+	var restored ChatSession
+	err = json.Unmarshal(data, &restored)
+	if err != nil {
+		t.Fatalf("Deserialization failed: %v", err)
+	}
+
+	// Verify interruption fields
+	if !restored.Interrupted {
+		t.Error("Interrupted should be true")
+	}
+	if restored.InterruptReason != "怪物突然出現" {
+		t.Errorf("InterruptReason = %v, want '怪物突然出現'", restored.InterruptReason)
+	}
+}
+
+// TestChatSession_JSONSerialization_RoundTrip tests round-trip consistency.
+// Story 5.6 AC3: Test JSON round-trip (serialize -> deserialize -> serialize).
+func TestChatSession_JSONSerialization_RoundTrip(t *testing.T) {
+	now := time.Now()
+	original := &ChatSession{
+		ID:           "session_004",
+		Participants: []string{"player", "npc_005"},
+		Messages: []*ChatMessage{
+			NewChatMessage("msg_001", "player", "測試訊息", ChatMessageNormal),
+		},
+		StartBeat: 30,
+		EndBeat:   32,
+		Summary: &ChatSummary{
+			MainTopics:      []string{"測試"},
+			NarrativeImpact: "無影響",
+		},
+		Interrupted: false,
+		CreatedAt:   now,
+	}
+
+	// First serialization
+	data1, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("First serialization failed: %v", err)
+	}
+
+	// First deserialization
+	var intermediate ChatSession
+	err = json.Unmarshal(data1, &intermediate)
+	if err != nil {
+		t.Fatalf("First deserialization failed: %v", err)
+	}
+
+	// Second serialization
+	data2, err := json.Marshal(&intermediate)
+	if err != nil {
+		t.Fatalf("Second serialization failed: %v", err)
+	}
+
+	// Second deserialization
+	var final ChatSession
+	err = json.Unmarshal(data2, &final)
+	if err != nil {
+		t.Fatalf("Second deserialization failed: %v", err)
+	}
+
+	// Verify consistency
+	if final.ID != original.ID {
+		t.Errorf("ID consistency check failed: %v != %v", final.ID, original.ID)
+	}
+	if final.StartBeat != original.StartBeat {
+		t.Errorf("StartBeat consistency check failed: %v != %v", final.StartBeat, original.StartBeat)
+	}
+	if final.EndBeat != original.EndBeat {
+		t.Errorf("EndBeat consistency check failed: %v != %v", final.EndBeat, original.EndBeat)
+	}
+}
+
+// TestChatSession_EmptyMessages tests session with no messages.
+func TestChatSession_EmptyMessages(t *testing.T) {
+	original := &ChatSession{
+		ID:           "session_empty",
+		Participants: []string{"player"},
+		Messages:     []*ChatMessage{},
+		StartBeat:    5,
+		EndBeat:      5,
+		CreatedAt:    time.Now(),
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Serialization failed: %v", err)
+	}
+
+	var restored ChatSession
+	err = json.Unmarshal(data, &restored)
+	if err != nil {
+		t.Fatalf("Deserialization failed: %v", err)
+	}
+
+	if restored.ID != original.ID {
+		t.Errorf("ID = %v, want %v", restored.ID, original.ID)
+	}
+	if restored.Messages == nil {
+		t.Error("Messages should not be nil")
+	}
+	if len(restored.Messages) != 0 {
+		t.Errorf("Messages length = %v, want 0", len(restored.Messages))
 	}
 }
