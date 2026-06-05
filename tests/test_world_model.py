@@ -85,6 +85,22 @@ def test_object_memory_via_loop(monkeypatch):
     assert loop._world.find("筆記本").state == "inspected"
 
 
+# ── 觀測投影：world_progress.world_model 含實體 + affordances_here ───────────
+def test_observation_projects_world_model(monkeypatch):
+    monkeypatch.setattr(C, "ENABLE_NARRATIVE_CONTROL", True)
+    from tests.test_narrative_v2_integration_nr import _loop
+    loop = _loop(); loop.start({"theme": "x", "npc_count": 1})
+    # 餵含物件的敘事 → 登記 object
+    loop._world_model_tick("我四處看", "桌上撿起一張員工證，旁邊有把鑰匙。")
+    wp = loop.world_progress()
+    wm = wp["world_model"]
+    assert "current_area" in wm and "entities" in wm and "affordances_here" in wm
+    labels = [e["label"] for e in wm["entities"] if e["kind"] == OBJECT]
+    assert any("員工證" in l for l in labels) and any("鑰匙" in l for l in labels)
+    # affordances_here 至少含一個 inspect
+    assert any(a["verb"] == INSPECT for a in wm["affordances_here"])
+
+
 # ── 不過度登記：純氛圍敘事(無前景化線索)不亂登記物件 ───────────────────────
 def test_no_over_registration():
     # 沒有「撿起/桌上/發現…」這類線索 → 不把氛圍裡的名詞當物件

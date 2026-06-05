@@ -766,7 +766,7 @@ class BeatLoop:
         from core.narrative.exit_resolver import WITHDRAW_STATES
         inv_state = "paused" if intent in WITHDRAW_STATES else "active"
         avail = [getattr(o, "text", "") for o in (getattr(dp, "suggested_options", None) or [])]
-        return {
+        out = {
             "current_area": scene,
             "known_areas": known,
             "world_facts": sorted(all_facts.keys()),
@@ -775,6 +775,26 @@ class BeatLoop:
             "investigation_state": inv_state,
             "available_next": avail,
         }
+        out["world_model"] = self._world_model_projection()    # WorldModel 投影（實體記憶）
+        return out
+
+    def _world_model_projection(self) -> dict:
+        """把 WorldModel 投影成觀測（AI 可看到世界記得哪些實體、可做什麼）。"""
+        w = getattr(self, "_world", None)
+        if w is None:
+            return {}
+        try:
+            ents = [{"id": e.id, "kind": e.kind, "label": e.label, "state": e.state}
+                    for e in w.entities.values()]
+            affs = [{"verb": a.verb, "entity_id": a.entity_id, "label": a.label}
+                    for a in w.affordances_here()]
+            by_kind = {}
+            for e in w.entities.values():
+                by_kind[e.kind] = by_kind.get(e.kind, 0) + 1
+            return {"current_area": w.current_area, "counts": by_kind,
+                    "entities": ents[:40], "affordances_here": affs[:20]}
+        except Exception:
+            return {}
 
     def _story_evidence_tick(self, action: str, narrative: str, reveal_changed: bool):
         """HB1：玩家做了有意義調查但本 beat reveal 無變化 → 保底產 hinted evidence 走 bridge。"""
