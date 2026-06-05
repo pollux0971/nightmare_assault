@@ -104,7 +104,8 @@ def test_world_progress_fields(monkeypatch):
     for k in ("current_area", "known_areas", "world_facts", "new_world_facts_this_beat",
               "changed_exits_this_beat", "investigation_state", "available_next"):
         assert k in wp, f"world_progress 缺 {k}"
-    assert wp["investigation_state"] in ("active", "paused")
-    # 撤退意圖 → investigation_state 變 paused
+    # investigation_state 現為 ExplorationMode（active_exploration/temporary_retreat/review_mode/…）
+    assert wp["investigation_state"] == "active_exploration"
+    # 撤退整理 → ReviewMode Lock：investigation_state 變 review_mode（撤離鎖）
     out2 = loop.step("先撤到外面整理線索，不結束本次調查")
-    assert out2["world_progress"]["investigation_state"] == "paused"
+    assert out2["world_progress"]["investigation_state"] == "review_mode"

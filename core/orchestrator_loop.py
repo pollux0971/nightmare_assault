@@ -310,6 +310,8 @@ class BeatLoop:
         self._escape_step = "none"               # 本 beat 離開意圖（預設無）
         self._exit_intent = "none"               # Player Sovereignty：離開意圖分類
         self._exit_affordance = None             # 本 beat exit affordance（唯 end_campaign 進結局）
+        self._exploration_mode = (self.bb.game_meta or {}).get(
+            "exploration_mode", "active_exploration")   # ReviewMode Lock（持久、跨 beat 黏著）
         # HB1/HB2/HE1：本 beat 揭露觀測（每 beat 重置）
         self._reveal_updates_this_beat = []
         self._evidence_events_this_beat = 0
@@ -331,17 +333,31 @@ class BeatLoop:
         # 2. ProgressKernel：決定本 beat 推進的事件（EventPatch + obligations）
         # NegativeIntentGuard（P0）：把玩家明確拒絕的目標傳進 kernel，避免選到「移動到該目標」的事件
         _negated = []
+        review_locked = False
         if ENABLE_NARRATIVE_CONTROL:
             try:
                 from core.narrative.negative_intent import negated_targets
                 _negated = negated_targets(player_decision)
             except Exception:
                 _negated = []
+            # ExplorationMode / ReviewMode Lock（撤離鎖）：先算本 beat 模式，餵進 kernel 停止自動推進
+            try:
+                from core.narrative.exit_resolver import resolve_exit_intent, resolve_exit_affordance
+                from core.narrative.exploration_mode import resolve_mode, is_review_locked
+                self._exit_intent = resolve_exit_intent(player_decision)
+                self._exit_affordance = resolve_exit_affordance(player_decision)
+                self._escape_step = self._exit_intent
+                prev_mode = (self.bb.game_meta or {}).get("exploration_mode", "active_exploration")
+                self._exploration_mode = resolve_mode(player_decision, prev_mode, self._exit_affordance)
+                review_locked = is_review_locked(self._exploration_mode)
+                self.bb.game_meta = {**self.bb.game_meta, "exploration_mode": self._exploration_mode}
+            except Exception as e:
+                log.warning("exploration mode resolve skipped: %s", e)
         _p("kernel")
         progress = self._kernel.resolve_player_action(
             player_decision, gs,
             warden={"directive": verdict.directive_to_story, "rule_violation": verdict.rule_violation,
-                    "negated_targets": _negated},
+                    "negated_targets": _negated, "review_mode": review_locked},
         )
 
         # 3. story = realizer（context 只給 revealed + obligations，防暴雷）
@@ -363,11 +379,7 @@ class BeatLoop:
                 log.warning("narrative control (reveal/downgrade) skipped: %s", e)
             # NR2：答債——分類玩家提問，債≥2 時加償還義務進 story context
             self._answer_debt_tick(player_decision, ctx)
-            # Player Sovereignty：解析成 exit affordance（ExitResolver 不直接 ending；只 end_campaign 進結局）
-            from core.narrative.exit_resolver import resolve_exit_intent, resolve_exit_affordance
-            self._exit_intent = resolve_exit_intent(player_decision)
-            self._exit_affordance = resolve_exit_affordance(player_decision)
-            self._escape_step = self._exit_intent     # observation 沿用此欄位
+            # （exit affordance / exploration_mode 已在 kernel 呼叫前算好——見上方撤離鎖）
             # NR5：母題冷卻——換場景重置；把超用母題注入 context（story 須演化或換意象）
             self._motif_cooldown_pre(gs, ctx)
             # NR6：動機心跳——逾期未提動機 → 加提醒義務
@@ -390,20 +402,27 @@ class BeatLoop:
                              "progress_state": bridge.to_snapshot_dict(self._game_state)}
 
         # NR0/HB1：揭露橋接——kernel 線索 → bridge；若本 beat 無 reveal 變化且玩家在調查 → 保底 evidence
-        if ENABLE_NARRATIVE_CONTROL and self._reveal_ledger is not None:
+        # 撤離鎖：review/retreat 模式**不得觸發 reveal_updates**（玩家在整理，不在調查）。
+        if ENABLE_NARRATIVE_CONTROL and self._reveal_ledger is not None and not review_locked:
             _changed = self._revelation_tick(self._game_state)
             self._story_evidence_tick(player_decision, narrative, _changed)
         # P0 WorldStateFact：從 story 敘事抽世界事實（NPC fact 由 bridge_npc_evidence 處理）
         if ENABLE_NARRATIVE_CONTROL:
-            self._world_facts_tick(narrative, source="story")
-            self._world_model_tick(player_decision, narrative, dp)   # WorldModel：實體記憶
+            # 撤離鎖：review 模式不新增 world_fact（requirement 4：只生 notes，不新增 fact）
+            if not review_locked:
+                self._world_facts_tick(narrative, source="story")
+            # WorldModel：實體記憶（review 模式只允許檢查已知物件，不新增 object、不覆蓋安全區）
+            self._world_model_tick(player_decision, narrative, dp, review_locked=review_locked)
 
         self.last_story = narrative
         # Player Sovereignty：離開意圖處理（ambiguous → ExitOffer；retreat → 降危險；皆不自動收束）
         _nc_on = ENABLE_NARRATIVE_CONTROL and getattr(self, "_narrative_contract", None)
         if _nc_on:
             # 用**已套用 patch 的** self._game_state（gs 是 pre-apply 舊物件，會覆蓋本 beat 進度）
-            dp = self._apply_exit_intent(self._exit_intent, self._game_state, dp)
+            if review_locked:
+                dp = self._apply_review_lock(player_decision, dp)   # 撤離鎖：安全區 + review 四選一
+            else:
+                dp = self._apply_exit_intent(self._exit_intent, self._game_state, dp)
         self._safe_point(narrative, dp)
         self._log_beat(progress)
 
@@ -633,6 +652,37 @@ class BeatLoop:
             log.warning("apply exit intent skipped: %s", e)
         return dp
 
+    def _apply_review_lock(self, player_decision: str, dp):
+        """撤離鎖：玩家在安全區整理 → 確保 current_area=安全區、降危險、dp 換成 ReviewMode 四選一。
+
+        - WorldModel.current_area 切到結構性安全區（withdraw durability：不被 kernel 推回站內）。
+        - 「根據已知線索整理」→ 只生 notes（用既有 ledger/world_facts，不新增 fact/truth）。
+        - available_next = return_inside / review_notes / inspect_inventory / end_campaign。
+        """
+        try:
+            from core.world.model import SAFE_ZONE_AREA_ID
+            from core.narrative.exploration_mode import (
+                build_review_decision_point, wants_notes, review_notes_text)
+            gs = self._game_state
+            if self._world is not None and self._world.current_area != SAFE_ZONE_AREA_ID:
+                self._world.withdraw_to_safe_zone()
+                self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
+            d = int(getattr(gs, "danger_level", 0) or 0)
+            if d > 0:                                    # 撤退降即時危險（續行，不結局）
+                gs.danger_level = max(0, d - 1)
+                bridge.sync_to_blackboard(gs, self.bb)
+            notes = ""
+            if wants_notes(player_decision):             # 只摘要既有線索，不新增 fact/truth
+                from core.narrative.world_facts import get_world_facts
+                notes = review_notes_text(getattr(self, "_reveal_ledger", None),
+                                          get_world_facts(self.bb))
+            log.info("review lock active（mode=%s, area=%s）", self._exploration_mode,
+                     getattr(self._world, "current_area", None))
+            return build_review_decision_point(dp, notes_text=notes)
+        except Exception as e:
+            log.warning("apply review lock skipped: %s", e)
+            return dp
+
     def _trigger_player_ending(self, player_decision: str, gs):
         """玩家明確「結束本次調查」→ 結算結局（escape；品質由 reveal 帳本決定 clean/ambiguous）。"""
         if self.ended:                               # 防禦：warden 硬結局已先觸發 → 不覆寫
@@ -738,13 +788,16 @@ class BeatLoop:
             pass
         return str(scene_id)
 
-    def _world_model_tick(self, action: str, narrative: str, dp=None):
+    def _world_model_tick(self, action: str, narrative: str, dp=None, *, review_locked: bool = False):
         """WorldModel：current_area 的**唯一權威**。kernel 只在「真正移動」時透過 WorldDelta 改區域；
         **不得用 scene sync 覆蓋** WorldModel 已套用的 current_area（如撤退到 outside_dock）。
 
         物件/NPC/事實登記**優先走 story 結構化 entity_delta**（object/actor/fact，每 beat ≤3，
         malformed 丟棄）；story 沒給結構化 delta 時，才退回 EntityExtractor 掃敘事（fallback）。
         本 beat 被新增/變更狀態的實體記進 `_changed_entities_this_beat`（供 observation 投影）。
+
+        撤離鎖（review_locked）：**不**讓 kernel scene-sync 覆蓋安全區、**不**新增 object entity；
+        只保留「玩家明確檢查已知物件 → inspected」（只動既有 entity，不登記新的）。
         """
         if self._world is None:
             return
@@ -754,23 +807,24 @@ class BeatLoop:
             gs = self._game_state
             scene = getattr(gs, "current_scene", None)
             before = {eid: e.state for eid, e in self._world.entities.items()}
-            # 只有 kernel **真的移動了**（場景 ≠ 上次 WorldModel 同步的 kernel 場景）才改 current_area。
-            # 若玩家原地觀察 / 否定移動 / 已撤退到 outside_dock，kernel 場景不變 → WorldModel 不被覆蓋。
-            if scene and scene != self._world_kernel_scene:
+            # 只有 kernel **真的移動了**（場景 ≠ 上次同步的 kernel 場景）才改 current_area。
+            # 撤離鎖時跳過：玩家撤在安全區，kernel scene-sync 不得把 current_area 推回站內（durability）。
+            if not review_locked and scene and scene != self._world_kernel_scene:
                 self._world.apply(WorldDelta(op="move_current", entity_id=scene, origin="kernel"))
                 # 補 label（apply 用 id 當 label 登記時補回顯示名）
                 _e = self._world.get(scene)
                 if _e is not None and _e.label == scene:
                     _e.label = self._area_label(scene)
                 self._world_kernel_scene = scene
-            # 優先：story 結構化 entity_delta（object/actor/fact，kind-guarded）。
-            story_deltas = coerce_entity_deltas(getattr(dp, "entity_delta", None))
-            if story_deltas:
-                self._world.apply_story_deltas(story_deltas)
-            else:
-                # fallback：EntityExtractor 掃敘事（story 沒給結構化 delta 時才用）。
-                self._world.apply_deltas(extract_entities(narrative, npc_names=self.known_npcs))
-            # 玩家檢查物件 → 標 inspected（世界記得他查過）
+            # 撤離鎖時**不新增** story object entity（requirement 3）；否則優先結構化 entity_delta。
+            if not review_locked:
+                story_deltas = coerce_entity_deltas(getattr(dp, "entity_delta", None))
+                if story_deltas:
+                    self._world.apply_story_deltas(story_deltas)
+                else:
+                    # fallback：EntityExtractor 掃敘事（story 沒給結構化 delta 時才用）。
+                    self._world.apply_deltas(extract_entities(narrative, npc_names=self.known_npcs))
+            # 玩家明確檢查物件 → 標 inspected（只動既有 entity，不新增；review 模式也允許）
             if any(v in (action or "") for v in ("檢查", "查看", "檢視", "端詳", "研究", "翻看")):
                 for o in self._world.by_kind(OBJECT):
                     if any(tok and tok in action for tok in (o.label or "").split()):
@@ -816,10 +870,14 @@ class BeatLoop:
         new_facts = getattr(self, "_new_world_facts_this_beat", []) or []
         changed_exits = [k for k in new_facts
                          if (all_facts.get(k) or {}).get("category") == "exit"]
-        intent = getattr(self, "_exit_intent", "none")
-        from core.narrative.exit_resolver import WITHDRAW_STATES
-        inv_state = "paused" if intent in WITHDRAW_STATES else "active"
+        # investigation_state = ExplorationMode（active_exploration/temporary_retreat/review_mode/…）
+        from core.narrative.exploration_mode import is_review_locked, REVIEW_AFFORDANCES
+        mode = getattr(self, "_exploration_mode", "active_exploration")
+        inv_state = mode
         avail = [getattr(o, "text", "") for o in (getattr(dp, "suggested_options", None) or [])]
+        if is_review_locked(mode):
+            # 撤離鎖：available_next 含 return_inside / review_notes / inspect_inventory / end_campaign
+            avail = REVIEW_AFFORDANCES + avail
         return {
             "current_area": current_area,
             "known_areas": known,
@@ -849,11 +907,19 @@ class BeatLoop:
             for e in w.entities.values():
                 by_kind[e.kind] = by_kind.get(e.kind, 0) + 1
             changed = list(getattr(self, "_changed_entities_this_beat", []) or [])
+            # 撤離鎖：entities_here 只顯示「安全區當前 area 的 entity」（不顯示站內的物件）
+            from core.narrative.exploration_mode import is_review_locked
+            from core.world.model import SAFE_ZONE_AREA_ID
+            review = is_review_locked(getattr(self, "_exploration_mode", "active_exploration"))
+            def _here(items):
+                if review:
+                    items = [e for e in items if e.props.get("area") == SAFE_ZONE_AREA_ID]
+                return [_e(e) for e in items]
             return {"current_area": w.current_area, "counts": by_kind,
                     "entities": ents[:40], "affordances_here": affs[:20],
                     # story structured entity_delta：此處的實體 / 可互動物 / 本 beat 變更
-                    "entities_here": [_e(e) for e in w.entities_here()][:40],
-                    "interactables_here": [_e(e) for e in w.interactables_here()][:20],
+                    "entities_here": _here(w.entities_here())[:40],
+                    "interactables_here": _here(w.interactables_here())[:20],
                     "changed_entities_this_beat": changed}
         except Exception:
             return {}

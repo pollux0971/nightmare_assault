@@ -28,6 +28,15 @@ class ProgressKernel:
 
     def resolve_player_action(self, player_input: str, state: GameState,
                               warden: dict | None = None) -> ProgressResult:
+        # ReviewMode Lock：玩家撤在安全區整理線索 → 不推場景、不種線索、不升壓（撤離鎖）。
+        if (warden or {}).get("review_mode"):
+            chosen = self._make_review_event(state)
+            return ProgressResult(
+                accepted=True, patch=self._event_to_patch(chosen, state),
+                committed_event=chosen["id"],
+                explanation="review mode: investigation advance suppressed",
+                soft_lookahead=[])
+
         intent_tags = self._normalize_intent(player_input)
 
         candidates = self._candidate_events(state, intent_tags)
@@ -168,6 +177,22 @@ class ProgressKernel:
     @staticmethod
     def _has_recent_clue(state: GameState, window: int = 2) -> bool:
         return any(c.first_seen_beat >= state.beat_number - window for c in state.clues.values())
+
+    def _make_review_event(self, state: GameState) -> dict[str, Any]:
+        """ReviewMode：安全區整理線索的 beat——**不改場景、不種線索、不升壓**，只記 review 進展。
+
+        仍給非空 progress_delta（滿足 validator「每 beat ≥1 delta」），但不觸發任何自動推進。
+        """
+        beat = state.beat_number
+        scene = state.current_scene
+        return {
+            "id": f"review.{scene}.{beat}", "scene_id": scene, "intent_tags": ["free"],
+            "effects": [],                               # 無 op：不動場景/危險/線索
+            "progress_delta": ["review_notes"],          # 非空 → 過 validator；但非調查推進
+            "narrative_obligations": [
+                "玩家正在安全區整理既有線索，不引入新的場景、線索或威脅；只回顧已知。"],
+            "forbidden_after": [],
+            "debug_reason": "review mode: no investigation advance."}
 
     def _make_fallback_event(self, state: GameState) -> dict[str, Any]:
         """玩家越界/無合法候選時的 **context-aware sparse fallback**：
