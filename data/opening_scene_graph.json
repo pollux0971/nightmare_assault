@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "description": "Minimal opening scene graph to prevent open-door repetition and seed clue/NPC presence.",
+  "events": [
+    {
+      "id": "event.open_door_101",
+      "scene_id": "scene.ward_101",
+      "intent_tags": [
+        "open",
+        "move"
+      ],
+      "preconditions": [
+        "not_recent:event.open_door_101"
+      ],
+      "effects": [
+        {
+          "op": "set",
+          "path": "event_status.event.open_door_101",
+          "value": "resolved"
+        },
+        {
+          "op": "set",
+          "path": "current_scene",
+          "value": "scene.corridor_2f"
+        },
+        {
+          "op": "set",
+          "path": "scene_phase",
+          "value": "beginning"
+        },
+        {
+          "op": "add",
+          "path": "clues.clue.scratch_marks",
+          "value": {
+            "title": "門框上的抓痕",
+            "content": "抓痕方向從病房內側往外，像是有人曾經被關在裡面。",
+            "tags": [
+              "door",
+              "hospital",
+              "escape"
+            ]
+          }
+        }
+      ],
+      "progress_delta": [
+        "event_resolved",
+        "location_changed",
+        "new_clue_added"
+      ],
+      "narrative_obligations": [
+        "必須描寫玩家已經打開病房門。",
+        "必須讓玩家進入二樓走廊。",
+        "必須自然描寫門框上的抓痕。",
+        "下一個選項不得再詢問是否打開同一扇病房門。"
+      ],
+      "forbidden_after": [
+        "event.open_door_101",
+        "ask_open_door_101"
+      ],
+      "grants_clues": [
+        "clue.scratch_marks"
+      ],
+      "grants_items": [],
+      "spawns_npcs": [],
+      "satisfies": [
+        "obl.leave_starting_room",
+        "obl.seed_first_clue"
+      ],
+      "max_repeat": 1
+    },
+    {
+      "id": "event.inspect_ward_101",
+      "scene_id": "scene.ward_101",
+      "intent_tags": [
+        "inspect",
+        "free"
+      ],
+      "preconditions": [
+        "clue_missing:clue.patient_tag"
+      ],
+      "effects": [
+        {
+          "op": "add",
+          "path": "clues.clue.patient_tag",
+          "value": {
+            "title": "沒有姓名的病患腕帶",
+            "content": "腕帶上只有床號，姓名欄被刮掉。",
+            "tags": [
+              "identity",
+              "ward"
+            ]
+          }
+        }
+      ],
+      "progress_delta": [
+        "new_clue_added"
+      ],
+      "narrative_obligations": [
+        "必須讓玩家在病房內找到一條新線索，而不是只重複描述房間。"
+      ],
+      "forbidden_after": [],
+      "grants_clues": [
+        "clue.patient_tag"
+      ],
+      "max_repeat": 1
+    },
+    {
+      "id": "event.nurse_shadow_corridor",
+      "scene_id": "scene.corridor_2f",
+      "intent_tags": [
+        "inspect",
+        "move",
+        "free",
+        "call"
+      ],
+      "preconditions": [
+        "npc_not_visible:npc.night_nurse"
+      ],
+      "effects": [
+        {
+          "op": "set",
+          "path": "npcs.npc.night_nurse.visible",
+          "value": true
+        },
+        {
+          "op": "set",
+          "path": "npcs.npc.night_nurse.current_scene",
+          "value": "scene.corridor_2f"
+        },
+        {
+          "op": "set",
+          "path": "npcs.npc.night_nurse.entry_mode",
+          "value": "seen_at_distance"
+        }
+      ],
+      "progress_delta": [
+        "npc_spawned"
+      ],
+      "narrative_obligations": [
+        "必須讓夜班護士以遠距離、曖昧、不完全可信的方式出現在走廊。",
+        "她的出現必須給玩家新的互動方向：詢問、跟隨、躲避、觀察。"
+      ],
+      "forbidden_after": [
+        "event.nurse_shadow_corridor"
+      ],
+      "spawns_npcs": [
+        "npc.night_nurse"
+      ],
+      "satisfies": [
+        "obl.introduce_first_npc"
+      ],
+      "max_repeat": 1
+    },
+    {
+      "id": "event.corridor_dragging_sound",
+      "scene_id": "scene.corridor_2f",
+      "intent_tags": [
+        "move",
+        "inspect",
+        "free"
+      ],
+      "preconditions": [
+        "not_recent:event.corridor_dragging_sound"
+      ],
+      "effects": [
+        {
+          "op": "inc",
+          "path": "danger_level",
+          "value": 1
+        }
+      ],
+      "progress_delta": [
+        "danger_level_changed"
+      ],
+      "narrative_obligations": [
+        "必須讓走廊遠處出現拖行聲或其他壓力升級，不得原地重複病房描寫。"
+      ],
+      "forbidden_after": [],
+      "max_repeat": 2
+    }
+  ],
+  "start_scene": "scene.ward_101"
+}

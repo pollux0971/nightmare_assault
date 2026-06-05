@@ -1,0 +1,23 @@
+{
+  "api_key": "sk-or-v1-...你的OpenRouter金鑰...",
+  "base_url": "https://openrouter.ai/api/v1",
+  "timeout": 90,
+  "agent_models": {
+    "story": [
+      "deepseek/deepseek-v3.2",
+      "qwen/qwen3-max"
+    ],
+    "setup": [
+      "anthropic/claude-sonnet-4.6"
+    ],
+    "orchestrator": [
+      "minimax/minimax-m3"
+    ],
+    "warden": [
+      "minimax/minimax-m3"
+    ],
+    "compactor": [
+      "minimax/minimax-m3"
+    ]
+  }
+}

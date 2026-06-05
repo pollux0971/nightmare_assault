@@ -1,0 +1,36 @@
+# 執行期產物
+storage/
+*.db
+*.sqlite3
+
+# 回滾用檔案快照（刻意不進 git — 回滾不靠 git）
+dev/snapshots/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# 環境/密鑰
+.env
+config/config.json
+test_api.txt
+*api*.txt
+*.key
+
+# OS
+.DS_Store
+
+# 開發工具索引（CodeGraph，本地可重建）/ 執行期 pid
+.codegraph/
+*.pid
+
+# patch 產物（壓縮包與解壓資料夾）
+nightmare-assault-runtime-hardgate-patch-*/
+nightmare-assault-runtime-hardgate-patch-*.zip
+
+# 備份與舊版（不進公開 repo，本地保留）
+backup/
+dev/_legacy/

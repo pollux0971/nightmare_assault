@@ -1,0 +1,159 @@
+/* theme.css — 深色現代恐怖主題（U16）。血紅是點綴非主色。 */
+:root {
+  --bg:       #0A0A0C;   /* 近黑，留空間感 */
+  --bg-sub:   #14141A;   /* 卡片、輸入框 */
+  --bg-raise: #1c1c24;
+  --text:     #C8C8D0;   /* 灰白主文字 */
+  --text-dim: #7a7a85;
+  --blood:    #8B1A1A;   /* 血紅：危險/關鍵詞/hover，克制 */
+  --blood-lt: #b83232;
+  --border:   #3A3A45;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: 'NotoSerifTC', 'Noto Serif TC', '思源宋體', serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.9;
+  overflow: hidden;
+}
+
+/* 背景明暗呼吸 */
+#breath {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(120% 120% at 50% 0%, #15151c 0%, #0A0A0C 70%);
+  animation: breathe 11s ease-in-out infinite;
+}
+
+.view { display: none; position: relative; z-index: 1; height: 100vh; }
+.view.active { display: flex; }
+
+/* 置中面板（前置畫面） */
+#view-settings, #view-menu, #view-new, #view-ending, #view-loading {
+  align-items: center; justify-content: center; flex-direction: column;
+}
+.panel {
+  width: min(520px, 86vw);
+  background: var(--bg-sub);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2.4rem 2rem;
+  display: flex; flex-direction: column; gap: .7rem;
+}
+.title { font-size: 2.2rem; letter-spacing: .12em; margin: 0 0 .2rem; text-align: center; }
+.subtitle { text-align: center; color: var(--text-dim); margin: 0 0 1.4rem; font-style: italic; }
+h2 { margin: 0 0 .6rem; letter-spacing: .06em; }
+label { color: var(--text-dim); font-size: .85rem; margin-top: .5rem; }
+.hint { color: var(--text-dim); font-size: .78rem; margin: .2rem 0; }
+.hint.dim { opacity: .5; }
+.msg { min-height: 1.2em; color: var(--blood-lt); font-size: .82rem; }
+
+input, button { font-family: inherit; font-size: 1rem; }
+input {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: .65rem .8rem; outline: none;
+}
+input:focus { border-color: var(--blood); }
+
+button {
+  cursor: pointer; border-radius: 6px; padding: .7rem 1rem;
+  border: 1px solid var(--border); background: var(--bg-raise); color: var(--text);
+  transition: all .18s ease;
+}
+button:hover { border-color: var(--blood); color: #fff; }
+button.primary { background: #2a1414; border-color: var(--blood); }
+button.primary:hover { background: var(--blood); }
+button.ghost { background: transparent; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+.row { display: flex; gap: .6rem; margin-top: .6rem; }
+.row button { flex: 1; }
+
+/* 遊戲主畫面 */
+#view-game { flex-direction: column; }
+#game-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: .7rem 1.2rem; border-bottom: 1px solid var(--border);
+  color: var(--text-dim); font-size: .9rem; background: rgba(10,10,12,.7);
+}
+.header-btns button { padding: .35rem .55rem; margin-left: .3rem; }
+
+#skill-limit {
+  max-height: 0; opacity: 0; overflow: hidden;
+  margin: 0 clamp(1rem, 6vw, 4rem); padding: 0 .9rem;
+  border-left: 3px solid var(--blood); border-radius: 4px;
+  background: rgba(139, 26, 26, .14); color: #e6c9c4;
+  font-size: .88rem; line-height: 1.6;
+  transition: max-height .4s ease, opacity .4s ease, padding .4s ease, margin-bottom .4s ease;
+}
+#skill-limit.show { max-height: 7rem; opacity: 1; padding: .6rem .9rem; margin-bottom: .5rem; }
+
+#narrative {
+  flex: 1; overflow-y: auto; padding: 1.6rem clamp(1rem, 6vw, 4rem);
+  font-size: 1.08rem; white-space: pre-wrap;
+  user-select: text; -webkit-user-select: text;   /* 可選取複製當前段 */
+}
+#narrative .blood { color: var(--blood-lt); }
+
+#decision { padding: .6rem clamp(1rem, 6vw, 4rem) 1rem; border-top: 1px solid var(--border); }
+.recap { color: var(--text-dim); font-style: italic; margin: .2rem 0 .8rem; min-height: 1em; }
+#options { display: flex; flex-direction: column; gap: .5rem; margin-bottom: .8rem; }
+.opt {
+  text-align: left; background: var(--bg-sub); border: 1px solid var(--border);
+  padding: .7rem .9rem;
+}
+.opt:hover { border-color: var(--blood); }
+.opt.danger { border-color: #4a1d1d; }
+.opt.danger:hover { background: #2a1414; }
+.continue { display: block; margin: .4rem auto .8rem; }
+#free-input { display: flex; gap: .5rem; }
+#free-text { flex: 1; }
+
+.status-bar { padding: .3rem 1.2rem; font-size: .78rem; color: var(--text-dim); min-height: 1.4em; }
+
+.loading-wrap { text-align: center; }
+.loading-line { font-size: 1.2rem; color: var(--text); opacity: 0; max-width: 70vw; }
+.blood-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blood);
+  margin: 1.4rem auto; animation: blink 2.2s ease-in-out infinite; }
+
+.ending-body { white-space: pre-wrap; max-height: 50vh; overflow-y: auto; }
+
+dialog {
+  background: var(--bg-sub); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; padding: 1.4rem 1.6rem;
+  min-width: 320px;
+}
+dialog::backdrop { background: rgba(0,0,0,.6); }
+dialog ul { list-style: none; padding: 0; }
+dialog li { padding: .4rem 0; border-bottom: 1px solid var(--border); }
+.hidden { display: none !important; }
+
+/* HUD：生成管線進度（固定右下） */
+#hud {
+  position: fixed; right: 16px; bottom: 16px; z-index: 50;
+  background: rgba(20,20,26,.92); border: 1px solid var(--border);
+  border-radius: 8px; padding: .7rem .9rem; min-width: 168px;
+  font-size: .82rem; box-shadow: 0 6px 24px rgba(0,0,0,.5);
+  animation: fadeIn .35s ease;
+}
+.hud-title { color: var(--blood-lt); letter-spacing: .08em; margin-bottom: .45rem; }
+#hud-steps { list-style: none; margin: 0; padding: 0; }
+#hud-steps li { display: flex; align-items: center; gap: .5rem; padding: .18rem 0; color: var(--text-dim); }
+#hud-steps li .mark { width: 1.1em; text-align: center; }
+#hud-steps li.active { color: var(--text); }
+#hud-steps li.active .mark { color: var(--blood-lt); animation: blink 1s ease-in-out infinite; }
+#hud-steps li.done { color: var(--text-dim); }
+#hud-steps li.done .mark { color: #4a7a4a; }
+
+/* 等待動畫（注入 #narrative） */
+.wait-core { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 50vh; gap: 1.2rem; }
+.wait-dots { display: flex; gap: .6rem; }
+.wait-dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--blood);
+  animation: waitpulse 1.3s ease-in-out infinite; }
+.wait-dots span:nth-child(2) { animation-delay: .22s; }
+.wait-dots span:nth-child(3) { animation-delay: .44s; }
+.wait-line { color: var(--text-dim); font-style: italic; letter-spacing: .05em;
+  transition: opacity .8s ease; }

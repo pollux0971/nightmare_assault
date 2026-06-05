@@ -1,0 +1,92 @@
+================================================================================
+自動化遊玩（敘事控制 ON · NPC truth-id plumbing）
+flag=true
+驗收鏈：調查→reveal→revealed_bible｜追問 NPC（看 npc_chat_debug）｜兩段式逃脫｜低碎片 ambiguous
+================================================================================
+
+【開場】
+```
+json
+{
+  "current_scene": "entrance_hall",
+  "scene_phase": "beginning",
+  "beat_number": 0,
+  "recent_events": [],
+  "committed_event": null,
+  "narrative_obligations": [
+    "開場序幕不得只是地點描述：先建立一個角色動機鉤子（主角為何而來、在找誰）。",
+    "加入一個真假混合的異常資訊，玩家一時無法判斷真假。",
+    "加入一個與主角身份相關的恐怖鉤子。",
+    "加入一個表層超自然想像，但不解釋成因（之後可在真相揭露時被回收）。",
+    "最後才停在第一個可行動選擇；**禁止在開場直接解釋完整真相**，允許誤導但誤導須能被後續回收。",
+    "介紹起始場景與可見的出口（包含一扇門），以恐怖氛圍鋪陳，最後提供玩家可選行動（如開門、檢查、呼喊），不要替玩家做決定。"
+  ],
+  "forbidden_repeats": [],
+  "new_clues": [],
+  "new_items": [],
+  "spawned_npcs": [],
+  "visible_npcs": [],
+  "relevant_clues": [],
+  "relevant_items": [
+
+〔開局〕reveal: hinted+=0 observed+=0 suspected+=0 confirmed+=0/8 frags=0
+〔NPC 白名單〕allowed=['data_log_fragment', 'wenwen_medical_file', 'chen_location_hint', 'infrasound_nature', 'north_door_warning', 'control_room_key', 'wuhauiren_true_motive'] forbidden(core)=['signal_cutoff_method']
+
+================================================================================
+▶ beat1 我選：跟隨走廊深處的拖行聲前進
+你站在研究站入口大廳的中央，金屬地板在腳下發出輕微的呻吟。通風管道傳來的嗡鳴聲像某種深海生物的呼吸，忽遠忽近。所有的時鐘都停在03:17——這是你第一眼就注意到的不對勁。牆上的地圖顯示走廊通往生活區iO7上標記著"緊急出口"，但墨水已經暈開，像被什麼液體浸濕過。
+
+當你朝走廊移動時，靴子蹭到了地面某種粘稠的痕跡。蹲下來看，那是半乾涸的棕色污漬，混著幾根被扯斷的電線，斷口參差不齊——像是被什麼東西硬生生從設備上撕下來的。這絕對不是正常維護會留下的痕跡。走廊深處傳來金屬拖行的聲音，節奏詭異地像在模仿人類腳步。
+〔reveal: hinted+=1 observed+=0 suspected+=0 confirmed+=0/8 frags=0〕 evidence_this_beat=1 unmapped=0 reveal_updates=[{'truth_id': 'data_log_fragment', 'from': 'hidden', 'to': 'hinted', 'strength': 0.3, 'source': 'kernel'}]
+
+================================================================================
+▶ beat2 我選：檢查電線斷口
+走廊的燈管閃爍著，你蹲下來檢查斷裂的電線，指尖傳來輕微的刺痛。那些裸露的銅絲像是被什麼東西從內部撕裂的，斷口參差不齊。通風管道的嗡鳴聲突然變調，變成一種近似人類呻吟的頻率。
+
+這時你注意到走廊盡頭有動靜。一個模糊的人影站在轉角處的陰影裡，距離你大約二十公尺。他穿著皺巴巴的研究制服，領口別著「謝明哲」的名牌，但光線太暗，你看不清他的表情。
+
+「別碰那些電線。」他的聲音從遠處傳來，帶著某種機械般的頓挫，「它們會...記得你。」話還沒說完，他的身影就向後退了一步，半邊身子隱入轉角的黑暗中。所有時鐘都停在03:17，包括你腕錶上那枚本該是數位顯示的。
+〔reveal: hinted+=1 observed+=0 suspected+=0 confirmed+=0/8 frags=0〕 evidence_this_beat=1 unmapped=1 reveal_updates=[]
+
+----------------------------------------------------------------
+💬 找「謝明哲」追問（看 NPC 能不能安全推 reveal）
+  我：這裡到底發生過什麼事？
+  謝明哲（partial）：謝明哲的呼吸聲在走廊盡頭變得急促起來，他的手指緊緊抓住轉角的牆壁邊緣，指節泛白。"我...我不能告訴你。"他語速飛快，"你聽到了嗎？那些聲音...它們會跟著知道的東西走。"
+
+他的目光不時瞥向天花板上的通風口，"03:17...所有時鐘都停在03:17。那時候..."聲音突然卡住，他用力搖頭，"不對，不對，我不該說這個
+  〔npc_chat_debug〕{'allowed_truth_refs': ['wenwen_medical_file', 'chen_location_hint', 'infrasound_nature', 'north_door_warning', 'control_room_key', 'wuhauiren_true_motive'], 'evidence_events_proposed': 0, 'evidence_events_accepted': 0, 'evidence_events_rejected': 0, 'rejection_reasons': []}
+  我：你看過我弟弟林晨嗎？
+  謝明哲（partial）：（謝明哲的身體猛地僵住，手指掐進掌心）「林...林晨？」他的聲音突然變得異常乾澀，「你...不該找他。這裡的每個人都...」 
+
+通風管的嗡鳴突然增強，他的視線快速掃過天花板，像在確認什麼。
+
+（壓低聲音）「A7儲藏室...如果你一定要知道。但別告訴任何人是我說的...尤其是周凱。」他後退半步，陰影開始吞噬他的輪廓。「
+  〔npc_chat_debug〕{'allowed_truth_refs': ['wenwen_medical_file', 'chen_location_hint', 'infrasound_nature', 'north_door_warning', 'control_room_key', 'wuhauiren_true_motive'], 'evidence_events_proposed': 0, 'evidence_events_accepted': 0, 'evidence_events_rejected': 0, 'rejection_reasons': []}
+  我：432.7 是什麼意思？再說清楚一點
+  謝明哲（partial）："432.7？" 謝明哲的聲音突然變調，手指神經質地敲打著褲縫。"那不是...那不是赫茲，不是測量單位。別再問了。"
+
+他往後退了半步，肩膀抵在牆上，呼吸變得急促。"你聽到了對吧？那些聲音。通風管道的...不是機器聲。"
+
+突然他抬起頭，視線穿過你的肩膀看向走廊深處，瞳孔微微放大。"它們來了。你最好快走——" 他猛地轉
+  〔npc_chat_debug〕{'allowed_truth_refs': ['wenwen_medical_file', 'chen_location_hint', 'infrasound_nature', 'north_door_warning', 'control_room_key', 'wuhauiren_true_motive'], 'evidence_events_proposed': 0, 'evidence_events_accepted': 0, 'evidence_events_rejected': 0, 'rejection_reasons': []}
+
+================================================================================
+▶ beat3 我選：先檢查電線斷口是否真的在『記憶』什麼
+你蹲下身，指尖輕觸斷裂的電線邊緣。金屬斷口異常平整，像是被某種精密的工具切斷，而非自然磨損。當你的皮膚接觸到裸露的銅線時，一陣細微的刺痛感竄上手臂——不是觸電，更像是某種...記憶的刺痛。 
+
+走廊深處突然傳來金屬扭曲的尖銳聲響，你抬頭看見謝明哲的身影在遠處的轉角一閃而過。他似乎在奔跑，但腳步聲卻詭異地消失了。與此同時，通風管道傳來低沉的嗡鳴，你不確定那是機器還是海浪的迴響。 
+
+牆上的時鐘全部停在03:17，秒針微微顫動卻無法前進。
+〔reveal: hinted+=1 observed+=0 suspected+=0 confirmed+=0/8 frags=0〕 evidence_this_beat=0 unmapped=0 reveal_updates=[]
+
+================================================================================
+▶ beat4 我選：檢查牆上停止的時鐘
+走廊的白熾燈管閃爍著，你伸手觸碰牆上那面停止的時鐘——03:17。金屬邊緣泛著鏽蝕的腥味，像是被海風浸潤了太久。當你的指尖擦過錶面時，秒針突然跳動了一下，然後又靜止了。
+
+遠處傳來腳步聲。謝明哲背對著你站在走廊轉角，他雙手插在白袍口袋裡，似乎正盯著牆上的某樣東西。他沒發現你。
+
+你注意到他身旁的通風口柵欄鬆脫了一角，裡面傳來低沉的嗡鳴，像是某種機器運轉的頻率，又像是遠處海浪拍打礁岩的悶響。
+〔reveal: hinted+=1 observed+=0 suspected+=0 confirmed+=0/8 frags=0〕 evidence_this_beat=1 unmapped=2 reveal_updates=[]
+
+================================================================================
+▶ beat5 我選：檢查鬆脫的通風口

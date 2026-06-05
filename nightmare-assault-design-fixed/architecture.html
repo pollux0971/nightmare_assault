@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nightmare Assault — Multi-Agent 架構導覽</title>
+<style>
+  :root{
+    --bg:#0a0a0c; --bg2:#101015; --panel:#191921; --panel2:#22222c;
+    --ink:#ece7dc; --dim:#b0a99c; --faint:#6b665d;
+    --blood:#b3231f; --blood2:#e0463c; --ember:#d98a3a; --ghost:#6f8fb0; --moss:#5e8d6a;
+    --line:#2a2a34; --line2:#3a3a47;
+    --r:12px;
+    --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+    --sans:"Noto Sans CJK TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:radial-gradient(1300px 900px at 72% -12%,#1a1520 0%,var(--bg) 58%);
+    color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+  /* 微弱明暗呼吸：只壓最外緣，不蓋內容 */
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(1100px 800px at 50% 45%,transparent 78%,rgba(0,0,0,.42) 100%);
+    animation:breathe 10s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.35}50%{opacity:.6}}
+
+  .deck{position:relative;height:100vh;width:100vw}
+  .slide{position:absolute;inset:0;display:none;flex-direction:column;
+    padding:4.2vh 5vw 8vh;opacity:0;transition:opacity .45s ease}
+  .slide.on{display:flex;opacity:1;animation:rise .5s ease}
+  @keyframes rise{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+  .kicker{font-family:var(--mono);font-size:.78rem;letter-spacing:.32em;text-transform:uppercase;
+    color:var(--blood2);margin-bottom:.9rem}
+  h1{font-size:clamp(2rem,5vw,3.6rem);font-weight:800;line-height:1.05;letter-spacing:-.01em}
+  h2{font-size:clamp(1.5rem,3.2vw,2.4rem);font-weight:800;line-height:1.1;margin-bottom:.3rem}
+  .sub{color:var(--dim);font-size:clamp(.95rem,1.5vw,1.18rem);line-height:1.7;margin-top:.8rem;max-width:60ch}
+  .lead{color:var(--ink);font-size:clamp(1rem,1.7vw,1.3rem);line-height:1.7;max-width:72ch}
+  .hr{height:1px;background:linear-gradient(90deg,var(--blood),transparent);margin:.9rem 0 1.4rem;width:240px}
+  b,strong{color:#fff}
+  .blood{color:var(--blood2)} .ember{color:var(--ember)} .ghost{color:var(--ghost)} .moss{color:var(--moss)}
+  code{font-family:var(--mono);font-size:.86em;background:#000;color:#cdb7a0;padding:.1em .4em;border-radius:5px;border:1px solid var(--line)}
+
+  .grow{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center}
+  .cols{display:flex;gap:2.2vw;align-items:stretch}
+  .col{flex:1;min-width:0}
+
+  /* 卡片 / 節點 */
+  .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
+    border-radius:var(--r);padding:1rem 1.1rem;position:relative}
+  .card h3{font-size:1rem;margin-bottom:.3rem;display:flex;align-items:center;gap:.5rem}
+  .card p{color:var(--dim);font-size:.86rem;line-height:1.55}
+  .tag{font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;padding:.16em .5em;border-radius:999px;
+    border:1px solid var(--line2);color:var(--dim);white-space:nowrap}
+  .tag.hot{color:var(--blood2);border-color:#5a1f1f;background:#1a0d0d}
+  .tag.med{color:var(--ember);border-color:#4a371f}
+  .tag.lite{color:var(--ghost);border-color:#26384a}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+
+  .grid{display:grid;gap:.8rem}
+  .g4{grid-template-columns:repeat(4,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g2{grid-template-columns:repeat(2,1fr)}
+
+  /* 分層堆疊 */
+  .stack{display:flex;flex-direction:column;gap:.55rem}
+  .layer{border:1px solid var(--line);border-radius:10px;padding:.7rem 1rem;background:var(--panel);
+    display:flex;align-items:center;gap:1rem}
+  .layer .lname{font-weight:700;min-width:190px;display:flex;align-items:center;gap:.55rem}
+  .layer .lbody{color:var(--dim);font-size:.85rem;display:flex;gap:.5rem;flex-wrap:wrap}
+  .chip{font-family:var(--mono);font-size:.72rem;border:1px solid var(--line2);border-radius:6px;padding:.16em .5em;color:#bcae9c;background:#0c0c10}
+  .layer.agent{border-color:#4a1f1f;background:linear-gradient(90deg,#170d0d,var(--panel))}
+  .layer.kernel{border-color:#264a30;background:linear-gradient(90deg,#0e160f,var(--panel))}
+  .layer.config{border-color:#3a2b16;background:linear-gradient(90deg,#160f08,var(--panel))}
+  .layer.state{border-color:#26384a;background:linear-gradient(90deg,#0c1117,var(--panel))}
+
+  /* 流程管線 */
+  .flow{display:flex;align-items:stretch;gap:.35rem;flex-wrap:wrap}
+  .step{flex:1;min-width:96px;border:1px solid var(--line2);border-radius:10px;padding:.6rem .5rem;text-align:center;
+    background:var(--panel);position:relative}
+  .step .n{font-family:var(--mono);font-size:.64rem;color:var(--faint)}
+  .step .t{font-weight:700;font-size:.86rem;margin-top:.15rem}
+  .step .d{color:var(--dim);font-size:.72rem;margin-top:.2rem;line-height:1.4}
+  .arrow{align-self:center;color:var(--blood);font-size:1.1rem;flex:none}
+  .step.k{border-color:#2f6b3f;box-shadow:0 0 0 1px #19311f inset}
+  .step.s{border-color:#5a1f1f;box-shadow:0 0 0 1px #2a0f0f inset}
+
+  .note{display:flex;gap:.6rem;align-items:flex-start;color:var(--dim);font-size:.86rem;line-height:1.6;
+    border-left:2px solid var(--blood);padding:.2rem 0 .2rem .8rem;margin-top:1rem}
+  .pillrow{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.7rem}
+  .pill{border:1px solid var(--line2);border-radius:999px;padding:.3em .8em;font-size:.8rem;color:var(--dim)}
+  .pill b{color:var(--ink)}
+
+  table.t{width:100%;border-collapse:collapse;font-size:.82rem}
+  table.t th,table.t td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--line)}
+  table.t th{color:var(--faint);font-family:var(--mono);font-weight:600;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase}
+  table.t td b{color:#fff}
+
+  .ba{display:flex;gap:1rem}
+  .ba .box{flex:1;border:1px solid var(--line);border-radius:10px;padding:.9rem}
+  .ba .bad{border-color:#5a1f1f;background:#140a0a}
+  .ba .good{border-color:#264a30;background:#0c160f}
+  .ba h4{font-size:.92rem;margin-bottom:.5rem}
+  .ba .ex{font-family:var(--mono);font-size:.78rem;color:#cdb7a0;line-height:1.7}
+
+  /* 導航 */
+  .nav{position:fixed;left:0;right:0;bottom:0;height:46px;display:flex;align-items:center;
+    justify-content:space-between;padding:0 18px;background:linear-gradient(0deg,rgba(0,0,0,.6),transparent);
+    z-index:20;font-family:var(--mono);font-size:.74rem;color:var(--dim)}
+  .dots{display:flex;gap:7px}
+  .nd{width:8px;height:8px;border-radius:50%;background:#2c2c36;cursor:pointer;transition:.2s}
+  .nd:hover{background:#4a4a58}
+  .nd.on{background:var(--blood2);box-shadow:0 0 8px var(--blood)}
+  .nbtn{cursor:pointer;border:1px solid var(--line2);border-radius:7px;padding:.25em .8em;color:var(--ink);
+    background:#0c0c10;user-select:none}
+  .nbtn:hover{border-color:var(--blood);color:#fff}
+  .counter b{color:var(--ink)}
+  .progress{position:fixed;top:0;left:0;height:2px;background:var(--blood2);z-index:30;transition:width .3s}
+  .hint{position:fixed;top:14px;right:18px;font-family:var(--mono);font-size:.66rem;color:var(--faint);z-index:20}
+  .legend{display:flex;gap:1rem;flex-wrap:wrap;margin-top:.8rem;font-size:.78rem;color:var(--dim)}
+  .legend span{display:flex;align-items:center;gap:.4rem}
+</style>
+</head>
+<body>
+<div class="progress" id="prog"></div>
+<div class="hint">← → / 空白鍵 換頁</div>
+<div class="deck" id="deck">
+
+  <!-- 1 · 封面 -->
+  <section class="slide">
+    <div class="grow">
+      <div class="kicker">multi-agent · llm horror text adventure</div>
+      <h1>Nightmare&nbsp;Assault<br/><span style="color:var(--dim);font-weight:300">多代理架構導覽</span></h1>
+      <div class="hr"></div>
+      <p class="lead">一款由 <b>多個 LLM agent 協同驅動</b>的無限恐怖文字冒險。玩家給一個主題，系統生出有「真相」的世界，再以<b>分鏡（beat）</b>為單位把故事無限說下去——同時擁有 <span class="blood">玩家自由</span> 與 <span class="moss">劇情連貫</span>。</p>
+      <div class="pillrow">
+        <span class="pill"><b>8</b> 個 agent</span>
+        <span class="pill">後端 <b>Python</b> · 前端 <b>Web</b> · <b>pywebview</b></span>
+        <span class="pill"><b>OpenRouter</b> 多模型</span>
+        <span class="pill">+ Progress Kernel · Config Center</span>
+      </div>
+    </div>
+    <p style="color:var(--faint);font-size:.8rem">本簡報含兩個關鍵補丁：<span class="moss">Narrative Progress Kernel</span>（世界狀態權威）與 <span class="ember">Config Center</span>（可配置 prompt）。</p>
+  </section>
+
+  <!-- 2 · 核心命題 -->
+  <section class="slide">
+    <div class="kicker">核心命題</div>
+    <h2>世界真相，不是劇情骨架</h2>
+    <div class="hr"></div>
+    <div class="grow cols">
+      <div class="col">
+        <p class="lead">不可能三角：<b>高自由度</b>、<b>劇情連貫</b>、<b>預定義骨架</b>，三者最多同時要兩個。</p>
+        <p class="sub">本作放棄「預定義骨架」，改用<b>世界真相</b>——定義「發生過什麼、威脅是什麼、什麼致命、有哪些秘密可被發現」，但<b>不</b>定義事件順序。玩家怎麼跑都自由，而他發現的每個碎片自動互相吻合，因為它們同源。</p>
+        <div class="note">▍ <span>類型定性 <b>逃生即推理</b>：威脅給壓力、資訊給出路。結局條件 = 資訊拼圖的完成。</span></div>
+      </div>
+      <div class="col" style="display:flex;align-items:center;justify-content:center">
+        <svg width="320" height="280" viewBox="0 0 320 280">
+          <polygon points="160,30 300,250 20,250" fill="none" stroke="#3a3a47" stroke-width="1.5"/>
+          <text x="160" y="22" fill="#e6e1d6" font-size="14" text-anchor="middle" font-weight="700">高自由度</text>
+          <text x="300" y="270" fill="#e6e1d6" font-size="14" text-anchor="middle" font-weight="700">劇情連貫</text>
+          <text x="20" y="270" fill="#615c54" font-size="14" text-anchor="middle">預定義骨架</text>
+          <line x1="160" y1="30" x2="300" y2="250" stroke="#b3231f" stroke-width="3"/>
+          <text x="250" y="150" fill="#e0463c" font-size="13" text-anchor="middle" transform="rotate(57 250 150)">本作選這條邊</text>
+          <circle cx="160" cy="30" r="5" fill="#e0463c"/><circle cx="300" cy="250" r="5" fill="#5e8d6a"/>
+          <circle cx="20" cy="250" r="5" fill="#615c54"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · 分層架構 -->
+  <section class="slide">
+    <div class="kicker">系統架構</div>
+    <h2>六層 · State 層不依賴 LLM，可獨立測試</h2>
+    <div class="hr"></div>
+    <div class="grow">
+      <div class="stack">
+        <div class="layer"><span class="lname">🖥 Frontend</span>
+          <span class="lbody"><span class="chip">pywebview</span><span class="chip">HTML/CSS/JS</span><span class="chip">NA.* 事件渲染</span>前端不解析分隔符/JSON</span></div>
+        <div class="layer agent"><span class="lname"><span class="dot" style="background:var(--blood2)"></span>Agent Layer（LLM）</span>
+          <span class="lbody"><span class="chip">setup</span><span class="chip">orchestrator</span><span class="chip">story</span><span class="chip">warden</span><span class="chip">compactor</span><span class="chip">npc-chat</span><span class="chip">dreaming</span><span class="chip">offstage-fate</span></span></div>
+        <div class="layer"><span class="lname">⚙ Orchestration</span>
+          <span class="lbody"><span class="chip">BeatLoop 主迴圈</span><span class="chip">SignalBus</span><span class="chip">StreamParser 三級 repair</span></span></div>
+        <div class="layer kernel"><span class="lname"><span class="dot" style="background:var(--moss)"></span>Progress Kernel <span style="font-weight:400;color:var(--faint);font-size:.7rem">補丁</span></span>
+          <span class="lbody"><span class="chip">ProgressKernel</span><span class="chip">PatchValidator</span><span class="chip">SceneGraphProvider</span><span class="chip">Attractors</span></span></div>
+        <div class="layer config"><span class="lname"><span class="dot" style="background:var(--ember)"></span>Config Center <span style="font-weight:400;color:var(--faint);font-size:.7rem">補丁</span></span>
+          <span class="lbody"><span class="chip">PromptComposer</span><span class="chip">fragments</span><span class="chip">ConfigPromptSource</span><span class="chip">feature flags</span></span></div>
+        <div class="layer state"><span class="lname"><span class="dot" style="background:var(--ghost)"></span>State + Persistence</span>
+          <span class="lbody"><span class="chip">Blackboard（版本化 patch）</span><span class="chip">三層記憶</span><span class="chip">SQLite 快照/存檔</span></span></div>
+      </div>
+      <div class="note">▍ <span>Agent Layer 透過 <b>Blackboard</b> 讀寫狀態，<b>不直接互相呼叫</b>；錨點不可變性靠<b>程式碼權限</b>強制，而非靠 prompt 自律。</span></div>
+    </div>
+  </section>
+
+  <!-- 4 · Agent 編制 -->
+  <section class="slide">
+    <div class="kicker">agent 編制</div>
+    <h2>8 個 agent · 各司其職</h2>
+    <div class="hr"></div>
+    <div class="grow">
+      <div class="grid g4">
+        <div class="card"><h3>🧬 setup <span class="tag hot">Heavy</span></h3><p>開新局跑一次。生<b>雙層 bible</b> + NPC + 場景 + 開場。<b class="blood">唯一不可降級</b>。</p></div>
+        <div class="card"><h3>🗝 orchestrator <span class="tag lite">Light</span></h3><p>每 beat。<b>揭露閘門</b>：把碎片 real→revealed。多數條件<b>程式碼判</b>。</p></div>
+        <div class="card" style="border-color:#5a1f1f"><h3>✒ story <span class="tag med">Medium</span></h3><p>每 beat、<b class="blood">唯一串流</b>。寫到決策點停筆。<b>只讀 revealed_bible</b> → 結構上不可能暴雷。</p></div>
+        <div class="card"><h3>⚖ warden <span class="tag lite">Light</span></h3><p>每 beat、<b>僅玩家</b>。致命規則 + 結局 gate + 技能封頂。本地硬規則優先。</p></div>
+        <div class="card"><h3>💬 npc-chat <span class="tag lite">Light</span></h3><p>聊天室開啟時。多輪對話、NPC 間互動。串流。</p></div>
+        <div class="card"><h3>🌙 dreaming <span class="tag lite">Light</span></h3><p>非同步、每 K beat。<b>在場</b> NPC 反思，更新演化層（無 warden 閘門）。</p></div>
+        <div class="card"><h3>🚪 offstage-fate <span class="tag lite">Light</span></h3><p>非同步。<b>離場</b> NPC 命運（機遇/失蹤/屍體/敵對），程式碼擲骰 + LLM 寫血肉。</p></div>
+        <div class="card"><h3>🗜 compactor <span class="tag med">Medium</span></h3><p>非同步、使用率門檻。滾動摘要 + ledger + 聊天封存濃縮。</p></div>
+      </div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--blood2)"></span>每 beat 都跑且串流：只有 <b style="color:#fff">story</b></span>
+        <span><span class="dot" style="background:var(--ember)"></span>回合外非同步：dreaming · compactor · offstage-fate（玩家讀字時跑，不卡互動）</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · 防暴雷 -->
+  <section class="slide">
+    <div class="kicker">結構性防暴雷</div>
+    <h2>雙層 Bible + 權限模型</h2>
+    <div class="hr"></div>
+    <div class="grow cols">
+      <div class="col">
+        <p class="lead">story 暴雷的根因是「它看得到全部真相，只能靠自律不講」。雙層 bible 把它變成<b>結構保證</b>。</p>
+        <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.6rem">
+          <div class="card" style="border-color:#5a1f1f"><h3>🔒 real_bible <span class="tag hot">鎖</span></h3><p>完整真相：what_really_happened、deadly_rule、revelation_pool（碎片池）、結局條件。<b class="blood">只有 orchestrator + warden + setup 能讀</b>。</p></div>
+          <div style="text-align:center;color:var(--blood);font-size:1.3rem">↓ 揭露閘門：達標才搬碎片 ↓</div>
+          <div class="card" style="border-color:#264a30"><h3>👁 revealed_bible <span class="tag" style="color:var(--moss);border-color:#264a30">已揭露</span></h3><p>已揭露子集。<b class="moss">story 只能讀這個</b> → 沒揭露的它根本看不到，沒東西可暴雷。</p></div>
+        </div>
+      </div>
+      <div class="col">
+        <table class="t">
+          <tr><th>寫入者</th><th>可寫</th><th>碰不到</th></tr>
+          <tr><td><b>setup</b></td><td>全部（初始化）</td><td>之後 real/secret 鎖死</td></tr>
+          <tr><td><b>orchestrator</b></td><td>revealed_bible</td><td>real 只讀</td></tr>
+          <tr><td><b class="blood">story</b></td><td>BeatHistory、narrative</td><td><b class="blood">real_bible 讀不到</b></td></tr>
+          <tr><td><b>warden</b></td><td>verdict、ledger</td><td>real 只讀、npc_evolving</td></tr>
+          <tr><td><b>dreaming</b></td><td>npc_evolving</td><td><b>secret_core（權限邊界）</b></td></tr>
+          <tr><td><b>compactor</b></td><td>摘要、ledger、封存</td><td>一切 anchor</td></tr>
+        </table>
+        <div class="note">▍ <span><b>玩家 → warden</b>；<b>NPC → 權限邊界</b>。兩道機制各管不同對象，不交叉。NPC 演化層變更<b>不</b>送 warden。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 · Beat 迴圈 -->
+  <section class="slide">
+    <div class="kicker">核心 · 多代理如何協同</div>
+    <h2>一個 Beat 的生命週期</h2>
+    <div class="hr"></div>
+    <div class="grow">
+      <div class="flow">
+        <div class="step"><div class="n">IN</div><div class="t">玩家輸入</div><div class="d">打字 / 選項<br/>包 &lt;player_action&gt;</div></div>
+        <div class="arrow">→</div>
+        <div class="step"><div class="n">A1</div><div class="t">warden</div><div class="d">僅查玩家：致命/結局/技能</div></div>
+        <div class="arrow">→</div>
+        <div class="step k"><div class="n">A2</div><div class="t">Progress Kernel</div><div class="d">決定推進事件<br/>EventPatch + 義務</div></div>
+        <div class="arrow">→</div>
+        <div class="step s"><div class="n">A3</div><div class="t">story（串流）</div><div class="d">只 realize 已決定的<br/>讀 revealed，停決策點</div></div>
+        <div class="arrow">→</div>
+        <div class="step k"><div class="n">A4</div><div class="t">PatchValidator</div><div class="d">≥1 progress_delta<br/>否則拒，commit</div></div>
+        <div class="arrow">→</div>
+        <div class="step"><div class="n">A5</div><div class="t">安全點</div><div class="d">SQLite 快照<br/>merge + version+1</div></div>
+        <div class="arrow">→</div>
+        <div class="step"><div class="n">A6</div><div class="t">結局吸引子</div><div class="d">危險/真相/出路<br/>越門檻才觸發</div></div>
+      </div>
+
+      <div class="cols" style="margin-top:1.4rem">
+        <div class="col card" style="border-color:#264a30">
+          <h3>🟢 回合內（同步，卡互動）</h3>
+          <p>warden → kernel → story 串流 → validator commit → 快照。story 永遠讀<b>穩定快照</b>，看到的世界一致。</p>
+        </div>
+        <div class="col card" style="border-color:#3a2b16">
+          <h3>🟠 回合外（非同步，玩家讀字時跑）</h3>
+          <p><b>compactor</b>（壓縮歷史）、<b>dreaming</b>（NPC 演化）只<b>產 patch</b>，主迴圈在安全點驗版本後才 merge → 不污染 story 讀取。</p>
+        </div>
+      </div>
+      <div class="note">▍ <span>SignalBus 解耦：<code>BEAT_COMPLETED</code> 觸發快照/壓縮排程、<code>ENDING_TRIGGERED</code> 進結局、<code>RULE_VIOLATION</code> 生死亡 beat。<b>agent 之間從不直接呼叫彼此</b>。</span></div>
+    </div>
+  </section>
+
+  <!-- 7 · Progress Kernel -->
+  <section class="slide">
+    <div class="kicker">補丁一 · 穩定化</div>
+    <h2><span class="moss">Narrative Progress Kernel</span> — 世界狀態權威</h2>
+    <div class="hr"></div>
+    <div class="grow cols">
+      <div class="col">
+        <p class="lead">問題：讓 LLM 自由決定「世界狀態」，會出現<b>開門後又問要不要開門</b>、NPC 不進場、線索/背包不持久。</p>
+        <p class="sub">解法：把「推進判定」從 LLM 手上拿走，交給<b>程式碼層的 kernel</b>。story 退化成<b class="moss">純 realizer</b>——只把已決定的結果寫成敘事。</p>
+        <div class="flow" style="margin-top:1rem">
+          <div class="step"><div class="t" style="font-size:.78rem">玩家行動</div></div><div class="arrow">→</div>
+          <div class="step k"><div class="t" style="font-size:.78rem">intent 正規化</div></div><div class="arrow">→</div>
+          <div class="step k"><div class="t" style="font-size:.78rem">候選事件選擇</div></div><div class="arrow">→</div>
+          <div class="step k"><div class="t" style="font-size:.78rem">EventPatch</div><div class="d">義務 + forbidden</div></div>
+        </div>
+        <div class="pillrow">
+          <span class="pill">flag <b>ENABLE_PROGRESS_KERNEL</b> 預設 ON</span>
+          <span class="pill">失敗 → 退 legacy 流程</span>
+          <span class="pill">結局靠 <b>attractor</b>，非固定終點</span>
+        </div>
+      </div>
+      <div class="col">
+        <div class="ba" style="flex-direction:column">
+          <div class="box bad"><h4 class="blood">✗ 沒有 kernel</h4>
+            <div class="ex">玩家：我推開門<br/>下一 beat：<span class="blood">「你要打開那扇門嗎？」</span>← 又問一次</div></div>
+          <div class="box good" style="margin-top:.8rem"><h4 class="moss">✓ 有 kernel</h4>
+            <div class="ex">kernel：door_opened → forbidden_repeats=[ask_open_door]<br/>story：<span class="moss">「門開了，走廊冷光把病房切成兩半。你可以…」</span></div></div>
+        </div>
+        <div class="note">▍ <span><b>PatchValidator</b> 強制每 beat ≥1 progress_delta（場景/線索/道具/NPC/威脅/結局吸引力任一），否則拒絕 → <b>每個行動都有後果</b>。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 · Config Center -->
+  <section class="slide">
+    <div class="kicker">補丁二 · 可配置化</div>
+    <h2><span class="ember">Config Center</span> — Story prompt 模組化</h2>
+    <div class="hr"></div>
+    <div class="grow cols">
+      <div class="col">
+        <p class="lead">把 story 的 prompt 拆成<b>可配置 fragment</b>，可組裝、可預覽、可快照、可回滾——而不破壞 MVP-A。</p>
+        <div class="flow" style="margin-top:1rem">
+          <div class="step"><div class="t" style="font-size:.8rem">fragments</div><div class="d">role / kernel_obedience<br/>no_repetition …</div></div>
+          <div class="arrow">→</div>
+          <div class="step k" style="border-color:#3a2b16"><div class="t" style="font-size:.8rem">PromptComposer</div><div class="d">依 sort_order 組裝<br/>穩定 prompt_hash</div></div>
+          <div class="arrow">→</div>
+          <div class="step s" style="border-color:#3a2b16"><div class="t" style="font-size:.8rem">ConfigPromptSource</div><div class="d">active → default<br/>→ <b>static fallback</b></div></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="t" style="font-size:.8rem">story agent</div></div>
+        </div>
+        <div class="pillrow">
+          <span class="pill">flag <b>ENABLE_CONFIG_CENTER</b> 預設 OFF</span>
+          <span class="pill">config 失敗 → 退 SKILL.md，不崩</span>
+          <span class="pill">每場 run 存 prompt_hash 快照</span>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card"><h3>🛠 draft → preview → activate</h3>
+          <p style="margin-top:.4rem">UI 編輯只進 <b>draft</b>，預覽即時看編譯後 prompt（<b class="ember">零 LLM</b>），<b>啟用</b>後才影響進行中的遊戲 → 安全試錯。</p>
+        </div>
+        <table class="t" style="margin-top:.9rem">
+          <tr><th>agent</th><th>fragments</th><th>讀 real_bible?</th></tr>
+          <tr><td><b class="blood">story</b></td><td>8 件</td><td><b class="blood">永遠 false</b></td></tr>
+          <tr><td>orchestrator</td><td>2 件</td><td>true（揭露用）</td></tr>
+          <tr><td>setup</td><td>2 件</td><td>true（建構用）</td></tr>
+          <tr><td>warden / compactor</td><td>2 件</td><td>false</td></tr>
+        </table>
+        <div class="note">▍ <span><b>決定性</b>：同 fragments + 同變數 → 同 prompt_hash。任一 run 可反查「哪個 prompt 版本造成這個行為」。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 · 模型分層 + 並行 -->
+  <section class="slide">
+    <div class="kicker">工程基礎</div>
+    <h2>模型分層 · Fallback · 並行控制</h2>
+    <div class="hr"></div>
+    <div class="grow cols">
+      <div class="col">
+        <h3 style="margin-bottom:.6rem">三層模型 + fallback 鏈</h3>
+        <table class="t">
+          <tr><th>層</th><th>用途</th><th>fallback</th></tr>
+          <tr><td><span class="tag hot">Heavy</span></td><td>setup（真相密度高）</td><td>sonnet → 3.5 → flash</td></tr>
+          <tr><td><span class="tag med">Medium</span></td><td>story · compactor</td><td>flash → haiku → mini</td></tr>
+          <tr><td><span class="tag lite">Light</span></td><td>warden · orchestrator · npc</td><td>mini → lite → <b>本地邏輯</b></td></tr>
+        </table>
+        <div class="note">▍ <span>warden 的致命規則可在<b>純 Python 保底</b>——LLM 全失效也不誤殺、不全崩（graceful degradation）。</span></div>
+      </div>
+      <div class="col">
+        <h3 style="margin-bottom:.6rem">Blackboard 並行控制</h3>
+        <div style="display:flex;flex-direction:column;gap:.5rem">
+          <div class="card"><p><b>版本化容器</b>：每次 merge → version +1。</p></div>
+          <div class="card"><p><b>非同步只產 patch</b>：dreaming/compactor 不直接寫，主迴圈在<b>安全點</b>驗 base_version 後才 merge；過期則拒/rebase。</p></div>
+          <div class="card"><p><b>同步路徑讀穩定快照</b>：玩家搶快也不會讓 story 讀到半套狀態。</p></div>
+          <div class="card"><p><b>快照存「當時」摘要</b>：回 beat 10 不會帶 beat 30 的摘要。</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MVP-B · 差異化 -->
+  <section class="slide">
+    <div class="kicker">MVP-B · 差異化機制</div>
+    <h2>讓世界活起來、讓一場遊戲有終點</h2>
+    <div class="hr"></div>
+    <div class="grow">
+      <div class="grid g3">
+        <div class="card"><h3>🧠 UB4 輕量 dreaming</h3><p>在場 NPC 每 5 beat 演化（情緒/意圖/關係）。<b class="moss">只寫 evolving</b>（碰不到 secret_core）；self_aware=false 不編謊；沒戲份凍結；非同步只產 patch。</p></div>
+        <div class="card" style="border-color:#5a1f1f"><h3>🏁 UB2 一種結局序列</h3><p><b class="blood">純敘述收尾 + 完整真相揭露</b>（結局是唯一可露 real_bible 的時機）+ 復盤。提早觸發 → 沒找到的碎片一次攤開。</p></div>
+        <div class="card"><h3>⚖ UB1 技能封頂強化</h3><p>破格宣稱<b>接受但加侷限</b>（侷限變謎題/線索）。本地偵測，LLM 掛也封頂；(技能,侷限) 寫 ledger。</p></div>
+        <div class="card"><h3>🎒 UB5 道具庫完整</h3><p><code>held_by</code> 綁 NPC（命運跟著走）、增刪查轉移、隨快照保存；<b class="blood">is_key_item 永不外露</b>。</p></div>
+        <div class="card"><h3>🛡 UB3 防暴雷驗證報告</h3><p><b>對抗性 caller</b>（逐字 echo context）+ injection probes → 證明 story context 結構上無 real_bible。產驗證報告。</p></div>
+        <div class="card" style="border-color:#264a30"><h3>✅ 47 工單全 done</h3><p>MVP-A + Progress Kernel + Config Center + MVP-B。555 測試綠。真實 LLM 實測連續生成、0 fallback。</p></div>
+      </div>
+      <div class="note">▍ <span>MVP-B 在穩定引擎上補差異化——NPC 會反思演化、一場遊戲能收尾並揭曉真相、破格宣稱被合理封頂。</span></div>
+    </div>
+  </section>
+
+  <!-- 10 · 收尾 -->
+  <section class="slide">
+    <div class="kicker">整體圖景</div>
+    <h2>多代理如何一起運作 — 一句話</h2>
+    <div class="hr"></div>
+    <div class="grow">
+      <p class="lead" style="font-size:clamp(1.05rem,2vw,1.45rem)">
+        <b>setup</b> 一次建好有真相的世界 → 每個 beat 由 <b>warden</b> 守門、<b class="moss">kernel</b> 決定世界怎麼推進、<b class="blood">story</b> 把結果串流成恐怖敘事（只讀已揭露、結構上不暴雷）、<b>orchestrator</b> 適時揭露新碎片 → <b>validator</b> 確保每步有後果 → <b>compactor / dreaming</b> 在回合外悄悄維護記憶與活的 NPC。所有人透過 <b class="ghost">Blackboard</b> 溝通，沒人直接呼叫彼此。
+      </p>
+      <div class="grid g4" style="margin-top:1.6rem">
+        <div class="card" style="text-align:center"><h3 style="justify-content:center;font-size:1.6rem;color:#fff">8</h3><p style="text-align:center">協同 agent</p></div>
+        <div class="card" style="text-align:center"><h3 style="justify-content:center;font-size:1.6rem;color:#fff">2</h3><p style="text-align:center">關鍵補丁<br/>Kernel · Config</p></div>
+        <div class="card" style="text-align:center"><h3 style="justify-content:center;font-size:1.6rem;color:#fff">3</h3><p style="text-align:center">層記憶<br/>Hot · Warm · Cold</p></div>
+        <div class="card" style="text-align:center"><h3 style="justify-content:center;font-size:1.6rem;color:#fff">∞</h3><p style="text-align:center">無限故事模式</p></div>
+      </div>
+      <div class="legend" style="margin-top:1.5rem">
+        <span><span class="dot" style="background:var(--blood2)"></span>自由 + 連貫：世界真相驅動</span>
+        <span><span class="dot" style="background:var(--moss)"></span>每步有後果：kernel + validator</span>
+        <span><span class="dot" style="background:var(--ember)"></span>可調可回滾：config center</span>
+        <span><span class="dot" style="background:var(--ghost)"></span>結構防暴雷：雙層 bible + 權限</span>
+      </div>
+    </div>
+    <p style="color:var(--faint);font-size:.8rem;text-align:center">Nightmare Assault · 詳見 <code>00-overview</code> · <code>01-architecture</code> · <code>10-progress-kernel</code> · <code>11-config-center</code></p>
+  </section>
+
+</div>
+
+<div class="nav">
+  <span class="nbtn" id="prev">◀ 上一頁</span>
+  <div class="dots" id="dots"></div>
+  <span class="counter">第 <b id="cur">1</b> / <span id="tot">10</span> 頁</span>
+  <span class="nbtn" id="next">下一頁 ▶</span>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const dotsBox=document.getElementById('dots');
+  let i=0;
+  slides.forEach((_,k)=>{const d=document.createElement('div');d.className='nd';d.onclick=()=>go(k);dotsBox.appendChild(d);});
+  const dots=[...document.querySelectorAll('.nd')];
+  document.getElementById('tot').textContent=slides.length;
+  function go(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('on',k===i));
+    dots.forEach((d,k)=>d.classList.toggle('on',k===i));
+    document.getElementById('cur').textContent=i+1;
+    document.getElementById('prog').style.width=((i+1)/slides.length*100)+'%';
+  }
+  document.getElementById('next').onclick=()=>go(i+1);
+  document.getElementById('prev').onclick=()=>go(i-1);
+  document.addEventListener('keydown',e=>{
+    if(['ArrowRight',' ','PageDown'].includes(e.key)){e.preventDefault();go(i+1);}
+    else if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();go(i-1);}
+    else if(e.key==='Home')go(0); else if(e.key==='End')go(slides.length-1);
+  });
+  const h=parseInt((location.hash||'').replace('#',''),10);
+  go(Number.isFinite(h)&&h>=1?h-1:0);
+</script>
+</body>
+</html>

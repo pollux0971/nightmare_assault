@@ -1,0 +1,37 @@
+# Nightmare Assault — Python 專案底座（E0-S0）
+#
+# 開發環境建議用 venv（不污染系統 Python；本機 .venv 已 gitignore）：
+#   python3 -m venv .venv
+#   .venv/bin/pip install -e ".[dev]"      # 安裝 core + 開發工具(pytest)
+#   .venv/bin/python -m pytest -q          # 跑驗收
+#
+# 註：pywebview 需系統 webview runtime（Linux: WebKitGTK），於前端階段(E7)再實際安裝；
+#     底座階段只需 dev 依賴(pytest) 即可跑驗收。
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nightmare-assault"
+version = "0.0.0"
+description = "LLM 驅動的無限恐怖文字冒險遊戲（後端 core）"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.0",    # 全部資料契約（core/models.py）
+    "pywebview>=5.0",   # 桌面殼（JS↔Python 橋接，前端階段需實際安裝）
+    "httpx>=0.27",      # OpenRouter（OpenAI 相容）LLM client
+    "PyYAML>=6.0",      # config YAML 載入
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["core*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

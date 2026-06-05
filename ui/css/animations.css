@@ -1,0 +1,43 @@
+/* animations.css — 逐字浮現、淡入、明暗呼吸、血點明滅（U17 視覺） */
+
+@keyframes breathe {
+  0%, 100% { filter: brightness(0.92); }
+  50%      { filter: brightness(1.06); }
+}
+@keyframes blink {
+  0%, 100% { opacity: .25; }
+  50%      { opacity: 1; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 逐字浮現：每個 token span 由透明淡入 */
+#narrative .tok {
+  opacity: 0;
+  animation: fadeIn .42s ease forwards;
+}
+
+/* 決策選項逐個淡入（JS 設 animation-delay 遞增） */
+.opt {
+  opacity: 0;
+  animation: fadeUp .4s ease forwards;
+}
+.recap.show { animation: fadeUp .5s ease forwards; }
+
+/* view 切換淡入 */
+.view.active { animation: fadeIn .5s ease; }
+
+/* 序章台詞緩慢浮現又淡去由 JS 控 opacity transition */
+.loading-line { transition: opacity 1.6s ease; }
+
+/* 等待動畫的血點脈動 */
+@keyframes waitpulse {
+  0%, 100% { opacity: .25; transform: scale(.8); }
+  50%      { opacity: 1;   transform: scale(1.15); }
+}

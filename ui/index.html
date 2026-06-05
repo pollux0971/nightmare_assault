@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nightmare Assault</title>
+  <link rel="stylesheet" href="css/theme.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+</head>
+<body>
+  <div id="breath"></div>
+
+  <!-- HUD：生成管線進度（固定角落） -->
+  <div id="hud" class="hidden">
+    <div class="hud-title">◈ 夢魘生成中</div>
+    <ul id="hud-steps"></ul>
+  </div>
+
+  <!-- 設定畫面 -->
+  <section id="view-settings" class="view">
+    <div class="panel">
+      <h1 class="title">Nightmare&nbsp;Assault</h1>
+      <p class="subtitle">當你凝視深淵，深淵也在凝視你</p>
+      <label>OpenRouter API Key</label>
+      <input id="cfg-key" type="password" placeholder="sk-or-v1-…" autocomplete="off" />
+      <p class="hint">金鑰只存在本機，永不上傳前端以外之處。所有請求由後端發出。</p>
+      <button id="btn-save-cfg" class="primary">儲存並繼續</button>
+      <p id="cfg-msg" class="msg"></p>
+    </div>
+  </section>
+
+  <!-- 主選單 -->
+  <section id="view-menu" class="view">
+    <div class="panel">
+      <h1 class="title">Nightmare&nbsp;Assault</h1>
+      <button id="btn-new" class="primary">新的夢魘</button>
+      <button id="btn-continue" class="ghost">繼續</button>
+      <button id="btn-settings" class="ghost">設定</button>
+      <button id="btn-config" class="ghost">配置中心</button>
+    </div>
+  </section>
+
+  <!-- 新局設定 -->
+  <section id="view-new" class="view">
+    <div class="panel">
+      <h2>新的夢魘</h2>
+      <label>主題</label>
+      <input id="new-theme" type="text" placeholder="例如：廢棄的精神病院、深海研究站、末班列車…" />
+      <label>主角姓名</label>
+      <input id="new-name" type="text" placeholder="林默" value="林默" />
+      <label>同行者人數</label>
+      <input id="new-npc" type="number" min="1" max="5" value="2" />
+      <div class="row">
+        <button id="btn-start" class="primary">進入世界</button>
+        <button id="btn-back-menu" class="ghost">返回</button>
+      </div>
+      <p id="new-msg" class="msg"></p>
+    </div>
+  </section>
+
+  <!-- 載入畫面（序章儀式） -->
+  <section id="view-loading" class="view">
+    <div class="loading-wrap">
+      <p id="loading-line" class="loading-line"></p>
+      <div class="blood-dot"></div>
+      <p class="hint dim">如果害怕，可以把音量調小。</p>
+    </div>
+  </section>
+
+  <!-- 遊戲主畫面 -->
+  <section id="view-game" class="view">
+    <header id="game-header">
+      <span id="loc">📍 <span id="loc-name">—</span> · 第 <span id="beat-no">0</span> 分鏡</span>
+      <span class="header-btns">
+        <button id="btn-inv" title="道具">🎒</button>
+        <button id="btn-chat" title="交談">💬</button>
+        <button id="btn-save" title="存檔">💾</button>
+        <button id="btn-transcript" title="複製故事">📋</button>
+        <button id="btn-debug" title="進度狀態">🐞</button>
+        <button id="btn-menu" title="選單">≡</button>
+      </span>
+    </header>
+
+    <div id="skill-limit"></div>
+
+    <div id="narrative"></div>
+
+    <div id="decision">
+      <p id="recap" class="recap"></p>
+      <div id="options"></div>
+      <button id="btn-continue-narration" class="continue hidden">繼續 ▼</button>
+      <div id="free-input">
+        <input id="free-text" type="text" placeholder="或描述你想做的事…" />
+        <button id="btn-submit">送出</button>
+      </div>
+    </div>
+    <div id="game-status" class="status-bar"></div>
+  </section>
+
+  <!-- 聊天室（MC3）-->
+  <dialog id="dlg-chat">
+    <h3>交談 <span id="chat-with" class="hint dim"></span></h3>
+    <ul id="chat-npc-list" style="list-style:none;padding:0;max-height:18vh;overflow:auto"></ul>
+    <div id="chat-log" style="display:none;flex-direction:column;gap:.4rem;
+         max-height:38vh;overflow:auto;margin:.5rem 0;padding:.4rem;
+         border:1px solid var(--border,#2a2a34);border-radius:6px"></div>
+    <div id="chat-input-row" class="row" style="display:none">
+      <input id="chat-text" type="text" placeholder="說點什麼…" style="flex:1" />
+      <button id="chat-send" class="primary">說</button>
+      <button id="chat-back" class="ghost">換人</button>
+    </div>
+    <button onclick="document.getElementById('dlg-chat').close()" class="ghost">離開</button>
+  </dialog>
+
+  <!-- 道具面板 -->
+  <dialog id="dlg-inv">
+    <h3>道具</h3>
+    <ul id="inv-list"></ul>
+    <button onclick="document.getElementById('dlg-inv').close()">關閉</button>
+  </dialog>
+
+  <!-- 存檔面板 -->
+  <dialog id="dlg-save">
+    <h3>存檔</h3>
+    <input id="save-label" type="text" placeholder="存檔名稱" />
+    <button id="btn-do-save">建立存檔點</button>
+    <h4>既有存檔</h4>
+    <ul id="save-list"></ul>
+    <button onclick="document.getElementById('dlg-save').close()">關閉</button>
+  </dialog>
+
+  <!-- 故事逐字稿（複製） -->
+  <dialog id="dlg-transcript">
+    <h3>故事逐字稿</h3>
+    <textarea id="transcript-text" readonly
+      style="width:min(78vw,640px);height:54vh;background:var(--bg);color:var(--text);
+             border:1px solid var(--border);border-radius:6px;padding:.7rem;
+             font-family:inherit;font-size:.92rem;line-height:1.8;resize:vertical"></textarea>
+    <p class="hint">可全選（Ctrl/Cmd+A）後複製，或按下方按鈕。</p>
+    <div class="row">
+      <button id="btn-copy-transcript" class="primary">複製到剪貼簿</button>
+      <button onclick="document.getElementById('dlg-transcript').close()" class="ghost">關閉</button>
+    </div>
+    <p id="copy-msg" class="hint"></p>
+  </dialog>
+
+  <!-- Debug 進度面板 -->
+  <dialog id="dlg-debug">
+    <h3>進度狀態（Progress Kernel）</h3>
+    <pre id="debug-json" style="white-space:pre-wrap;max-height:50vh;overflow:auto;font-size:.8rem"></pre>
+    <button onclick="document.getElementById('dlg-debug').close()">關閉</button>
+  </dialog>
+
+  <!-- 配置中心（P5：draft → preview → activate；preview 不呼 LLM）-->
+  <dialog id="dlg-config">
+    <h3>配置中心 · Story Agent</h3>
+    <div class="row">
+      <label>Profile：</label>
+      <select id="cfg-profile"></select>
+      <span id="cfg-active-hash" class="hint dim"></span>
+    </div>
+    <div class="row" style="align-items:flex-start;gap:1rem">
+      <div style="flex:1;min-width:200px">
+        <h4>Prompt Fragments</h4>
+        <ul id="cfg-frag-list" style="max-height:42vh;overflow:auto;list-style:none;padding:0"></ul>
+      </div>
+      <div style="flex:2;min-width:280px">
+        <h4>編輯 <span id="cfg-frag-key" class="hint dim"></span></h4>
+        <textarea id="cfg-frag-editor"
+          style="width:100%;height:18vh;background:var(--bg);color:var(--text);
+                 border:1px solid var(--border);border-radius:6px;padding:.6rem;
+                 font-family:inherit;font-size:.9rem;line-height:1.7;resize:vertical"></textarea>
+        <div class="row">
+          <button id="cfg-btn-draft" class="ghost">存草稿</button>
+          <button id="cfg-btn-preview" class="ghost">預覽（不呼 LLM）</button>
+          <button id="cfg-btn-activate" class="primary">啟用草稿</button>
+        </div>
+        <p id="cfg-msg" class="hint"></p>
+        <h4>編譯後 prompt 預覽　<span id="cfg-preview-hash" class="hint dim"></span></h4>
+        <pre id="cfg-preview" style="white-space:pre-wrap;max-height:24vh;overflow:auto;
+             font-size:.78rem;background:var(--bg);border:1px solid var(--border);
+             border-radius:6px;padding:.6rem"></pre>
+      </div>
+    </div>
+    <h4>Feature Flags</h4>
+    <ul id="cfg-flags" style="list-style:none;padding:0"></ul>
+    <button onclick="document.getElementById('dlg-config').close()" class="ghost">關閉</button>
+  </dialog>
+
+  <!-- 結局 -->
+  <section id="view-ending" class="view">
+    <div class="panel">
+      <h2 id="ending-title">結局</h2>
+      <p id="ending-body" class="ending-body"></p>
+      <button id="btn-ending-menu" class="primary">回到主選單</button>
+    </div>
+  </section>
+
+  <script src="js/views.js"></script>
+  <script src="js/streaming.js"></script>
+  <script src="js/api.js"></script>
+</body>
+</html>

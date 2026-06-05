@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Nightmare Assault — 視覺化架構與表格參考</title>
+<style>
+  :root{
+    --bg:#0c0c10; --panel:#16161d; --panel2:#1d1d26; --card:#13131a;
+    --ink:#ece7dc; --dim:#b3ac9f; --faint:#746f65;
+    --blood:#b3231f; --blood2:#e0463c; --ember:#d98a3a; --ghost:#6f8fb0; --moss:#5e8d6a; --gold:#caa45a;
+    --line:#2b2b35; --line2:#3c3c49;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+    --sans:"Noto Sans CJK TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    background-image:radial-gradient(900px 600px at 90% -5%,#17121b 0%,transparent 60%)}
+  a{color:var(--blood2);text-decoration:none} a:hover{text-decoration:underline}
+  b,strong{color:#fff}
+  code{font-family:var(--mono);font-size:.86em;background:#000;color:#cdb7a0;padding:.08em .4em;border-radius:5px;border:1px solid var(--line)}
+  .blood{color:var(--blood2)} .ember{color:var(--ember)} .ghost{color:var(--ghost)} .moss{color:var(--moss)} .gold{color:var(--gold)} .dim{color:var(--dim)}
+
+  .wrap{display:flex;max-width:1280px;margin:0 auto}
+  /* TOC */
+  nav{position:sticky;top:0;align-self:flex-start;height:100vh;width:236px;flex:none;
+    padding:1.6rem 1rem 2rem;border-right:1px solid var(--line);overflow:auto}
+  nav .brand{font-weight:800;font-size:1.05rem;letter-spacing:-.01em;margin-bottom:.2rem}
+  nav .tag{font-family:var(--mono);font-size:.64rem;letter-spacing:.2em;color:var(--blood2);text-transform:uppercase}
+  nav .grp{font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;color:var(--faint);
+    text-transform:uppercase;margin:1.3rem 0 .4rem}
+  nav ol{list-style:none}
+  nav li a{display:block;padding:.3rem .5rem;border-radius:7px;color:var(--dim);font-size:.85rem;border-left:2px solid transparent}
+  nav li a:hover{background:var(--panel);color:var(--ink);text-decoration:none}
+  nav li a.on{color:#fff;border-left-color:var(--blood);background:var(--panel)}
+
+  main{flex:1;min-width:0;padding:2.2rem 2.4rem 6rem}
+  header.hero{margin-bottom:2rem}
+  header.hero h1{font-size:2rem;font-weight:800;letter-spacing:-.01em}
+  header.hero p{color:var(--dim);margin-top:.5rem;max-width:70ch}
+  .hr{height:1px;background:linear-gradient(90deg,var(--blood),transparent);margin:.8rem 0 0;width:280px}
+
+  .fig{background:linear-gradient(180deg,var(--panel),var(--card));border:1px solid var(--line);
+    border-radius:14px;padding:1.2rem 1.3rem 1.1rem;margin:1.5rem 0;scroll-margin-top:1rem}
+  .fig > .lbl{display:flex;align-items:baseline;gap:.7rem;margin-bottom:.2rem}
+  .fig .num{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;color:var(--blood2);
+    border:1px solid #4a1f1f;border-radius:6px;padding:.12em .5em;background:#160c0c;white-space:nowrap}
+  .fig h2{font-size:1.18rem;font-weight:800}
+  .fig .cap{color:var(--dim);font-size:.85rem;margin-top:.7rem;border-left:2px solid var(--blood);padding-left:.7rem}
+  .stage{background:#0b0b0f;border:1px solid var(--line);border-radius:10px;padding:1rem;margin-top:.9rem;overflow:auto}
+  svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  .legend{display:flex;gap:1.1rem;flex-wrap:wrap;margin-top:.7rem;font-size:.78rem;color:var(--dim)}
+  .legend span{display:flex;align-items:center;gap:.4rem}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+  .dash{width:18px;height:0;border-top:2px dashed var(--ember);display:inline-block}
+
+  /* CSS flow boxes */
+  .flow{display:flex;align-items:stretch;gap:.3rem;flex-wrap:wrap;justify-content:center}
+  .node{flex:1;min-width:108px;max-width:200px;border:1px solid var(--line2);border-radius:10px;
+    padding:.6rem .55rem;text-align:center;background:var(--panel2)}
+  .node .t{font-weight:700;font-size:.86rem} .node .d{color:var(--dim);font-size:.72rem;margin-top:.18rem;line-height:1.4}
+  .node.k{border-color:#2f6b3f;background:#0e160f} .node.s{border-color:#5a1f1f;background:#160c0c}
+  .node.c{border-color:#3a2b16;background:#160f08}
+  .ar{align-self:center;color:var(--blood);font-size:1.15rem;flex:none}
+  .stack{display:flex;flex-direction:column;gap:.5rem}
+  .layer{border:1px solid var(--line);border-radius:10px;padding:.6rem .9rem;display:flex;align-items:center;gap:1rem;background:var(--panel)}
+  .layer .ln{font-weight:700;min-width:188px;display:flex;align-items:center;gap:.5rem}
+  .chip{font-family:var(--mono);font-size:.7rem;border:1px solid var(--line2);border-radius:6px;padding:.14em .5em;color:#bcae9c;background:#0b0b0f;white-space:nowrap}
+  .layer .lb{color:var(--dim);font-size:.82rem;display:flex;gap:.4rem;flex-wrap:wrap}
+  .layer.agent{border-color:#4a1f1f} .layer.kernel{border-color:#264a30} .layer.config{border-color:#3a2b16} .layer.state{border-color:#26384a}
+
+  /* tables */
+  table.t{width:100%;border-collapse:collapse;font-size:.84rem}
+  table.t th,table.t td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--line);vertical-align:top}
+  table.t thead th{color:var(--faint);font-family:var(--mono);font-weight:600;font-size:.68rem;
+    letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid var(--line2);position:sticky}
+  table.t tbody tr:nth-child(odd){background:rgba(255,255,255,.015)}
+  table.t tbody tr:hover{background:rgba(224,70,60,.06)}
+  table.t td b{color:#fff}
+  .pin{font-family:var(--mono);font-size:.68rem;padding:.12em .5em;border-radius:999px;border:1px solid var(--line2);color:var(--dim);white-space:nowrap}
+  .pin.h{color:var(--blood2);border-color:#5a1f1f;background:#160c0c}
+  .pin.m{color:var(--ember);border-color:#4a371f;background:#160f08}
+  .pin.l{color:var(--ghost);border-color:#26384a;background:#0b1117}
+  .pin.no{color:var(--blood2);border-color:#5a1f1f} .pin.yes{color:var(--moss);border-color:#264a30}
+  .grp-h{font-family:var(--mono);font-size:.7rem;color:var(--gold);letter-spacing:.06em;padding-top:.9rem}
+  footer{color:var(--faint);font-size:.8rem;margin-top:2.5rem;border-top:1px solid var(--line);padding-top:1rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <div class="tag">visual reference</div>
+  <div class="brand">Nightmare Assault</div>
+  <div class="dim" style="font-size:.78rem">多代理架構 · 圖表參考</div>
+  <div class="grp">架構圖</div>
+  <ol>
+    <li><a href="#fig1">圖1 · 六層架構</a></li>
+    <li><a href="#fig2">圖2 · 8-Agent 拓撲</a></li>
+    <li><a href="#fig3">圖3 · Beat 迴圈時序</a></li>
+    <li><a href="#fig4">圖4 · 雙層 Bible 揭露閘門</a></li>
+    <li><a href="#fig5">圖5 · Progress Kernel 資料流</a></li>
+    <li><a href="#fig6">圖6 · Config Center 解析</a></li>
+  </ol>
+  <div class="grp">表格</div>
+  <ol>
+    <li><a href="#tbl1">表1 · Agent 編制</a></li>
+    <li><a href="#tbl2">表2 · 權限模型</a></li>
+    <li><a href="#tbl3">表3 · 模型分層 + Fallback</a></li>
+    <li><a href="#tbl4">表4 · SignalBus 事件</a></li>
+    <li><a href="#tbl5">表5 · 契約索引</a></li>
+    <li><a href="#tbl6">表6 · MVP-B 差異化機制</a></li>
+  </ol>
+</nav>
+
+<main>
+  <header class="hero">
+    <h1>視覺化架構與表格參考</h1>
+    <p>把 <code>00–11</code> 設計文件的核心結構濃縮成可視化圖表：6 張架構圖 + 5 張資料表。涵蓋 8 個 LLM agent 如何透過 Blackboard 協同、每個 beat 的資料流，以及兩個補丁（Progress Kernel、Config Center）。</p>
+    <div class="hr"></div>
+  </header>
+
+  <!-- 圖1 -->
+  <section class="fig" id="fig1">
+    <div class="lbl"><span class="num">圖 1</span><h2>六層架構</h2></div>
+    <div class="stage">
+      <div class="stack">
+        <div class="layer"><span class="ln">🖥 Frontend</span><span class="lb"><span class="chip">pywebview</span><span class="chip">HTML/CSS/JS</span><span class="chip">NA.* 事件渲染</span><span class="chip">不解析分隔符/JSON</span></span></div>
+        <div class="layer agent"><span class="ln"><span class="dot" style="background:var(--blood2)"></span>Agent Layer（LLM）</span><span class="lb"><span class="chip">setup</span><span class="chip">orchestrator</span><span class="chip">story</span><span class="chip">warden</span><span class="chip">compactor</span><span class="chip">npc-chat</span><span class="chip">dreaming</span><span class="chip">offstage-fate</span></span></div>
+        <div class="layer"><span class="ln">⚙ Orchestration</span><span class="lb"><span class="chip">BeatLoop</span><span class="chip">SignalBus</span><span class="chip">StreamParser（三級 repair）</span><span class="chip">EventExtract</span></span></div>
+        <div class="layer kernel"><span class="ln"><span class="dot" style="background:var(--moss)"></span>Progress Kernel <span class="dim" style="font-weight:400;font-size:.7rem">補丁①</span></span><span class="lb"><span class="chip">ProgressKernel</span><span class="chip">PatchValidator</span><span class="chip">SceneGraphProvider</span><span class="chip">ContextBuilder</span><span class="chip">Attractors</span></span></div>
+        <div class="layer config"><span class="ln"><span class="dot" style="background:var(--ember)"></span>Config Center <span class="dim" style="font-weight:400;font-size:.7rem">補丁②</span></span><span class="lb"><span class="chip">PromptComposer</span><span class="chip">ConfigStore</span><span class="chip">ConfigPromptSource</span><span class="chip">FeatureFlags</span></span></div>
+        <div class="layer state"><span class="ln"><span class="dot" style="background:var(--ghost)"></span>State + Persistence</span><span class="lb"><span class="chip">Blackboard（版本化 patch）</span><span class="chip">三層記憶</span><span class="chip">SQLite 快照/存檔</span></span></div>
+      </div>
+    </div>
+    <p class="cap">State 層不依賴 LLM，可獨立測試。Agent 層透過 Blackboard 讀寫，<b>不直接互相呼叫</b>；錨點不可變性靠程式碼權限強制，而非 prompt 自律。兩個補丁是旁路增量層，預設可關、失敗降級。</p>
+  </section>
+
+  <!-- 圖2 -->
+  <section class="fig" id="fig2">
+    <div class="lbl"><span class="num">圖 2</span><h2>8-Agent 拓撲 — 一切透過 Blackboard</h2></div>
+    <div class="stage">
+      <svg viewBox="0 0 840 470" width="840">
+        <defs>
+          <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#6f8fb0"/></marker>
+        </defs>
+        <!-- connectors (under) : node-center -> blackboard-center (420,235) -->
+        <g stroke-width="1.4" fill="none">
+          <line x1="420" y1="55"  x2="420" y2="235" stroke="#5a3030"/>
+          <line x1="639" y1="108" x2="420" y2="235" stroke="#3a4a5a"/>
+          <line x1="730" y1="235" x2="420" y2="235" stroke="#3a4a5a" stroke-dasharray="5 4"/>
+          <line x1="639" y1="362" x2="420" y2="235" stroke="#3a4a5a" stroke-dasharray="5 4"/>
+          <line x1="420" y1="415" x2="420" y2="235" stroke="#3a4a5a" stroke-dasharray="5 4"/>
+          <line x1="201" y1="362" x2="420" y2="235" stroke="#3a4a5a"/>
+          <line x1="110" y1="235" x2="420" y2="235" stroke="#5a3030"/>
+          <line x1="201" y1="108" x2="420" y2="235" stroke="#3a4a5a"/>
+        </g>
+        <!-- Blackboard hub -->
+        <g>
+          <rect x="338" y="196" width="164" height="78" rx="12" fill="#0c1117" stroke="#26384a" stroke-width="1.6"/>
+          <text x="420" y="227" text-anchor="middle" fill="#cfe0ef" font-size="16" font-weight="800" font-family="sans-serif">Blackboard</text>
+          <text x="420" y="247" text-anchor="middle" fill="#6f8fb0" font-size="11" font-family="sans-serif">版本化狀態 · patch · 快照</text>
+        </g>
+        <!-- agent node helper boxes -->
+        <!-- story (top, every-beat) -->
+        <g><rect x="356" y="31" width="128" height="48" rx="9" fill="#160c0c" stroke="#5a1f1f" stroke-width="1.4"/>
+          <circle cx="372" cy="49" r="5" fill="#d98a3a"/><text x="386" y="53" fill="#fff" font-size="13" font-weight="700" font-family="sans-serif">story ★</text>
+          <text x="420" y="70" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">每 beat · 串流 · 只讀 revealed</text></g>
+        <!-- warden -->
+        <g><rect x="575" y="84" width="128" height="48" rx="9" fill="#0b1117" stroke="#26384a" stroke-width="1.2"/>
+          <circle cx="591" cy="102" r="5" fill="#6f8fb0"/><text x="605" y="106" fill="#fff" font-size="13" font-weight="700" font-family="sans-serif">warden</text>
+          <text x="639" y="123" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">僅玩家 · 致命/結局</text></g>
+        <!-- compactor -->
+        <g><rect x="666" y="211" width="128" height="48" rx="9" fill="#160f08" stroke="#4a371f" stroke-width="1.2"/>
+          <circle cx="682" cy="229" r="5" fill="#d98a3a"/><text x="696" y="233" fill="#fff" font-size="13" font-weight="700" font-family="sans-serif">compactor</text>
+          <text x="730" y="250" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">非同步 · 壓縮記憶</text></g>
+        <!-- offstage-fate -->
+        <g><rect x="575" y="338" width="128" height="48" rx="9" fill="#0b1117" stroke="#26384a" stroke-width="1.2"/>
+          <circle cx="591" cy="356" r="5" fill="#6f8fb0"/><text x="605" y="360" fill="#fff" font-size="12.5" font-weight="700" font-family="sans-serif">offstage-fate</text>
+          <text x="639" y="377" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">非同步 · 離場命運</text></g>
+        <!-- dreaming -->
+        <g><rect x="356" y="391" width="128" height="48" rx="9" fill="#0b1117" stroke="#26384a" stroke-width="1.2"/>
+          <circle cx="372" cy="409" r="5" fill="#6f8fb0"/><text x="386" y="413" fill="#fff" font-size="13" font-weight="700" font-family="sans-serif">dreaming</text>
+          <text x="420" y="430" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">非同步 · 在場 NPC 演化</text></g>
+        <!-- npc-chat -->
+        <g><rect x="137" y="338" width="128" height="48" rx="9" fill="#0b1117" stroke="#26384a" stroke-width="1.2"/>
+          <circle cx="153" cy="356" r="5" fill="#6f8fb0"/><text x="167" y="360" fill="#fff" font-size="13" font-weight="700" font-family="sans-serif">npc-chat</text>
+          <text x="201" y="377" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">隨選 · 聊天室</text></g>
+        <!-- setup -->
+        <g><rect x="46" y="211" width="128" height="48" rx="9" fill="#160c0c" stroke="#5a1f1f" stroke-width="1.4"/>
+          <circle cx="62" cy="229" r="5" fill="#b3231f"/><text x="76" y="233" fill="#fff" font-size="13" font-weight="700" font-family="sans-serif">setup</text>
+          <text x="110" y="250" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">開局一次 · 不可降級</text></g>
+        <!-- orchestrator -->
+        <g><rect x="137" y="84" width="128" height="48" rx="9" fill="#0b1117" stroke="#26384a" stroke-width="1.2"/>
+          <circle cx="153" cy="102" r="5" fill="#6f8fb0"/><text x="167" y="106" fill="#fff" font-size="12.5" font-weight="700" font-family="sans-serif">orchestrator</text>
+          <text x="201" y="123" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">每 beat · 揭露閘門</text></g>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--blood)"></span>Heavy（setup）</span>
+      <span><span class="dot" style="background:var(--ember)"></span>Medium（story · compactor）</span>
+      <span><span class="dot" style="background:var(--ghost)"></span>Light（其餘）</span>
+      <span><span class="dash"></span>非同步（回合外，只產 patch）</span>
+      <span>★ 每 beat 都跑且串流</span>
+    </div>
+    <p class="cap">所有 agent 只跟中央 <b>Blackboard</b> 讀寫，<b>彼此從不直接呼叫</b>——這是並行安全與解耦的基礎。非同步 agent（dreaming/compactor/offstage-fate）在玩家讀字時跑、只產 patch，主迴圈在安全點驗版本後才 merge。</p>
+  </section>
+
+  <!-- 圖3 -->
+  <section class="fig" id="fig3">
+    <div class="lbl"><span class="num">圖 3</span><h2>Beat 迴圈時序 — 一個分鏡的資料流</h2></div>
+    <div class="stage">
+      <svg viewBox="0 0 880 440" width="880">
+        <defs>
+          <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#e0463c"/></marker>
+          <marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#d98a3a"/></marker>
+        </defs>
+        <!-- lane headers + lifelines -->
+        <g font-family="sans-serif" font-size="12" font-weight="700" text-anchor="middle">
+          <!-- x: 玩家80 warden235 kernel400 story545 validator675 state800 -->
+          <g><rect x="34" y="16" width="92" height="32" rx="7" fill="#15151d" stroke="#3c3c49"/><text x="80" y="37" fill="#ece7dc">玩家/前端</text></g>
+          <g><rect x="189" y="16" width="92" height="32" rx="7" fill="#0b1117" stroke="#26384a"/><text x="235" y="37" fill="#cfe0ef">warden</text></g>
+          <g><rect x="352" y="16" width="96" height="32" rx="7" fill="#0e160f" stroke="#2f6b3f"/><text x="400" y="37" fill="#bfe2c8">kernel</text></g>
+          <g><rect x="499" y="16" width="92" height="32" rx="7" fill="#160c0c" stroke="#5a1f1f"/><text x="545" y="37" fill="#f0c4be">story</text></g>
+          <g><rect x="627" y="16" width="96" height="32" rx="7" fill="#0e160f" stroke="#2f6b3f"/><text x="675" y="37" fill="#bfe2c8">validator</text></g>
+          <g><rect x="752" y="16" width="96" height="32" rx="7" fill="#0c1117" stroke="#26384a"/><text x="800" y="37" fill="#cfe0ef">state/DB</text></g>
+        </g>
+        <g stroke="#2b2b35" stroke-width="1" stroke-dasharray="3 5">
+          <line x1="80" y1="50" x2="80" y2="418"/><line x1="235" y1="50" x2="235" y2="418"/>
+          <line x1="400" y1="50" x2="400" y2="418"/><line x1="545" y1="50" x2="545" y2="418"/>
+          <line x1="675" y1="50" x2="675" y2="418"/><line x1="800" y1="50" x2="800" y2="418"/>
+        </g>
+        <!-- messages -->
+        <g font-family="sans-serif" font-size="11" fill="#cdb7a0">
+          <!-- m1 -->
+          <line x1="80" y1="86" x2="233" y2="86" stroke="#e0463c" stroke-width="1.5" marker-end="url(#a2)"/>
+          <text x="156" y="78" text-anchor="middle">行動 ⟨player_action⟩</text>
+          <!-- m2 -->
+          <line x1="235" y1="120" x2="398" y2="120" stroke="#e0463c" stroke-width="1.5" marker-end="url(#a2)"/>
+          <text x="316" y="112" text-anchor="middle">通過 + directive</text>
+          <!-- m3 self kernel -->
+          <rect x="356" y="142" width="180" height="30" rx="6" fill="#0e160f" stroke="#2f6b3f"/>
+          <text x="446" y="161" text-anchor="middle" fill="#bfe2c8">resolve → EventPatch（義務/forbidden）</text>
+          <!-- m4 kernel->story -->
+          <line x1="400" y1="196" x2="543" y2="196" stroke="#e0463c" stroke-width="1.5" marker-end="url(#a2)"/>
+          <text x="471" y="188" text-anchor="middle">ContextBuilder（revealed · 無 real_bible）</text>
+          <!-- m5 story->player stream -->
+          <line x1="545" y1="232" x2="82" y2="232" stroke="#e0463c" stroke-width="1.5" marker-end="url(#a2)"/>
+          <text x="300" y="224" text-anchor="middle">串流敘事 + 停決策點（前端逐字渲染）</text>
+          <!-- m6 story->validator -->
+          <line x1="545" y1="268" x2="673" y2="268" stroke="#e0463c" stroke-width="1.5" marker-end="url(#a2)"/>
+          <text x="609" y="260" text-anchor="middle">EventPatch</text>
+          <!-- m7 validator->state -->
+          <line x1="675" y1="302" x2="798" y2="302" stroke="#e0463c" stroke-width="1.5" marker-end="url(#a2)"/>
+          <text x="736" y="294" text-anchor="middle">commit（≥1 delta）+ 快照</text>
+          <!-- m8 async state->kernel -->
+          <line x1="800" y1="344" x2="402" y2="344" stroke="#d98a3a" stroke-width="1.4" stroke-dasharray="6 4" marker-end="url(#a3)"/>
+          <text x="600" y="336" text-anchor="middle" fill="#d98a3a">回合外：compactor/dreaming 安全點 merge（非同步）</text>
+          <!-- m9 ending -->
+          <line x1="400" y1="384" x2="543" y2="384" stroke="#e0463c" stroke-width="1.2" marker-end="url(#a2)"/>
+          <text x="471" y="376" text-anchor="middle">attractor 越門檻 → 結局序列</text>
+        </g>
+      </svg>
+    </div>
+    <p class="cap">同步路徑（紅）：玩家 → warden → kernel 決定推進 → story 只 realize（讀穩定快照、無 real_bible）→ validator 強制每步有後果 → 落 SQLite。非同步路徑（橘虛線）：壓縮與 NPC 演化在回合外只產 patch，安全點才 merge，不污染 story 讀取。</p>
+  </section>
+
+  <!-- 圖4 -->
+  <section class="fig" id="fig4">
+    <div class="lbl"><span class="num">圖 4</span><h2>雙層 Bible 與揭露閘門 — 結構性防暴雷</h2></div>
+    <div class="stage">
+      <svg viewBox="0 0 840 320" width="840">
+        <defs><marker id="a4" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#e0463c"/></marker></defs>
+        <!-- real_bible -->
+        <rect x="40" y="40" width="220" height="120" rx="12" fill="#160c0c" stroke="#5a1f1f" stroke-width="1.6"/>
+        <text x="150" y="68" text-anchor="middle" fill="#fff" font-size="15" font-weight="800" font-family="sans-serif">🔒 real_bible</text>
+        <text x="150" y="90" text-anchor="middle" fill="#e0463c" font-size="10.5" font-family="sans-serif">完整真相（鎖）</text>
+        <text x="150" y="112" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">what_really_happened</text>
+        <text x="150" y="128" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">deadly_rule · revelation_pool</text>
+        <text x="150" y="144" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">ending_conditions</text>
+        <!-- gate (orchestrator) -->
+        <polygon points="430,100 500,135 430,170 360,135" fill="#0b1117" stroke="#26384a" stroke-width="1.5"/>
+        <text x="430" y="131" text-anchor="middle" fill="#cfe0ef" font-size="12" font-weight="700" font-family="sans-serif">orchestrator</text>
+        <text x="430" y="148" text-anchor="middle" fill="#6f8fb0" font-size="9.5" font-family="sans-serif">揭露閘門</text>
+        <line x1="260" y1="135" x2="358" y2="135" stroke="#e0463c" stroke-width="1.6" marker-end="url(#a4)"/>
+        <text x="305" y="127" text-anchor="middle" fill="#cdb7a0" font-size="9.5" font-family="sans-serif">讀 real</text>
+        <text x="430" y="200" text-anchor="middle" fill="#746f65" font-size="9.5" font-family="sans-serif">條件達標才搬碎片</text>
+        <text x="430" y="214" text-anchor="middle" fill="#746f65" font-size="9.5" font-family="sans-serif">min_beats / 抵達 / 觸及</text>
+        <!-- revealed_bible -->
+        <rect x="580" y="40" width="220" height="120" rx="12" fill="#0c160f" stroke="#264a30" stroke-width="1.6"/>
+        <text x="690" y="68" text-anchor="middle" fill="#fff" font-size="15" font-weight="800" font-family="sans-serif">👁 revealed_bible</text>
+        <text x="690" y="90" text-anchor="middle" fill="#5e8d6a" font-size="10.5" font-family="sans-serif">已揭露子集</text>
+        <text x="690" y="116" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">revealed_fragments</text>
+        <text x="690" y="132" text-anchor="middle" fill="#b3ac9f" font-size="10" font-family="sans-serif">known_atmosphere</text>
+        <line x1="500" y1="135" x2="578" y2="135" stroke="#e0463c" stroke-width="1.6" marker-end="url(#a4)"/>
+        <text x="539" y="127" text-anchor="middle" fill="#cdb7a0" font-size="9.5" font-family="sans-serif">搬碎片</text>
+        <!-- story reads revealed only -->
+        <rect x="610" y="230" width="160" height="56" rx="10" fill="#160c0c" stroke="#5a1f1f" stroke-width="1.4"/>
+        <text x="690" y="255" text-anchor="middle" fill="#fff" font-size="13" font-weight="700" font-family="sans-serif">✒ story</text>
+        <text x="690" y="273" text-anchor="middle" fill="#5e8d6a" font-size="10" font-family="sans-serif">只讀 revealed → 不可能暴雷</text>
+        <line x1="690" y1="160" x2="690" y2="228" stroke="#5e8d6a" stroke-width="1.6" marker-end="url(#a4)"/>
+        <!-- story cannot read real -->
+        <line x1="150" y1="160" x2="150" y2="250" stroke="#5a1f1f" stroke-width="1.4" stroke-dasharray="5 5"/>
+        <line x1="150" y1="250" x2="608" y2="250" stroke="#5a1f1f" stroke-width="1.4" stroke-dasharray="5 5"/>
+        <text x="360" y="244" text-anchor="middle" fill="#e0463c" font-size="11" font-weight="700" font-family="sans-serif">✗ story 讀不到 real_bible（程式碼權限，非 prompt）</text>
+      </svg>
+    </div>
+    <p class="cap">story 暴雷的根因是「看得到全部真相、只能靠自律不講」。雙層 bible 把它變成<b>結構保證</b>：完整真相鎖在 <code>real_bible</code>（只有 orchestrator/warden/setup 能讀），story 只讀 orchestrator 搬過來的 <code>revealed_bible</code> 子集——沒揭露的它根本看不到。</p>
+  </section>
+
+  <!-- 圖5 -->
+  <section class="fig" id="fig5">
+    <div class="lbl"><span class="num">圖 5</span><h2>Progress Kernel 資料流（補丁①）</h2></div>
+    <div class="stage">
+      <div class="flow">
+        <div class="node"><div class="t">玩家行動</div><div class="d">⟨player_action⟩</div></div>
+        <div class="ar">→</div>
+        <div class="node k"><div class="t">ProgressKernel</div><div class="d">intent 正規化 → 候選事件 → 評分 → EventPatch（義務 + forbidden）</div></div>
+        <div class="ar">→</div>
+        <div class="node k"><div class="t">ContextBuilder</div><div class="d">story 最小 context<br/>無 real_bible</div></div>
+        <div class="ar">→</div>
+        <div class="node s"><div class="t">story（realizer）</div><div class="d">只 realize 已決定的<br/>串流、停決策點</div></div>
+      </div>
+      <div class="flow" style="margin-top:.5rem">
+        <div class="node k"><div class="t">PatchValidator</div><div class="d">base_version 檢查<br/><b>≥1 progress_delta</b> 否則拒</div></div>
+        <div class="ar">→</div>
+        <div class="node k"><div class="t">ProgressBridge</div><div class="d">GameState → Blackboard<br/>clues/inventory/npc/scene</div></div>
+        <div class="ar">→</div>
+        <div class="node k"><div class="t">Attractors</div><div class="d">死亡/真相/逃脫拉力<br/>越門檻才觸發結局</div></div>
+        <div class="ar">→</div>
+        <div class="node"><div class="t">SQLite 快照</div><div class="d">含當時摘要</div></div>
+      </div>
+    </div>
+    <div class="legend"><span><span class="dot" style="background:var(--moss)"></span>kernel 元件（程式碼層，非 LLM）</span><span>flag <code>ENABLE_PROGRESS_KERNEL</code> 預設 ON；失敗→回退 legacy 流程</span></div>
+    <p class="cap">世界狀態怎麼推進由<b>程式碼層 kernel</b> 決定，story 退化為純 realizer。每 beat 強制 ≥1 狀態 delta（「每個行動都有後果」），修好「開門後又問開門」。結局是吸引子（累積拉力），不是固定終點節點。</p>
+  </section>
+
+  <!-- 圖6 -->
+  <section class="fig" id="fig6">
+    <div class="lbl"><span class="num">圖 6</span><h2>Config Center — Story prompt 解析（補丁②）</h2></div>
+    <div class="stage">
+      <div class="flow">
+        <div class="node c"><div class="t">prompt_fragments</div><div class="d">role / kernel_obedience / no_repetition …（8 件）</div></div>
+        <div class="ar">→</div>
+        <div class="node c"><div class="t">PromptComposer</div><div class="d">依 sort_order 組裝<br/>穩定 prompt_hash · 零 LLM preview</div></div>
+        <div class="ar">→</div>
+        <div class="node c"><div class="t">ConfigPromptSource</div><div class="d">active → default → <b>static fallback</b></div></div>
+        <div class="ar">→</div>
+        <div class="node s"><div class="t">SkillCaller → story</div><div class="d">system_override</div></div>
+      </div>
+      <div class="flow" style="margin-top:.7rem;justify-content:flex-start;gap:.6rem">
+        <div class="node" style="max-width:none;flex:none;border-color:#3a2b16"><div class="t">draft → preview → activate</div><div class="d">UI 編輯只進 draft；預覽零 LLM；啟用後才影響進行中遊戲</div></div>
+        <div class="node" style="max-width:none;flex:none"><div class="t">run_config_snapshots</div><div class="d">每場 run 存 profile + prompt_hash → 可反查「哪個版本造成這行為」</div></div>
+        <div class="node" style="max-width:none;flex:none"><div class="t">fallback</div><div class="d">config 失敗 → 退 <code>skills/story/SKILL.md</code>，不崩</div></div>
+      </div>
+    </div>
+    <div class="legend"><span><span class="dot" style="background:var(--ember)"></span>config 元件</span><span>flag <code>ENABLE_CONFIG_CENTER</code> 預設 OFF（行為與補丁前一致）</span><span>story <code>include_real_bible=false</code> 硬規則不變</span></div>
+    <p class="cap">story 的 prompt 拆成可配置 fragment，可組裝/預覽/快照/回滾。<b>決定性</b>：同 fragments + 同變數 → 同 prompt_hash。同機制可擴展到 warden/orchestrator/compactor/setup。</p>
+  </section>
+
+  <!-- 表1 -->
+  <section class="fig" id="tbl1">
+    <div class="lbl"><span class="num">表 1</span><h2>Agent 編制</h2></div>
+    <table class="t">
+      <thead><tr><th>Agent</th><th>模型層</th><th>頻率</th><th>串流</th><th>讀</th><th>寫</th><th>職責</th></tr></thead>
+      <tbody>
+        <tr><td><b>setup</b></td><td><span class="pin h">Heavy</span></td><td>開局一次</td><td>否</td><td>主題</td><td>全部（初始化）</td><td>生雙層 bible + NPC + 場景 + 開場。<b class="blood">不可降級</b></td></tr>
+        <tr><td><b>orchestrator</b></td><td><span class="pin l">Light</span></td><td>每 beat</td><td>否</td><td>real_bible</td><td>revealed_bible</td><td>揭露閘門：碎片 real→revealed（多數程式碼判）</td></tr>
+        <tr><td><b class="blood">story</b></td><td><span class="pin m">Medium</span></td><td>每 beat</td><td><b class="moss">是</b></td><td><b>revealed_bible</b></td><td>BeatHistory · narrative</td><td>寫 beat、停決策點。<b>只讀 revealed</b> → 不可能暴雷</td></tr>
+        <tr><td><b>warden</b></td><td><span class="pin l">Light</span></td><td>每 beat（玩家）</td><td>否</td><td>real_bible</td><td>verdict · ledger</td><td>致命規則 + 結局 gate + 技能封頂（<b>僅玩家</b>）</td></tr>
+        <tr><td><b>npc-chat</b></td><td><span class="pin l">Light</span></td><td>隨選</td><td>是</td><td>NPC 認知</td><td>ChatLog</td><td>多輪對話、NPC 間互動</td></tr>
+        <tr><td><b>dreaming</b></td><td><span class="pin l">Light</span></td><td>非同步/每 K</td><td>否</td><td>ledger · evolving</td><td>npc_evolving</td><td><b>在場</b> NPC 反思演化（無 warden 閘門）</td></tr>
+        <tr><td><b>offstage-fate</b></td><td><span class="pin l">Light</span></td><td>非同步/觸發</td><td>否</td><td>revelation_pool</td><td>offstage_intent</td><td><b>離場</b> NPC 命運（擲骰 + LLM 寫血肉）</td></tr>
+        <tr><td><b>compactor</b></td><td><span class="pin m">Medium</span></td><td>非同步/門檻</td><td>否</td><td>beat 歷史</td><td>摘要 · ledger · 封存</td><td>滾動摘要 + ledger + 聊天封存濃縮</td></tr>
+      </tbody>
+    </table>
+    <p class="cap">唯一每 beat 都跑且串流的生成 agent 是 <b>story</b>。dreaming/compactor/offstage-fate 為回合外非同步（玩家讀字時跑，不卡互動）。</p>
+  </section>
+
+  <!-- 表2 -->
+  <section class="fig" id="tbl2">
+    <div class="lbl"><span class="num">表 2</span><h2>權限模型（誰能寫什麼）</h2></div>
+    <table class="t">
+      <thead><tr><th>寫入者</th><th>可寫入欄位</th><th>碰不到</th></tr></thead>
+      <tbody>
+        <tr><td><b>setup</b></td><td>全部（初始化）</td><td>之後 <code>real_bible</code> / <code>secret_core</code> 鎖死</td></tr>
+        <tr><td><b>orchestrator</b></td><td><code>revealed_bible</code>、<code>newly_revealed</code></td><td><code>real_bible</code>（只讀）、<code>secret_core</code></td></tr>
+        <tr><td><b class="blood">story</b></td><td>BeatHistory（追加）、<code>narrative</code></td><td><b class="blood">real_bible 讀不到</b>、secret_core、npc_evolving</td></tr>
+        <tr><td><b>warden</b></td><td>verdict、Ledger（技能二元組）</td><td>real_bible（只讀）、npc_evolving</td></tr>
+        <tr><td><b>npc-chat</b></td><td>ChatLog（追加）</td><td>一切 anchor</td></tr>
+        <tr><td><b>dreaming</b></td><td><code>npc_evolving</code>、offstage_intent</td><td><b>real_bible、secret_core（權限邊界）</b></td></tr>
+        <tr><td><b>compactor</b></td><td>RollingSummary、Ledger、ColdArchive</td><td>一切 anchor</td></tr>
+      </tbody>
+    </table>
+    <p class="cap">錨點不可變性靠<b>程式碼權限</b>強制，而非 warden。<b>玩家 → warden</b>；<b>NPC → 權限邊界</b>，兩道機制各管不同對象、不交叉。違規寫 anchor 直接拋 <code>PermissionError</code>。</p>
+  </section>
+
+  <!-- 表3 -->
+  <section class="fig" id="tbl3">
+    <div class="lbl"><span class="num">表 3</span><h2>模型分層 + Fallback 鏈</h2></div>
+    <table class="t">
+      <thead><tr><th>層</th><th>主模型</th><th>Temp</th><th>用途</th><th>Fallback 鏈</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pin h">Heavy</span></td><td>claude-sonnet-4</td><td>0.6–0.7</td><td>setup（真相密度高、一次性）</td><td>sonnet → 3.5-sonnet → gemini-flash</td></tr>
+        <tr><td><span class="pin m">Medium</span></td><td>gemini-flash</td><td>0.7–0.8</td><td>story · compactor（創意 + 整合）</td><td>flash → haiku-3.5 → gpt-4.1-mini</td></tr>
+        <tr><td><span class="pin l">Light</span></td><td>gpt-4.1-mini</td><td>0.3–0.6</td><td>warden · orchestrator · npc · dreaming</td><td>mini → flash-lite → <b class="moss">本地邏輯</b></td></tr>
+      </tbody>
+    </table>
+    <p class="cap">warden 的致命規則「關鍵詞精確匹配」可在純 Python 保底——LLM 全失效也不誤殺、不全崩（graceful degradation）。Config Center 啟用後，每 agent 的 model/temperature 可由 profile 配置覆寫。</p>
+  </section>
+
+  <!-- 表4 -->
+  <section class="fig" id="tbl4">
+    <div class="lbl"><span class="num">表 4</span><h2>SignalBus 事件</h2></div>
+    <table class="t">
+      <thead><tr><th>事件</th><th>發布者</th><th>訂閱反應</th></tr></thead>
+      <tbody>
+        <tr><td><code>BEAT_COMPLETED</code></td><td>story / loop</td><td>觸發快照、檢查壓縮使用率、檢查 dreaming 排程</td></tr>
+        <tr><td><code>ENDING_TRIGGERED</code></td><td>warden / attractor</td><td>停止 beat 迴圈、進入結局序列</td></tr>
+        <tr><td><code>RULE_VIOLATION</code></td><td>warden</td><td>story 生成死亡 beat</td></tr>
+        <tr><td><code>SKILL_CLAIMED</code></td><td>warden</td><td>寫入 ledger、UI 提示侷限</td></tr>
+        <tr><td><code>CHATROOM_OPENED / CLOSED</code></td><td>前端</td><td>啟動/關閉 npc-chat；關閉時觸發濃縮</td></tr>
+        <tr><td><code>NPC_EVOLVED</code></td><td>dreaming</td><td>標記 NPC 演化層已更新（story 下個 beat 採用）</td></tr>
+        <tr><td><code>CONTEXT_THRESHOLD</code></td><td>compactor</td><td>啟動對應等級壓縮</td></tr>
+      </tbody>
+    </table>
+    <p class="cap">發布/訂閱模型解耦 agent 與系統反應——<b>agent 之間從不直接呼叫彼此</b>，一切經 Blackboard + SignalBus。</p>
+  </section>
+
+  <!-- 表5 -->
+  <section class="fig" id="tbl5">
+    <div class="lbl"><span class="num">表 5</span><h2>契約索引（FROZEN + 補丁）</h2></div>
+    <table class="t">
+      <thead><tr><th>群組</th><th>契約</th><th>Canonical</th></tr></thead>
+      <tbody>
+        <tr><td class="grp-h" colspan="3">資料與常數</td></tr>
+        <tr><td>—</td><td><code>Models</code> · <code>Constants</code> · <code>DecisionPoint</code></td><td>07 §二 · build/CONTRACTS</td></tr>
+        <tr><td class="grp-h" colspan="3">狀態與持久化</td></tr>
+        <tr><td>—</td><td><code>Blackboard</code> · <code>BlackboardPatch</code> · <code>PermissionTable</code> · <code>SceneRegistry</code> · <code>SQLiteSchema</code> · <code>RollingSummary</code> · <code>Ledger</code> · <code>SharedInventory</code> · <code>NPCRegistry</code></td><td>03 · 08 · 01 §四</td></tr>
+        <tr><td class="grp-h" colspan="3">LLM 與解析</td></tr>
+        <tr><td>—</td><td><code>OpenRouterClient</code> · <code>SkillCaller</code> · <code>SkillLoader</code> · <code>StreamParser</code> · <code>StreamProtocol</code> · <code>EventExtract</code> · <code>InjectionGuard</code></td><td>07 §三 · build/CONTRACTS §四</td></tr>
+        <tr><td class="grp-h" colspan="3">Agent 輸出與迴圈</td></tr>
+        <tr><td>—</td><td><code>SetupOutput</code> · <code>OrchestratorOutput</code> · <code>WardenOutput</code> · <code>WardenFallback</code> · <code>DreamingOutput</code> · <code>CompactorOutput</code> · <code>BeatLoop</code> · <code>SignalBus</code> · <code>API</code> · <code>JsApi</code> · <code>NA-events</code></td><td>07 · 08 · 01 §五</td></tr>
+        <tr><td class="grp-h" colspan="3"><span class="moss">補丁① Progress Kernel（dev §十）</span></td></tr>
+        <tr><td><span class="pin yes">新增</span></td><td><code>ProgressModels</code> · <code>PatchValidator</code> · <code>SceneGraphProvider</code> · <code>ProgressKernel</code> · <code>ProgressContext</code> · <code>ProgressBridge</code> · <code>EndingConditions</code></td><td>10-progress-kernel · core/progress_*</td></tr>
+        <tr><td class="grp-h" colspan="3"><span class="ember">補丁② Config Center（dev §十一）</span></td></tr>
+        <tr><td><span class="pin yes">新增</span></td><td><code>ConfigSchema</code> · <code>PromptFragments</code> · <code>PromptComposer</code> · <code>AgentContextPolicy</code> · <code>FeatureFlags</code> · <code>ConfigPromptSource</code> · <code>RunConfigSnapshot</code> · <code>ConfigUI</code></td><td>11-config-center · core/config/*</td></tr>
+      </tbody>
+    </table>
+    <p class="cap">FROZEN 契約為 MVP-A 凍結介面；兩個補丁的契約為 additive 新增，未動既有凍結項。完整索引見 <code>dev/CONTRACTS.md</code>。</p>
+  </section>
+
+  <!-- 表6 -->
+  <section class="fig" id="tbl6">
+    <div class="lbl"><span class="num">表 6</span><h2>MVP-B 差異化機制（UB1–UB5）</h2></div>
+    <table class="t">
+      <thead><tr><th>工單</th><th>機制</th><th>關鍵保證</th><th>實作</th></tr></thead>
+      <tbody>
+        <tr><td><b>UB1</b></td><td>技能宣稱封頂</td><td>破格宣稱<b>接受但加侷限</b>（謎題化）；本地偵測，LLM 掛也封頂；(技能,侷限) ledger</td><td><code>warden.check_skill_claim</code></td></tr>
+        <tr><td><b>UB2</b></td><td>一種結局序列</td><td><b>純敘述收尾 + 完整真相揭露</b>（結局唯一可露 real_bible）+ 復盤；提早觸發→沒找到的一次攤開</td><td><code>agents/ending.py</code></td></tr>
+        <tr><td><b>UB4</b></td><td>輕量 dreaming</td><td>在場 NPC 演化；<b class="moss">只寫 evolving（C6）</b>；self_aware=false 不編謊（C5）；沒戲份凍結（C7）；非同步只產 patch</td><td><code>agents/dreaming.py</code></td></tr>
+        <tr><td><b>UB5</b></td><td>道具庫完整</td><td>held_by（綁 NPC）/ <b class="blood">is_key_item 不外露</b> / 增刪查轉移 / 隨快照保存</td><td><code>InventoryItem</code> · <code>PatchValidator</code></td></tr>
+        <tr><td><b>UB3</b></td><td>防暴雷驗證報告</td><td><b>對抗性 caller + injection probes</b> → 證明 story context 結構上無 real_bible</td><td><code>qa/antispoiler.py</code></td></tr>
+      </tbody>
+    </table>
+    <p class="cap">MVP-B 在 MVP-A 引擎上補差異化：NPC 活起來（dreaming）、一場遊戲有終點與真相揭曉（ending）、破格宣稱被合理封頂（skill cap）、道具庫完整、防暴雷有對抗性驗證背書。47 工單全 done。</p>
+  </section>
+
+  <footer>
+    Nightmare Assault · 視覺化架構與表格參考 — 對應設計文件 <code>00–11</code>　|　搭配投影片 <code>architecture.html</code>（簡報版）
+  </footer>
+</main>
+</div>
+
+<script>
+  // TOC active-on-scroll
+  const links=[...document.querySelectorAll('nav a')];
+  const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+  const io=new IntersectionObserver(es=>{
+    es.forEach(e=>{ if(e.isIntersecting){ links.forEach(l=>l.classList.remove('on'));
+      const a=map.get(e.target.id); if(a)a.classList.add('on'); } });
+  },{rootMargin:'-10% 0px -80% 0px',threshold:0});
+  document.querySelectorAll('.fig').forEach(s=>io.observe(s));
+  // 深連結：?to=figN 載入即捲動到該節（供截圖/分享）
+  const to=new URLSearchParams(location.search).get('to');
+  if(to){const el=document.getElementById(to); if(el)el.scrollIntoView({block:'start'});}
+</script>
+</body>
+</html>
