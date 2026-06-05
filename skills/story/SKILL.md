@@ -119,9 +119,26 @@ writes: BeatHistory（追加）、turn_context.narrative_output
     "npcs_present": ["在場NPC"],
     "pacing": "calm | rising | peak",
     "audio_cue": "normal | silence | sting | swell"
-  }
+  },
+  "entity_delta": [
+    { "op": "register", "kind": "object", "label": "WU 袖扣", "affords": ["inspect", "take"] }
+  ]
 }
 ```
+
+### entity_delta（讓世界記住你敘述過的東西）
+
+當這個 beat 把一個**可被重訪/互動的具體東西**前景化（玩家撿到/看到的物件、確認在場的人、
+一條可檢查的事實），就在 `entity_delta` 登記它，世界才會記得、玩家下個 beat 才能再指涉它。
+
+- 只用三種 `kind`：`object`（道具/線索物件）、`actor`（NPC）、`fact`（可檢查事實）。
+  **不要**登記 `area` / `exit`——場景與出口由系統的地圖負責，你不要自由新增。
+- 每個 beat 最多 **1–3** 筆；只登記真正前景化的東西，氛圍名詞（牆、霧、走廊）不要登記。
+- `op`：`register`（新東西出現）或 `set_state`（已登記實體狀態改變）。
+- 物件狀態機：`noticed`（敘述到）→ `inspected`（被細看）→ `taken`/`used`。
+  例：玩家拿走袖扣 → `{ "op": "set_state", "entity_id": "object.WU_袖扣", "state": "taken" }`。
+- 同一個東西反覆出現用**同一個 label**，系統會對到同一個實體（不要每次換名字）。
+- `entity_delta` 是給系統記憶用的結構，**不影響你的敘事文字**；不確定就**留空**，別硬塞。
 
 ## 選項設計
 

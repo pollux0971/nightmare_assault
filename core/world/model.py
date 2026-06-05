@@ -42,6 +42,54 @@ _STATES = {
 SAFE_ZONE_AREA_ID = "area.outside_dock"
 SAFE_ZONE_LABEL = "外面（安全區）"
 
+# story 結構化 entity_delta 只准登記/改這些 kind（area/exit 由 kernel 圖擁有，story 不得自由新增）
+STORY_ENTITY_KINDS = {OBJECT, ACTOR, FACT}
+# story entity_delta 每 beat 最多新增/變更的實體數
+STORY_DELTA_CAP = 3
+# story 允許的 op（move_current 屬 area/kernel 權限，排除）
+_STORY_ALLOWED_OPS = ("register", "set_state")
+
+
+def coerce_entity_deltas(raw, *, allowed_kinds=STORY_ENTITY_KINDS,
+                         cap: int = STORY_DELTA_CAP,
+                         allow_ops=_STORY_ALLOWED_OPS) -> list:
+    """把 story 輸出的原始 entity_delta 清洗成安全的 WorldDelta 清單。
+
+    malformed item 一律丟棄(不污染 WorldModel)；非 list → []；超過 cap 截斷。
+    register 需 kind ∈ allowed_kinds 且有 label；set_state 需 entity_id + state。
+    """
+    out: list = []
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        if len(out) >= cap:
+            break
+        if not isinstance(item, dict):
+            continue
+        op = item.get("op")
+        if op not in allow_ops:
+            continue
+        if op == "register":
+            kind, label = item.get("kind"), item.get("label")
+            if kind not in allowed_kinds or not (isinstance(label, str) and label.strip()):
+                continue
+            eid = item.get("entity_id") or item.get("id")
+            affords = item.get("affords")
+            out.append(WorldDelta(
+                op="register", kind=kind, label=label.strip(),
+                entity_id=eid if isinstance(eid, str) else None,
+                state=item.get("state") if isinstance(item.get("state"), str) else None,
+                affords=list(affords) if isinstance(affords, list) else None,
+                props=item.get("props") if isinstance(item.get("props"), dict) else None,
+                origin="story"))
+        elif op == "set_state":
+            eid, state = item.get("entity_id") or item.get("id"), item.get("state")
+            if not (isinstance(eid, str) and isinstance(state, str) and state.strip()):
+                continue
+            out.append(WorldDelta(op="set_state", entity_id=eid, state=state.strip(),
+                                  origin="story"))
+    return out
+
 
 def slug(label: str) -> str:
     s = re.sub(r"\s+", "_", (label or "").strip())
@@ -256,6 +304,63 @@ class WorldModel:
 
     def apply_deltas(self, deltas) -> list:
         return [self.apply(d) for d in (deltas or [])]
+
+    # ── story/npc 結構化 entity_delta（kind-guarded，回傳被改的 entity id）─────────
+    def apply_entity_delta(self, delta, *, allowed_kinds=None) -> Entity | None:
+        """套用單一已清洗的 entity_delta，並 guard kind（story 不得碰 area/exit）。
+
+        register：kind 須 ∈ allowed_kinds。set_state：目標實體 kind 須 ∈ allowed_kinds。
+        回傳被新增/變更的 Entity（無效則 None）。
+        """
+        d = delta if isinstance(delta, dict) else delta.to_dict()
+        op = d.get("op")
+        if op == "register":
+            if allowed_kinds is not None and d.get("kind") not in allowed_kinds:
+                return None
+            return self.apply(d)
+        if op == "set_state":
+            eid, state = d.get("entity_id"), d.get("state")
+            e = self.entities.get(eid) if eid else None
+            if e is None or not state:
+                return None
+            if allowed_kinds is not None and e.kind not in allowed_kinds:
+                return None                            # 不准 story 改 area/exit 狀態
+            self.set_state(eid, state)
+            return e
+        return None                                    # move_current 等 → story 無權
+
+    def apply_story_deltas(self, deltas, *, allowed_kinds=STORY_ENTITY_KINDS) -> list:
+        """套用一串 story entity_delta，回傳實際被新增/變更的 entity id（供 changed_entities）。"""
+        changed: list = []
+        for d in deltas or []:
+            e = self.apply_entity_delta(d, allowed_kinds=allowed_kinds)
+            if e is not None and e.id not in changed:
+                changed.append(e.id)
+        return changed
+
+    # ── 「此處」的實體 / 可互動物 投影 ────────────────────────────────────────
+    def entities_here(self) -> list[Entity]:
+        """當前區域的實體（area 本身除外；有標定位置且不在此區域者排除）。"""
+        out: list[Entity] = []
+        for e in self.entities.values():
+            if e.kind == AREA:
+                continue
+            loc = e.props.get("area")
+            if loc and loc != self.current_area:
+                continue
+            out.append(e)
+        return out
+
+    def interactables_here(self) -> list[Entity]:
+        """當前區域**可互動**的實體（物件/NPC/出口；已 taken/used 的物件排除）。"""
+        out: list[Entity] = []
+        for e in self.entities_here():
+            if e.kind not in (OBJECT, ACTOR, EXIT):
+                continue
+            if e.kind == OBJECT and e.state in ("taken", "used"):
+                continue
+            out.append(e)
+        return out
 
     # ── 持久化(存進 game_meta)────────────────────────────────────────────────
     def to_dict(self) -> dict:

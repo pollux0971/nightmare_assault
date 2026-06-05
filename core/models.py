@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 
 
@@ -22,6 +22,14 @@ class DecisionPoint(BaseModel):
     free_input_hint: str = "或描述你想做的事…"
     beat_meta: BeatMeta
     is_narration_only: bool = False
+    # story 可選輸出的結構化世界實體變更（object/actor/fact；由 WorldModel 套用）。
+    # **容錯**：非 list 一律歸 []——malformed entity_delta 不得讓整個 DecisionPoint 解析失敗。
+    entity_delta: list = Field(default_factory=list)
+
+    @field_validator("entity_delta", mode="before")
+    @classmethod
+    def _tolerate_bad_entity_delta(cls, v):
+        return v if isinstance(v, list) else []
 
 
 class WorldTruth(BaseModel):

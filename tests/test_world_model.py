@@ -233,3 +233,117 @@ def test_explicit_end_campaign_only_ending_via_loop(monkeypatch):
     assert loop._exit_affordance.affordance == END_CAMPAIGN
     assert out.get("ended")                            # 唯 end_campaign 才結局
     assert (out.get("ending") or {}).get("via") == "player_exit"
+
+
+# ══ Story Structured entity_delta ════════════════════════════════════════════
+# story output 結構化 entity_delta（object/actor/fact，每 beat ≤3，malformed 不污染）。
+from core.world.model import coerce_entity_deltas, STORY_ENTITY_KINDS, STORY_DELTA_CAP, ACTOR as _ACTOR
+
+
+# ── coerce：合法 delta 通過、kind/op/cap/malformed 過濾 ───────────────────────
+def test_coerce_entity_deltas_filters():
+    raw = [
+        {"op": "register", "kind": OBJECT, "label": "WU 袖扣", "affords": [INSPECT]},
+        {"op": "register", "kind": "area", "label": "B 區"},        # area 不准 → 丟
+        {"op": "register", "kind": EXIT, "label": "後門"},          # exit 不准 → 丟
+        {"op": "register", "kind": OBJECT, "label": "   "},          # 空 label → 丟
+        {"op": "move_current", "entity_id": "area.x"},              # op 不准 → 丟
+        {"op": "set_state", "entity_id": "object.WU_袖扣", "state": "taken"},
+        "not-a-dict",                                                # malformed → 丟
+        {"kind": OBJECT, "label": "無 op"},                          # 無 op → 丟
+    ]
+    out = coerce_entity_deltas(raw)
+    kinds_ok = all(d.op in ("register", "set_state") for d in out)
+    assert kinds_ok
+    regs = [d for d in out if d.op == "register"]
+    assert len(regs) == 1 and regs[0].kind == OBJECT and regs[0].label == "WU 袖扣"
+    assert any(d.op == "set_state" and d.state == "taken" for d in out)
+    # 非 list / None → []
+    assert coerce_entity_deltas(None) == [] and coerce_entity_deltas("x") == []
+
+
+# ── cap：每 beat 最多 1–3 筆 ─────────────────────────────────────────────────
+def test_coerce_entity_deltas_caps_at_three():
+    raw = [{"op": "register", "kind": OBJECT, "label": f"物件{i}"} for i in range(6)]
+    assert len(coerce_entity_deltas(raw)) == STORY_DELTA_CAP == 3
+
+
+# ── apply_story_deltas：kind-guarded，回傳 changed id；不准改 area/exit 狀態 ────
+def test_apply_story_deltas_kind_guard():
+    m = WorldModel()
+    m.set_current_area("area.room", label="房間")
+    m.register_exit("北門", leads_to="area.hall", from_area="area.room", state="known")
+    deltas = coerce_entity_deltas([
+        {"op": "register", "kind": OBJECT, "label": "WU 袖扣"},
+        {"op": "set_state", "entity_id": "exit.北門", "state": "used"},   # 改 exit → 被 guard 擋
+    ])
+    changed = m.apply_story_deltas(deltas)
+    assert "object.WU_袖扣" in changed
+    assert m.get("exit.北門").state == "known"          # exit 狀態未被 story 改動
+    assert "exit.北門" not in changed
+
+
+# ── #1 regression：story 提到「WU 袖扣」後，玩家下一 beat 可檢查它 ─────────────
+def test_story_object_registered_and_inspectable_next_beat(monkeypatch):
+    loop = _started_loop(monkeypatch)
+    # beat A：story 結構化登記 object（直接走 tick，模擬 story 吐了 entity_delta）
+    from core.models import DecisionPoint, BeatMeta
+    dp = DecisionPoint(situation_recap="", decision_type="action",
+                       beat_meta=BeatMeta(beat_number=1),
+                       entity_delta=[{"op": "register", "kind": OBJECT,
+                                      "label": "WU 袖扣", "affords": [INSPECT, "take"]}])
+    loop._world_model_tick("我環顧四周", "桌上有一個袖扣。", dp)
+    obj = loop._world.find("袖扣", kind=OBJECT)
+    assert obj is not None and obj.state == "noticed"
+    assert "object.WU_袖扣" in loop._changed_entities_this_beat   # 本 beat 變更含它
+    # beat B：玩家檢查它 → 世界記得（noticed → inspected）
+    loop._world_model_tick("我檢查那個袖扣", "你端詳袖扣。", None)
+    assert loop._world.find("袖扣").state == "inspected"
+
+
+# ── #2 regression：物件 state 可從 noticed 變 inspected（結構化 set_state）──────
+def test_object_state_noticed_to_inspected_structured():
+    m = WorldModel()
+    m.apply_story_deltas(coerce_entity_deltas(
+        [{"op": "register", "kind": OBJECT, "label": "員工證"}]))
+    assert m.find("員工證").state == "noticed"
+    m.apply_story_deltas(coerce_entity_deltas(
+        [{"op": "set_state", "entity_id": "object.員工證", "state": "inspected"}]))
+    assert m.find("員工證").state == "inspected"
+
+
+# ── #3 regression：同物件再指涉仍對到同一 entity（label-slug 冪等）────────────
+def test_same_object_reference_maps_to_same_entity():
+    m = WorldModel()
+    m.apply_story_deltas(coerce_entity_deltas(
+        [{"op": "register", "kind": OBJECT, "label": "WU 袖扣"}]))
+    first = m.find("袖扣", kind=OBJECT)
+    # 下個 beat 再次登記同 label → 同一 entity，不重複新增
+    m.apply_story_deltas(coerce_entity_deltas(
+        [{"op": "register", "kind": OBJECT, "label": "WU 袖扣", "affords": [INSPECT]}]))
+    assert len(m.by_kind(OBJECT)) == 1
+    assert m.find("袖扣", kind=OBJECT).id == first.id
+
+
+# ── #4 regression：malformed entity_delta 不得污染 WorldModel ─────────────────
+def test_malformed_entity_delta_does_not_pollute(monkeypatch):
+    loop = _started_loop(monkeypatch)
+    n0 = len(loop._world.entities)
+    from core.models import DecisionPoint, BeatMeta
+    # entity_delta 是一坨垃圾：非 list、含壞 item、含禁止 kind
+    bad = DecisionPoint(situation_recap="", decision_type="action",
+                        beat_meta=BeatMeta(beat_number=1),
+                        entity_delta="not-a-list-at-all")     # field_validator → []
+    assert bad.entity_delta == []                              # DecisionPoint 不因此解析失敗
+    loop._world_model_tick("我站著不動", "什麼也沒發生。", bad)
+    # 沒有新增任何垃圾實體（fallback extractor 對純氛圍敘事也不登記）
+    assert len(loop._world.entities) == n0
+    # 直接餵壞 delta list 給 tick：禁止 kind / 壞 item 全被丟棄
+    dp2 = DecisionPoint(situation_recap="", decision_type="action",
+                        beat_meta=BeatMeta(beat_number=2),
+                        entity_delta=[{"op": "register", "kind": "exit", "label": "鬼門"},
+                                      "garbage", {"op": "drop_table"}])
+    loop._world_model_tick("我看著牆", "牆上有霉斑。", dp2)
+    assert loop._world.find("鬼門") is None                    # 禁止 kind 未進 WorldModel
+    assert all(e.kind in STORY_ENTITY_KINDS | {AREA, EXIT}
+               for e in loop._world.entities.values())        # 沒有非法 kind
