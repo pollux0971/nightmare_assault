@@ -71,7 +71,17 @@ def test_default_mode_is_masked():
 
 # ── 無 title 的碎片 → 用遮罩通用標題（不露 content）─────────────────────────
 def test_untitled_missed_uses_generic_label():
-    seq = build_ending_sequence(_bb(revealed_ids=(), titled=False), {"type": "death_physical"})
+    # 至少發現 1 個（found>0）才走分層明細；0 發現是低資訊結局，另測。
+    seq = build_ending_sequence(_bb(revealed_ids=("f1",), titled=False), {"type": "death_physical"})
     text = render_ending_text(seq)
     assert "未解的線索" in text                              # 通用遮罩標題
     assert "院長知情並掩蓋" not in text                      # 仍不露 content
+
+
+# ── 0 發現 → 低資訊結局（不是 fail screen、不列 ？？？、不露 content）──────────
+def test_zero_found_is_low_information_ending():
+    seq = build_ending_sequence(_bb(revealed_ids=(), titled=True), {"type": "escape"})
+    text = render_ending_text(seq)
+    assert "一無所知" in text or "仍未解的問題" in text       # 低資訊收尾語氣
+    assert "？？？" not in text                              # 不再列 ？？？ 責備玩家
+    assert "地下室藏著一份死亡名單" not in text              # 仍不露 content

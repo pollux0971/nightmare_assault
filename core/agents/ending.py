@@ -173,6 +173,17 @@ def render_ending_text(ending: dict, mode: str = "masked") -> str:
 
     # ── masked（預設）──
     partial = r.get("partial")
+    found_any = (partial.get("found", 0) if partial else found) or len(r.get("discovered") or [])
+    total_q = (partial.get("total") if partial else total) or total
+    if not found_any:
+        # Player Sovereignty 原則 7：0 發現 = **低資訊結局**，不是 fail screen（不列 ？？？、不責備）
+        # 語氣中性（結局型別由上方 closing 表達；此處只說「你沒理解這裡」，死/逃皆適用）
+        parts.append("\n── 你帶走的 ──")
+        parts.append("你對這裡發生的事，幾乎一無所知。")
+        if total_q:
+            parts.append(f"你理解的真相：極少　你帶出的線索：無　仍未解的問題：{total_q}")
+        return "\n".join(p for p in parts if p)
+
     if partial and partial.get("total"):
         # NR0（要求 #4）：用揭露帳本的分層明細——confirmed 露全文，observed/suspected/hinted 顯示標題與狀態，
         # 只有完全沒接觸的才 ？？？。

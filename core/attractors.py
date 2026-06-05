@@ -18,10 +18,10 @@ def _truth_count(state: GameState) -> int:
 def evaluate(state: GameState) -> dict[str, float]:
     """回傳各結局吸引子的拉力（0..∞，≥1 表示越過門檻）。
 
-    註（#6 review）：此處 death 拉力仍由 danger_level 推導，**但這不是 live bug**——
-    敘事控制開啟時，beat loop 在採用 attractor 死亡結局前會先過 `EndingCausalityGate.check_death`
-    （HA2，orchestrator_loop 的 attractor 區塊），無明確死因的 danger-only 死亡會被降級為 danger_warning。
-    本次刻意**不**把因果檢查下沉到這裡（依使用者指示，只清理 reveal 系統、不動 danger-death 行為）。
+    註：此處 death 拉力仍由 danger_level 推導，但**敘事控制開啟（Player Sovereignty）時，
+    beat loop 完全不採用 attractor 結局**——結局只由玩家明確「結束本次調查」或 warden 硬觸發（不可逆）產生，
+    所以 danger 累積不會自動致死。`dominant_ending`/`evaluate` 僅在 flag OFF 的舊相容路徑使用
+    （該路徑保留原 MVP 行為：danger 達標可由 attractor 收束）。
     """
     death = state.danger_level / DANGER_DEATH_THRESHOLD
     truth = _truth_count(state) / TRUTH_FRAGMENT_THRESHOLD

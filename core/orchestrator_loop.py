@@ -144,8 +144,6 @@ class BeatLoop:
         self._npc_chat_debug: dict = {}              # 最近一次 NPC evidence 驗證統計（observation 用）
         # NR2：答債（旁路）
         self._answer_debt = None
-        # NR4：兩段式逃脫——是否已發現出口候選（旁路）
-        self._exit_candidate_found = False
         # NR5/NR6：母題冷卻 + 動機心跳（旁路）
         self._motif_tracker = None
         self._motive_heartbeat = None
@@ -299,7 +297,8 @@ class BeatLoop:
     def _step_kernel(self, player_decision, input_path, on_event, on_progress) -> dict:
         _p = on_progress or (lambda *_: None)
         gs = self._game_state
-        self._escape_step = "none"               # NR4：本 beat 逃脫流程步驟（預設無）
+        self._escape_step = "none"               # 本 beat 離開意圖（預設無）
+        self._exit_intent = "none"               # Player Sovereignty：離開意圖分類
         # HB1/HB2/HE1：本 beat 揭露觀測（每 beat 重置）
         self._reveal_updates_this_beat = []
         self._evidence_events_this_beat = 0
@@ -340,8 +339,10 @@ class BeatLoop:
                 log.warning("narrative control (reveal/downgrade) skipped: %s", e)
             # NR2：答債——分類玩家提問，債≥2 時加償還義務進 story context
             self._answer_debt_tick(player_decision, ctx)
-            # NR4：兩段式逃脫——首次逃脫意圖 → 出口發現 beat（不即結局）
-            self._escape_step = self._escape_commit_tick(player_decision, ctx)
+            # Player Sovereignty：解析離開意圖（不自動收束；不確定 → ExitOffer）
+            from core.narrative.exit_resolver import resolve_exit_intent
+            self._exit_intent = resolve_exit_intent(player_decision)
+            self._escape_step = self._exit_intent     # observation 沿用此欄位
             # NR5：母題冷卻——換場景重置；把超用母題注入 context（story 須演化或換意象）
             self._motif_cooldown_pre(gs, ctx)
             # NR6：動機心跳——逾期未提動機 → 加提醒義務
@@ -369,52 +370,31 @@ class BeatLoop:
             self._story_evidence_tick(player_decision, narrative, _changed)
 
         self.last_story = narrative
+        # Player Sovereignty：離開意圖處理（ambiguous → ExitOffer；retreat → 降危險；皆不自動收束）
+        _nc_on = ENABLE_NARRATIVE_CONTROL and getattr(self, "_narrative_contract", None)
+        if _nc_on:
+            # 用**已套用 patch 的** self._game_state（gs 是 pre-apply 舊物件，會覆蓋本 beat 進度）
+            dp = self._apply_exit_intent(self._exit_intent, self._game_state, dp)
         self._safe_point(narrative, dp)
         self._log_beat(progress)
 
         if verdict.ending_triggered or verdict.rule_violation:
+            # warden 硬觸發（致命/不可逆）——允許結局（Player Sovereignty 原則 5）
             self.ended = True
             self.ending = {"type": verdict.ending_triggered or "death_physical",
                            "soft": bool(verdict.ending_is_soft), "via": "warden"}
         elif not self.ended:
-            # 結局吸引子：由累積狀態（危險/真相/出路）觸發，非固定終點節點
-            et = dominant_ending(self._game_state)
-            # NR4：逃脫須先發現出口再明確提交——await_commit 這個 beat 不讓逃脫結局結算
-            if (et == "escape" and ENABLE_NARRATIVE_CONTROL
-                    and getattr(self, "_narrative_contract", None)
-                    and getattr(self, "_escape_step", "none") == "await_commit"):
-                log.info("escape ending deferred: exit found this beat, awaiting commit")
-                et = None
-            # HA2：死亡因果硬閘——attractor 的 death←danger 無明確死因 → 降級，不直接致死
-            if (et and ENABLE_NARRATIVE_CONTROL and getattr(self, "_narrative_contract", None)):
-                try:
-                    from core.narrative.ending_causality import (
-                        EndingCausalityGate, EndingCandidate, DEATH_TYPES)
-                    if et in DEATH_TYPES:
-                        cand = EndingCandidate(type=et, source="attractor")
-                        res = EndingCausalityGate().check_death(
-                            cand, warden_result=verdict, progress_result=progress,
-                            state=self._game_state)
-                        if not res.allowed:
-                            log.info("death ending downgraded (%s): %s",
-                                     res.downgrade_to, res.reason)
-                            et = None                # danger-only → 不致死，續行
-                except Exception as e:
-                    log.warning("death gate skipped: %s", e)
-            if et:
-                self.ended = True
-                self.ending = {"type": et, "soft": False, "via": "attractor"}
-                # NC6：逃脫結局過因果門檻——0/8 或缺因果 → 標 ambiguous（refine UB7/attractor）
-                if ENABLE_NARRATIVE_CONTROL and getattr(self, "_narrative_contract", None) and et == "escape":
-                    try:
-                        from core.narrative.ending_gate import gate_escape_quality
-                        quality, reason = gate_escape_quality(
-                            self.bb, self._game_state, player_decision, gs.beat_number)
-                        self.ending["escape_quality"] = quality
-                        self.ending["gate_reason"] = reason
-                    except Exception as e:
-                        log.warning("ending gate skipped: %s", e)
-                self._emit(EVT_ENDING_TRIGGERED, et)
+            if _nc_on:
+                # Player Sovereignty：吸引子拉力**不自動收束**；只有玩家明確 run_ending 才結算
+                if self._exit_intent == "run_ending":
+                    self._trigger_player_ending(player_decision, gs)
+            else:
+                # flag OFF：保留原 attractor 自動收束行為（向後相容）
+                et = dominant_ending(self._game_state)
+                if et:
+                    self.ended = True
+                    self.ending = {"type": et, "soft": False, "via": "attractor"}
+                    self._emit(EVT_ENDING_TRIGGERED, et)
 
         self._finalize_ending()
         dp = self._enforce_ended_invariant(dp)       # HA1：ended ⇒ 無 options
@@ -593,20 +573,44 @@ class BeatLoop:
         except Exception as e:
             log.warning("motif/motive post skipped: %s", e)
 
-    def _escape_commit_tick(self, player_decision: str, ctx: dict) -> str:
-        """NR4：判斷逃脫步驟。await_commit → 注入出口發現義務、標記已找到出口；回傳步驟字串。"""
+    def _apply_exit_intent(self, intent: str, gs, dp):
+        """Player Sovereignty：依離開意圖調整本 beat（不自動收束）。
+
+        ambiguous → 把 decision_point 換成 ExitOffer（保留 story 敘事、只換選項，永遠含「結束」選項）；
+        temporary_retreat → 降即時危險、遊戲繼續；其餘 → dp 不變。
+        """
         try:
-            from core.narrative.escape_commit import EscapeCommitGate, EXIT_CANDIDATE_OBLIGATION
-            step = EscapeCommitGate().decide(
-                player_decision, exit_candidate_found=self._exit_candidate_found)
-            if step == "await_commit":
-                ctx.setdefault("narrative_obligations", []).append(EXIT_CANDIDATE_OBLIGATION)
-                self._exit_candidate_found = True
-                log.info("escape: exit candidate found, awaiting explicit commit")
-            return step
-        except Exception as e:                       # 逃脫閘門失敗不影響推進
-            log.warning("escape commit tick skipped: %s", e)
-            return "none"
+            from core.narrative.exit_resolver import (
+                AMBIGUOUS, TEMPORARY_RETREAT, build_exit_offer_decision_point)
+            if intent == AMBIGUOUS:
+                log.info("exit intent ambiguous → ExitOffer（不自動結局，交還玩家）")
+                return build_exit_offer_decision_point(dp)
+            if intent == TEMPORARY_RETREAT:
+                d = int(getattr(gs, "danger_level", 0) or 0)
+                if d > 0:
+                    gs.danger_level = max(0, d - 1)
+                    bridge.sync_to_blackboard(gs, self.bb)
+                    log.info("temporary retreat → danger %d→%d（續行，不結局）", d, gs.danger_level)
+        except Exception as e:
+            log.warning("apply exit intent skipped: %s", e)
+        return dp
+
+    def _trigger_player_ending(self, player_decision: str, gs):
+        """玩家明確「結束本次調查」→ 結算結局（escape；品質由 reveal 帳本決定 clean/ambiguous）。"""
+        if self.ended:                               # 防禦：warden 硬結局已先觸發 → 不覆寫
+            return
+        self.ended = True
+        self.ending = {"type": "escape", "soft": False, "via": "player_exit"}
+        try:
+            from core.narrative.ending_gate import gate_escape_quality
+            quality, reason = gate_escape_quality(
+                self.bb, self._game_state, player_decision, gs.beat_number)
+            self.ending["escape_quality"] = quality
+            self.ending["gate_reason"] = reason
+            log.info("player ended run (escape, %s)", quality)
+        except Exception as e:
+            log.warning("ending gate skipped: %s", e)
+        self._emit(EVT_ENDING_TRIGGERED, "escape")
 
     def _answer_debt_tick(self, player_decision: str, ctx: dict):
         """NR2：分類玩家提問→記債；債≥2 加償還義務進 story context；債存 game_meta 供 npc-chat。"""

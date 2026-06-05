@@ -45,7 +45,10 @@ def test_many_clues_survived_trigger_escape():
     assert dominant_ending(st) == "escape"
 
 
-def test_loop_ends_via_attractor_when_danger_accumulates():
+def test_loop_ends_via_attractor_when_danger_accumulates(monkeypatch):
+    # attractor 自動收束是 **flag OFF** 的舊行為；flag ON 改由 Player Sovereignty（玩家明確結束）。
+    import core.constants as C
+    monkeypatch.setattr(C, "ENABLE_NARRATIVE_CONTROL", False)
     loop = BeatLoop(FakeCaller(), Blackboard(), Database(), SignalBus(),
                     run_id="att", use_kernel=True)
     loop.start({"theme": "x", "npc_count": 1})
