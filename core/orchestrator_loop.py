@@ -146,6 +146,8 @@ class BeatLoop:
         self._answer_debt = None
         self._world = None                           # WorldModel（current_area/area/exit 的唯一權威）
         self._world_kernel_scene = None              # WorldModel 上次同步到的 kernel 場景（偵測真正移動）
+        from core.world.spatial import SpatialProjectionCache
+        self._spatial_cache = SpatialProjectionCache()  # P1：確定性投影 dirty-version 快取
         # NR5/NR6：母題冷卻 + 動機心跳（旁路）
         self._motif_tracker = None
         self._motive_heartbeat = None
@@ -488,6 +490,8 @@ class BeatLoop:
                 "blocked_reveal_candidates": list(getattr(self, "_blocked_reveal_candidates", [])),
                 # P0 #4：WorldProgress（current_area/known_areas/世界事實/investigation_state）
                 "world_progress": self.world_progress(dp),
+                # Spatial WorldModel Projection（確定性、唯讀、快取；無 LLM）
+                "spatial_debug": self.spatial_debug(),
                 "new_world_facts_this_beat": list(self._new_world_facts_this_beat),
                 "ended": self.ended, "ending": self.ending}
 
@@ -897,10 +901,10 @@ class BeatLoop:
             # 撤離鎖時跳過：玩家撤在安全區，kernel scene-sync 不得把 current_area 推回站內（durability）。
             if not review_locked and scene and scene != self._world_kernel_scene:
                 self._world.apply(WorldDelta(op="move_current", entity_id=scene, origin="kernel"))
-                # 補 label（apply 用 id 當 label 登記時補回顯示名）
+                # 補 label（apply 用 id 當 label 登記時補回顯示名；經 setter 才 bump cache）
                 _e = self._world.get(scene)
                 if _e is not None and _e.label == scene:
-                    _e.label = self._area_label(scene)
+                    self._world.set_label(scene, self._area_label(scene))
                 self._world_kernel_scene = scene
             # 撤離鎖時**不新增** story object entity（requirement 3）；否則優先結構化 entity_delta。
             if not review_locked:
@@ -919,6 +923,12 @@ class BeatLoop:
             after = {eid: e.state for eid, e in self._world.entities.items()}
             self._changed_entities_this_beat = [
                 eid for eid, st in after.items() if before.get(eid) != st]
+            # Spatial：只把本 beat **新登記**的物件/NPC 綁到當前區域（供 visible/remote）。
+            # 只認新登記（不認 state 變更）——避免把狀態變動的「遠處」物件誤綁到當前區。
+            cur = self._world.current_area
+            if cur and not review_locked:
+                for eid in (e for e in after if e not in before):
+                    self._world.tag_entity_area(eid, cur)
             self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
         except Exception as e:
             log.warning("world model tick skipped: %s", e)
@@ -980,6 +990,26 @@ class BeatLoop:
                 getattr(self, "_changed_entities_this_beat", []) or []),
             "world_model": self._world_model_projection(),
         }
+
+    def spatial_debug(self) -> dict:
+        """P2/P4：observation.spatial_debug——WorldModel 的**確定性唯讀**空間投影（無 LLM；快取）。
+
+        永不阻塞：用 dirty-version cache，WorldModel 不變則回上次結果；mental_map_text 為確定性模板。
+        """
+        w = getattr(self, "_world", None)
+        if w is None:
+            return {}
+        try:
+            from core.world.spatial import build_spatial_projection
+            mode = getattr(self, "_exploration_mode", "active_exploration")
+            cache = getattr(self, "_spatial_cache", None)
+            builder = lambda _w: build_spatial_projection(_w, exploration_mode=mode)
+            proj = (cache.get_or_build(w, builder, profile=mode)
+                    if cache is not None else builder(w))
+            return proj.to_debug_dict()
+        except Exception as e:                           # 投影失敗不影響推進（B8）
+            log.warning("spatial debug skipped: %s", e)
+            return {}
 
     def _world_model_projection(self) -> dict:
         """把 WorldModel 投影成觀測（AI 可看到世界記得哪些實體、此處有什麼可互動、本 beat 改了什麼）。"""

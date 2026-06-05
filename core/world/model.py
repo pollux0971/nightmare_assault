@@ -196,6 +196,24 @@ class WorldModel:
     def __init__(self):
         self.entities: dict[str, Entity] = {}
         self.current_area: str | None = None
+        # P1：dirty-version 計數（供 SpatialProjectionCache 失效判斷；runtime-only，不持久化）
+        self._versions: dict[str, int] = {
+            "world_version": 0, "area_version": 0, "exit_version": 0,
+            "entity_version": 0, "fact_version": 0, "mode_version": 0}
+
+    # ── P1：版本快照（任何結構變動都 bump world_version + 對應 category）──────────
+    def _bump(self, *cats: str):
+        self._versions["world_version"] += 1
+        for c in cats:
+            self._versions[c] = self._versions.get(c, 0) + 1
+
+    def _bump_kind(self, kind: str):
+        self._bump({AREA: "area_version", EXIT: "exit_version",
+                    FACT: "fact_version"}.get(kind, "entity_version"))
+
+    def version_snapshot(self) -> dict:
+        """輕量版本快照：WorldModel 一變動就改值，供投影 cache 失效（不含 LLM、不持久化）。"""
+        return dict(self._versions)
 
     # ── 登記 / 查詢 ──────────────────────────────────────────────────────────
     def register(self, kind: str, label: str, *, id: str | None = None,
@@ -209,9 +227,12 @@ class WorldModel:
             e = self.entities[eid]
             if label and not e.label:
                 e.label = label
+            added_role = False
             for r in (roles or []):                    # 合併 role（不覆蓋既有）
                 if r not in e.roles:
-                    e.roles.append(r)
+                    e.roles.append(r); added_role = True
+            if added_role:
+                self._bump_kind(e.kind)
             return e
         e = Entity(id=eid, kind=kind, label=label,
                    state=state or _DEFAULT_STATE.get(kind, "known"),
@@ -219,6 +240,7 @@ class WorldModel:
                    affords=list(affords if affords is not None else _DEFAULT_AFFORDS.get(kind, [])),
                    origin=origin, roles=list(roles or []))
         self.entities[eid] = e
+        self._bump_kind(kind)
         return e
 
     def get(self, eid: str) -> Entity | None:
@@ -249,15 +271,36 @@ class WorldModel:
             return False
         if state not in _STATES.get(e.kind, [state]):   # 未知狀態仍允許(寬鬆),但合法集優先
             pass
-        e.state = state
+        if e.state != state:
+            e.state = state
+            self._bump_kind(e.kind)
         return True
 
     def inspect(self, ref: str) -> Entity | None:
         """玩家檢查某物件 → 標 inspected(世界記得他查過)。"""
         e = self.find(ref, kind=OBJECT)
-        if e is not None:
+        if e is not None and e.state != "inspected":
             e.state = "inspected"
+            self._bump_kind(OBJECT)
         return e
+
+    def tag_entity_area(self, eid: str, area_id: str) -> bool:
+        """把物件/NPC 綁到所在區域（供 spatial visible/remote 判斷）。只在未綁定時設。"""
+        e = self.entities.get(eid)
+        if e is None or e.kind in (AREA, EXIT) or e.props.get("area") or not area_id:
+            return False
+        e.props["area"] = area_id
+        self._bump_kind(e.kind)
+        return True
+
+    def set_label(self, eid: str, label: str) -> bool:
+        """改某實體顯示名（current_area_label 屬投影輸出 → 經此 setter 才會 bump cache）。"""
+        e = self.entities.get(eid)
+        if e is None or not label or e.label == label:
+            return False
+        e.label = label
+        self._bump_kind(e.kind)
+        return True
 
     def move_to(self, area_ref: str, *, negated: list | None = None) -> tuple[bool, str]:
         """切換 current_area。respects NegativeIntentGuard:目標被否定 → 不移動。
@@ -286,7 +329,9 @@ class WorldModel:
         e = self.find(exit_ref, kind=EXIT)
         if e is None:
             return False
-        e.state = state
+        if e.state != state:
+            e.state = state
+            self._bump("exit_version")
         return True
 
     def move_through(self, exit_ref: str, *, negated: list | None = None) -> tuple[bool, str]:
@@ -307,12 +352,17 @@ class WorldModel:
         if dest:
             self.set_current_area(dest)
         e.state = "used"
+        self._bump("exit_version")
         return (True, "moved_through")
 
     def exits_here(self) -> list[Entity]:
         """當前區域可見的 exit/route。"""
+        return self.exits_from(self.current_area)
+
+    def exits_from(self, area_id: str | None) -> list[Entity]:
+        """從指定區域出發可見的 exit/route（props.area 未標 → 視為任意區域可見）。"""
         return [e for e in self.by_kind(EXIT)
-                if e.props.get("area") in (None, self.current_area)]
+                if e.props.get("area") in (None, area_id)]
 
     # ── Area roles（主題無關角色查詢）────────────────────────────────────────
     def set_area_role(self, area_id: str, role: str, *, exclusive: bool = False) -> bool:
@@ -326,6 +376,7 @@ class WorldModel:
                     other.roles.remove(role)
         if role not in e.roles:
             e.roles.append(role)
+        self._bump("area_version")
         return True
 
     def areas_with_role(self, role: str) -> list[Entity]:
@@ -389,12 +440,16 @@ class WorldModel:
         return e
 
     def _set_current(self, area_id: str):
+        if self.current_area == area_id and (
+                area_id in self.entities and self.entities[area_id].state == "current"):
+            return                                       # 無變化 → 不 bump
         for e in self.by_kind(AREA):
             if e.state == "current":
                 e.state = "visited"
         self.current_area = area_id
         if area_id in self.entities:
             self.entities[area_id].state = "current"
+        self._bump("area_version")
 
     # ── affordances / 投影 ───────────────────────────────────────────────────
     def affordances_here(self) -> list[Affordance]:
