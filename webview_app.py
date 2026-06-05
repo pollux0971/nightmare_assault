@@ -23,6 +23,7 @@ from core.signal import SignalBus
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config" / "config.json"
+CONFIG_EXAMPLE_PATH = ROOT / "config" / "config.example.json"
 STORAGE = ROOT / "storage"
 
 # 三層模型分層 → OpenRouter 模型字串（可被 config.agent_models 覆寫）
@@ -41,8 +42,43 @@ DEFAULT_TEMPS = {"setup": 0.7, "story": 0.8, "warden": 0.4,
 
 
 # ── config（key 存本機，gitignore）─────────────────────────────────────────
+def bootstrap_config_skeleton(path: Path = CONFIG_PATH,
+                              example: Path = CONFIG_EXAMPLE_PATH) -> bool:
+    """config.json 不存在時（例如別人 clone 後第一次跑），自動生成一份**框架** config.json。
+
+    來源優先 config.example.json（含建議模型清單），否則用內建預設；api_key 一律留空，
+    讓使用者自己填（或設環境變數 OPENROUTER_API_KEY）。已存在 → 不覆寫、回 False。
+    """
+    if path.is_file():
+        return False
+    skeleton: dict = {}
+    try:
+        if example.is_file():
+            skeleton = json.loads(example.read_text(encoding="utf-8"))
+    except Exception:
+        skeleton = {}
+    skeleton["api_key"] = ""                       # 框架不含金鑰，待使用者填
+    skeleton.setdefault("base_url", "https://openrouter.ai/api/v1")
+    skeleton.setdefault("timeout", 90)
+    # 確保 8 個 agent 都有模型（example 可能較舊缺項 → 用內建預設補齊，避免某 agent 無模型）
+    models = dict(skeleton.get("agent_models") or {})
+    for agent, default in DEFAULT_AGENT_MODELS.items():
+        models.setdefault(agent, default)
+    skeleton["agent_models"] = models
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"[config] 未找到 {path.name}，已自動生成框架設定 → {path}\n"
+              f"[config] 請在設定畫面填入 OpenRouter API key，或設環境變數 OPENROUTER_API_KEY。")
+        return True
+    except Exception as e:                          # 唯讀環境等寫不了 → 不致命，照常用記憶體預設
+        print(f"[config] 無法寫入框架設定（{e}）；改用記憶體預設，請在設定畫面輸入金鑰。")
+        return False
+
+
 def load_config(path: Path = CONFIG_PATH) -> dict:
     import os
+    bootstrap_config_skeleton(path)               # 缺檔則先生成框架（不覆寫既有）
     cfg: dict = {}
     if path.is_file():
         try:

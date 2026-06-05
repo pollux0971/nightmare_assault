@@ -4,7 +4,7 @@
   "timeout": 90,
   "agent_models": {
     "story": [
-      "deepseek/deepseek-v3.2",
+      "deepseek/deepseek-chat-v3-0324",
       "qwen/qwen3-max"
     ],
     "setup": [
@@ -17,6 +17,16 @@
       "minimax/minimax-m3"
     ],
     "compactor": [
+      "minimax/minimax-m3"
+    ],
+    "npc-chat": [
+      "deepseek/deepseek-chat-v3-0324",
+      "qwen/qwen3-max"
+    ],
+    "dreaming": [
+      "qwen/qwen3-max"
+    ],
+    "offstage-fate": [
       "minimax/minimax-m3"
     ]
   }
