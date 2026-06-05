@@ -38,9 +38,19 @@ _STATES = {
     FACT: ["asserted"],
 }
 
-# 「外面 / 安全區」——結構性區域（撤退目的地），主題無關
-SAFE_ZONE_AREA_ID = "area.outside_dock"
+# ── Area roles（主題無關角色；取代硬編碼地名）────────────────────────────────
+ROLE_SAFE_ZONE = "safe_zone"        # 撤退/整理的結構性安全區
+ROLE_SITE = "site"                  # 調查現場（主要地點）
+ROLE_ENTRY = "entry"                # 起始區域
+ROLE_ACTIVE_AREA = "active_area"    # 玩家撤退前所在、返回時的目標區域
+ROLE_CAMPAIGN_EXIT = "campaign_exit"  # 結束本次調查的離場區域
+AREA_ROLES = {ROLE_SAFE_ZONE, ROLE_SITE, ROLE_ENTRY, ROLE_ACTIVE_AREA, ROLE_CAMPAIGN_EXIT}
+
+# 預設結構性安全區（**主題無關** id/label；只在沒有 role=safe_zone 區域時當預設）
+SAFE_ZONE_AREA_ID = "area.safe_zone"
 SAFE_ZONE_LABEL = "外面（安全區）"
+# 舊存檔相容：以前硬寫的 outside_dock 仍視為 safe_zone（is_safe_zone 認得）
+LEGACY_SAFE_ZONE_ID = "area.outside_dock"
 
 # story 結構化 entity_delta 只准登記/改這些 kind（area/exit 由 kernel 圖擁有，story 不得自由新增）
 STORY_ENTITY_KINDS = {OBJECT, ACTOR, FACT}
@@ -153,6 +163,7 @@ class Entity:
     props: dict = field(default_factory=dict)
     affords: list = field(default_factory=list)
     origin: str = "kernel"          # kernel | story | npc | extractor
+    roles: list = field(default_factory=list)   # area roles（主題無關；safe_zone/site/entry/…）
 
 
 @dataclass
@@ -189,20 +200,24 @@ class WorldModel:
     # ── 登記 / 查詢 ──────────────────────────────────────────────────────────
     def register(self, kind: str, label: str, *, id: str | None = None,
                  state: str | None = None, props: dict | None = None,
-                 affords: list | None = None, origin: str = "story") -> Entity:
+                 affords: list | None = None, origin: str = "story",
+                 roles: list | None = None) -> Entity:
         if kind not in KINDS:
             raise ValueError(f"unknown entity kind: {kind}")
         eid = id or f"{kind}.{slug(label)}"
-        if eid in self.entities:                       # 已存在 → 不重複登記(可補 label)
+        if eid in self.entities:                       # 已存在 → 不重複登記(可補 label/role)
             e = self.entities[eid]
             if label and not e.label:
                 e.label = label
+            for r in (roles or []):                    # 合併 role（不覆蓋既有）
+                if r not in e.roles:
+                    e.roles.append(r)
             return e
         e = Entity(id=eid, kind=kind, label=label,
                    state=state or _DEFAULT_STATE.get(kind, "known"),
                    props=dict(props or {}),
                    affords=list(affords if affords is not None else _DEFAULT_AFFORDS.get(kind, [])),
-                   origin=origin)
+                   origin=origin, roles=list(roles or []))
         self.entities[eid] = e
         return e
 
@@ -299,12 +314,72 @@ class WorldModel:
         return [e for e in self.by_kind(EXIT)
                 if e.props.get("area") in (None, self.current_area)]
 
-    def withdraw_to_safe_zone(self) -> str:
-        """撤退到結構性安全區(若無則建);回傳該 area id。"""
-        if SAFE_ZONE_AREA_ID not in self.entities:
-            self.register(AREA, SAFE_ZONE_LABEL, id=SAFE_ZONE_AREA_ID, origin="kernel")
-        self._set_current(SAFE_ZONE_AREA_ID)
+    # ── Area roles（主題無關角色查詢）────────────────────────────────────────
+    def set_area_role(self, area_id: str, role: str, *, exclusive: bool = False) -> bool:
+        """給某 area 加上 role。exclusive=True → 先把該 role 從其他 area 移除（如 active_area）。"""
+        e = self.entities.get(area_id)
+        if e is None or e.kind != AREA:
+            return False
+        if exclusive:
+            for other in self.by_kind(AREA):
+                if other.id != area_id and role in other.roles:
+                    other.roles.remove(role)
+        if role not in e.roles:
+            e.roles.append(role)
+        return True
+
+    def areas_with_role(self, role: str) -> list[Entity]:
+        return [e for e in self.by_kind(AREA) if role in (e.roles or [])]
+
+    def area_with_role(self, role: str) -> Entity | None:
+        a = self.areas_with_role(role)
+        return a[0] if a else None
+
+    def safe_zone_id(self) -> str:
+        """安全區 id：優先 role=safe_zone；無 role 時 fallback 舊常數（相容），否則用主題無關預設。"""
+        e = self.area_with_role(ROLE_SAFE_ZONE)
+        if e is not None:
+            return e.id
+        if LEGACY_SAFE_ZONE_ID in self.entities:       # 舊存檔相容
+            return LEGACY_SAFE_ZONE_ID
         return SAFE_ZONE_AREA_ID
+
+    def site_area_id(self) -> str | None:
+        """調查現場 id：優先 active_area（撤退前所在）→ site → entry。"""
+        for role in (ROLE_ACTIVE_AREA, ROLE_SITE, ROLE_ENTRY):
+            e = self.area_with_role(role)
+            if e is not None:
+                return e.id
+        return None
+
+    def entry_area_id(self) -> str | None:
+        e = self.area_with_role(ROLE_ENTRY)
+        return e.id if e is not None else None
+
+    def is_safe_zone(self, area_id: str | None) -> bool:
+        """是否為安全區：role=safe_zone 或（相容）預設/舊常數 id。"""
+        if not area_id:
+            return False
+        e = self.entities.get(area_id)
+        if e is not None and ROLE_SAFE_ZONE in (e.roles or []):
+            return True
+        return area_id in (SAFE_ZONE_AREA_ID, LEGACY_SAFE_ZONE_ID)
+
+    def site_label(self, default: str = "現場") -> str:
+        """調查現場顯示名（給 ReviewMode 文案；無則用通用詞）。"""
+        sid = self.site_area_id()
+        e = self.entities.get(sid) if sid else None
+        return (e.label if e is not None and e.label else default) or default
+
+    def withdraw_to_safe_zone(self) -> str:
+        """撤退到結構性安全區（role=safe_zone；若無則用預設 id 建並標 role）;回傳該 area id。"""
+        sid = self.safe_zone_id()
+        if sid not in self.entities:
+            self.register(AREA, SAFE_ZONE_LABEL, id=sid, roles=[ROLE_SAFE_ZONE], origin="kernel")
+        else:
+            self.set_area_role(sid, ROLE_SAFE_ZONE)
+        self._set_current(sid)
+        return sid
 
     def set_current_area(self, area_id: str, label: str | None = None) -> Entity:
         """kernel 場景變動 → 同步 current_area(沒有則登記)。"""

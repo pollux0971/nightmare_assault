@@ -24,10 +24,12 @@ CAMPAIGN_END_REQUESTED = "campaign_end_requested"
 LOCKED_MODES = (TEMPORARY_RETREAT, REVIEW_MODE)
 
 # ── 玩家措辭 → 模式（先比對「明確再入/結束」，再比對「撤退/整理」）─────────────
-# 明確「回去研究站 / 重新進入」才解鎖回 active（requirement 5）
-_REENTER = ["回去研究站", "回到研究站", "回研究站", "重新進入", "再次進入", "返回站內",
-            "進去研究站", "回去裡面", "重新回到", "回到站內", "再進去", "重新展開調查",
-            "回到調查", "繼續深入調查"]
+# 明確「返回現場 / 重新進入」才解鎖回 active（theme-agnostic；不寫死特定地名）
+_REENTER = ["返回現場", "回到現場", "回現場", "返回", "回去", "重新進入", "再次進入",
+            "再進去", "重新回到", "重新展開調查", "回到調查", "繼續深入", "繼續往裡",
+            "繼續調查", "回到裡面", "回去裡面", "回到原處", "返回原處", "重新進去",
+            # 相容：舊主題（研究站）措辭仍可解
+            "回去研究站", "回到研究站", "回研究站", "返回站內", "回到站內"]
 # 整理/盤點/不新增調查/不碰真相 → review_mode
 _REVIEW = ["整理線索", "整理筆記", "盤點線索", "回顧線索", "梳理線索", "整理一下線索",
            "根據已知", "不新增調查", "不再深入", "不碰真相", "不追真相", "暫停調查",
@@ -104,24 +106,34 @@ INSPECT_INVENTORY = "inspect_inventory"
 END_CAMPAIGN_ACTION = "end_campaign"
 REVIEW_AFFORDANCES = [RETURN_INSIDE, REVIEW_NOTES, INSPECT_INVENTORY, END_CAMPAIGN_ACTION]
 
-# id → 玩家面選項文字（措辭須能被 resolve_mode / resolve_exit_intent 正確分類回去）
+# id → 玩家面選項文字（**主題無關**；措辭須能被 resolve_mode / resolve_exit_intent 正確分類回去）
 REVIEW_OPTION_LABELS = {
-    RETURN_INSIDE: "回到研究站，重新進入調查",
+    RETURN_INSIDE: "返回現場，繼續調查",
     REVIEW_NOTES: "根據已知線索整理筆記",
     INSPECT_INVENTORY: "檢視我隨身帶的東西",
     END_CAMPAIGN_ACTION: "結束本次調查，接受目前結果",
 }
 
 
-def build_review_decision_point(base_dp, notes_text: str = ""):
-    """把當前 beat 的 decision_point 換成 ReviewMode 四選一（不自動推進；永遠含再入與結束）。"""
+def _review_option_label(aff: str, site_label: str) -> str:
+    if aff == RETURN_INSIDE and site_label:
+        return f"返回{site_label}，繼續調查"
+    return REVIEW_OPTION_LABELS[aff]
+
+
+def build_review_decision_point(base_dp, notes_text: str = "", site_label: str = "現場"):
+    """把當前 beat 的 decision_point 換成 ReviewMode 四選一（不自動推進；永遠含再入與結束）。
+
+    site_label：調查現場顯示名（由 WorldModel 提供；去主題化，不寫死「研究站」）。
+    """
     from core.models import DecisionPoint, Option
     base_recap = (getattr(base_dp, "situation_recap", "") or "").strip()
-    frame = ("你退到安全的地方，暫時不再深入。你可以整理手上的線索，"
-             "檢視隨身的東西，重新進入研究站，或就此結束。")
+    frame = (f"你退到安全的地方，暫時不再深入。你可以整理手上的線索，"
+             f"檢視隨身的東西，返回{site_label or '現場'}繼續調查，或就此結束。")
     recap = (notes_text.strip() + "\n" + frame) if notes_text.strip() else (
         (base_recap + "\n" + frame) if base_recap else frame)
-    opts = [Option(text=REVIEW_OPTION_LABELS[a], tone="cautious") for a in REVIEW_AFFORDANCES]
+    opts = [Option(text=_review_option_label(a, site_label), tone="cautious")
+            for a in REVIEW_AFFORDANCES]
     return DecisionPoint(
         situation_recap=recap, decision_type="action", suggested_options=opts,
         free_input_hint="或描述你想整理 / 檢視的事（仍在安全區，不會自動深入）",

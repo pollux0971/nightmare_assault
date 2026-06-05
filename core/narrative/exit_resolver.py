@@ -68,6 +68,7 @@ from dataclasses import dataclass
 
 WITHDRAW_TO = "withdraw_to"      # 撤到安全區（不結局）
 MOVE_THROUGH = "move_through"    # 穿過出口/路線到另一區（不結局）
+RETURN_TO_SITE = "return_to_site"  # 從安全區返回調查現場（不結局；解鎖 active）
 END_CAMPAIGN = "end_campaign"    # **唯一**會進 EndingGate
 OFFER = "offer"                  # 語意不明 → ExitOffer 讓玩家選
 NO_EXIT = "no_exit"              # 非離開行動
@@ -75,21 +76,27 @@ NO_EXIT = "no_exit"              # 非離開行動
 
 @dataclass
 class ExitDecision:
-    affordance: str                 # withdraw_to | move_through | end_campaign | offer | no_exit
-    target: str | None = None       # area / exit ref（若有）
+    affordance: str                 # withdraw_to | move_through | return_to_site | end_campaign | offer | no_exit
+    target_role: str | None = None  # 主題無關 area role（safe_zone / site / …）；loop 解析成 area id
+    target: str | None = None       # （相容）具體 area/exit ref（若有）
     reason: str = ""
 
 
 def resolve_exit_affordance(text: str) -> ExitDecision:
-    """把玩家輸入解析成 **exit affordance**（不直接決定 ending）。
+    """把玩家輸入解析成 **exit affordance**（不直接決定 ending；目標以 role 表示，不硬寫地名）。
 
-    只有 END_CAMPAIGN 該由 loop 拿去進 EndingGate；其餘皆續行。
+    只有 END_CAMPAIGN 該由 loop 拿去進 EndingGate；其餘皆續行。target_role 由 loop 解析成 area id。
     """
-    intent = resolve_exit_intent(text)
+    from core.narrative.exploration_mode import _says_reenter  # 共用 theme-agnostic 再入偵測
+    t = text or ""
+    # 明確「返回現場 / 重新進入」→ return_to_site（target_role=site；不結局）
+    if _says_reenter(t):
+        return ExitDecision(RETURN_TO_SITE, target_role="site", reason="return to site")
+    intent = resolve_exit_intent(t)
     if intent == RUN_ENDING:
-        return ExitDecision(END_CAMPAIGN, reason="explicit end campaign")
+        return ExitDecision(END_CAMPAIGN, target_role="campaign_exit", reason="explicit end campaign")
     if intent in (TEMPORARY_RETREAT, SAFE_ZONE_REACHED):
-        return ExitDecision(WITHDRAW_TO, target="area.outside_dock", reason=intent)
+        return ExitDecision(WITHDRAW_TO, target_role="safe_zone", reason=intent)
     if intent == AREA_TRANSITION:
         return ExitDecision(MOVE_THROUGH, reason="area exit")   # target 由 kernel/WorldModel 決定
     if intent == RETURN_TO_MOTIVE:

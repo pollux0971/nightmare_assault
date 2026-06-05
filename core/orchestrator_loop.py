@@ -356,6 +356,13 @@ class BeatLoop:
                 prev_mode = (self.bb.game_meta or {}).get("exploration_mode", "active_exploration")
                 self._exploration_mode = resolve_mode(player_decision, prev_mode, self._exit_affordance)
                 review_locked = is_review_locked(self._exploration_mode)
+                # 返回現場：撤離鎖解除（locked → active）→ current_area 回到 site/active 區（離開安全區）
+                if is_review_locked(prev_mode) and not review_locked and self._world is not None:
+                    _sid = self._world.site_area_id()
+                    if _sid and self._world.current_area != _sid:
+                        self._world.set_current_area(_sid)
+                        self._world_kernel_scene = _sid
+                        self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
                 self.bb.game_meta = {**self.bb.game_meta, "exploration_mode": self._exploration_mode}
                 # WorldConsequence vs TruthEvidence：分類 action + 偵測「不碰真相」意圖
                 from core.narrative.action_intent import classify_action, no_truth_intent
@@ -683,13 +690,19 @@ class BeatLoop:
         - available_next = return_inside / review_notes / inspect_inventory / end_campaign。
         """
         try:
-            from core.world.model import SAFE_ZONE_AREA_ID
+            from core.world.model import ROLE_ACTIVE_AREA
             from core.narrative.exploration_mode import (
                 build_review_decision_point, wants_notes, review_notes_text)
             gs = self._game_state
-            if self._world is not None and self._world.current_area != SAFE_ZONE_AREA_ID:
+            site_label = "現場"
+            if self._world is not None and not self._world.is_safe_zone(self._world.current_area):
+                prev = self._world.current_area
+                if prev:                                 # 記住撤退前所在 → 返回目標（active_area）
+                    self._world.set_area_role(prev, ROLE_ACTIVE_AREA, exclusive=True)
                 self._world.withdraw_to_safe_zone()
                 self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
+            if self._world is not None:
+                site_label = self._world.site_label()    # 去主題化：用現場顯示名（不寫死研究站）
             d = int(getattr(gs, "danger_level", 0) or 0)
             if d > 0:                                    # 撤退降即時危險（續行，不結局）
                 gs.danger_level = max(0, d - 1)
@@ -701,7 +714,7 @@ class BeatLoop:
                                           get_world_facts(self.bb))
             log.info("review lock active（mode=%s, area=%s）", self._exploration_mode,
                      getattr(self._world, "current_area", None))
-            return build_review_decision_point(dp, notes_text=notes)
+            return build_review_decision_point(dp, notes_text=notes, site_label=site_label)
         except Exception as e:
             log.warning("apply review lock skipped: %s", e)
             return dp
@@ -843,6 +856,10 @@ class BeatLoop:
         scene = getattr(self._game_state, "current_scene", None)
         if scene:
             self._world.set_current_area(scene, label=self._area_label(scene))
+            # 主題無關角色：起始場景同時是 entry + site（調查現場）
+            from core.world.model import ROLE_ENTRY, ROLE_SITE
+            self._world.set_area_role(scene, ROLE_ENTRY)
+            self._world.set_area_role(scene, ROLE_SITE)
             self._world_kernel_scene = scene
             self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
 
@@ -931,9 +948,11 @@ class BeatLoop:
             current_area = w.current_area
             known = [e.id for e in w.by_kind(AREA)]
             exits = [{"id": e.id, "label": e.label, "state": e.state} for e in w.by_kind(EXIT)]
+            area_roles = {e.id: list(e.roles or []) for e in w.by_kind(AREA)}  # area_id → roles
         else:
             current_area = getattr(gs, "current_scene", None) if gs is not None else None
             known, exits = ([current_area] if current_area else []), []
+            area_roles = {}
         from core.narrative.world_facts import get_world_facts
         all_facts = get_world_facts(self.bb)
         new_facts = getattr(self, "_new_world_facts_this_beat", []) or []
@@ -956,6 +975,7 @@ class BeatLoop:
             "changed_exits_this_beat": changed_exits,
             "investigation_state": inv_state,
             "available_next": avail,
+            "area_roles": area_roles,                    # 主題無關角色：area_id → roles
             "changed_entities_this_beat": list(
                 getattr(self, "_changed_entities_this_beat", []) or []),
             "world_model": self._world_model_projection(),
@@ -968,7 +988,10 @@ class BeatLoop:
             return {}
         try:
             def _e(e):
-                return {"id": e.id, "kind": e.kind, "label": e.label, "state": e.state}
+                d = {"id": e.id, "kind": e.kind, "label": e.label, "state": e.state}
+                if e.roles:                              # 主題無關角色（area 才有；其餘空）
+                    d["roles"] = list(e.roles)
+                return d
             ents = [_e(e) for e in w.entities.values()]
             affs = [{"verb": a.verb, "entity_id": a.entity_id, "label": a.label}
                     for a in w.affordances_here()]
@@ -976,13 +999,12 @@ class BeatLoop:
             for e in w.entities.values():
                 by_kind[e.kind] = by_kind.get(e.kind, 0) + 1
             changed = list(getattr(self, "_changed_entities_this_beat", []) or [])
-            # 撤離鎖：entities_here 只顯示「安全區當前 area 的 entity」（不顯示站內的物件）
+            # 撤離鎖：entities_here 只顯示「安全區（當前 area）的 entity」（不顯示站內的物件）
             from core.narrative.exploration_mode import is_review_locked
-            from core.world.model import SAFE_ZONE_AREA_ID
             review = is_review_locked(getattr(self, "_exploration_mode", "active_exploration"))
             def _here(items):
                 if review:
-                    items = [e for e in items if e.props.get("area") == SAFE_ZONE_AREA_ID]
+                    items = [e for e in items if w.is_safe_zone(e.props.get("area"))]
                 return [_e(e) for e in items]
             return {"current_area": w.current_area, "counts": by_kind,
                     "entities": ents[:40], "affordances_here": affs[:20],

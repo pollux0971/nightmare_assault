@@ -189,7 +189,7 @@ def main(argv=None):
     for e in final_wm["entities"]:
         by_kind[e["kind"]] = by_kind.get(e["kind"], 0) + 1
 
-    SAFE = "area.outside_dock"
+    from core.world.model import SAFE_ZONE_AREA_ID as SAFE
     report = {
         "registered_entities": [f'{e["label"]}[{e["kind"]}:{e["state"]}|{e["origin"]}]'
                                 for e in final_wm["entities"]],

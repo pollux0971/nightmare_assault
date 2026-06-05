@@ -64,7 +64,8 @@ def test_build_review_decision_point_options():
     dp = build_review_decision_point(base, notes_text="你理了一遍線索。")
     texts = [o.text for o in dp.suggested_options]
     assert len(texts) == 4
-    assert any("回到研究站" in t for t in texts)       # return_inside
+    assert any("繼續調查" in t for t in texts)         # return_inside（去主題化，不寫死研究站）
+    assert not any("研究站" in t for t in texts)       # 不得出現硬編碼地名
     assert any("整理筆記" in t for t in texts)         # review_notes
     assert any("隨身" in t for t in texts)             # inspect_inventory
     assert any("結束本次調查" in t for t in texts)     # end_campaign
@@ -140,8 +141,9 @@ def test_review_dp_offers_return_and_end(monkeypatch):
     texts = [o for o in out["world_progress"]["available_next"]]
     dp = out["decision_point"]
     opt_texts = [getattr(o, "text", "") for o in (dp.suggested_options or [])]
-    assert any("回到研究站" in t for t in opt_texts)
+    assert any("繼續調查" in t for t in opt_texts)      # 返回現場（去主題化）
     assert any("結束本次調查" in t for t in opt_texts)
+    assert not any("研究站" in t for t in opt_texts)    # 不得出現硬編碼地名
 
 
 def test_review_mode_entities_here_only_safe_zone(monkeypatch):
