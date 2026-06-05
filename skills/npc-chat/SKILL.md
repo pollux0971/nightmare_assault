@@ -60,10 +60,13 @@ writes: ChatLog（追加）
   "reply": "（角色照常說的話）",
   "answer_status": "partial | evasion | actionable | none",
   "entity_delta": [
-    { "op": "register", "kind": "fact", "label": "通訊設備在機房" }
+    { "op": "register", "kind": "fact", "label": "‹改成你這句話裡實際講出的那條可檢查資訊›" }
   ]
 }
 ```
+
+> ⚠️ **上面 `label` 是占位示意，不是內容。** 換成你這輪**真的講出來**的那條主張（用你的話、你的世界觀），
+> **嚴禁照抄範例的占位字**；沒有具體可驗證資訊時就別加 `entity_delta`。
 
 - `entity_delta` 只准兩種 `kind`：`fact`（你主張的一條可檢查事實）、`actor`（你提到在場/某處的人）。
   **不准**登記 `object` / `area` / `exit`——你不能憑空生出新物件、新地圖、新出口（系統會拒絕）。
