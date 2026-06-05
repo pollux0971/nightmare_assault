@@ -296,6 +296,7 @@ class BeatLoop:
 
     def _step_kernel(self, player_decision, input_path, on_event, on_progress) -> dict:
         _p = on_progress or (lambda *_: None)
+        from core.constants import ENABLE_NARRATIVE_CONTROL   # 全方法共用（避免 UnboundLocal）
         gs = self._game_state
         self._escape_step = "none"               # 本 beat 離開意圖（預設無）
         self._exit_intent = "none"               # Player Sovereignty：離開意圖分類
@@ -303,6 +304,8 @@ class BeatLoop:
         self._reveal_updates_this_beat = []
         self._evidence_events_this_beat = 0
         self._unmapped_evidence_this_beat = 0
+        # P0 WorldStateFact：本 beat 新增的世界事實（每 beat 重置）
+        self._new_world_facts_this_beat = []
 
         # 1. warden（致命規則/技能/結局，僅玩家）
         _p("warden")
@@ -314,10 +317,19 @@ class BeatLoop:
             self._emit(EVT_ENDING_TRIGGERED, verdict)
 
         # 2. ProgressKernel：決定本 beat 推進的事件（EventPatch + obligations）
+        # NegativeIntentGuard（P0）：把玩家明確拒絕的目標傳進 kernel，避免選到「移動到該目標」的事件
+        _negated = []
+        if ENABLE_NARRATIVE_CONTROL:
+            try:
+                from core.narrative.negative_intent import negated_targets
+                _negated = negated_targets(player_decision)
+            except Exception:
+                _negated = []
         _p("kernel")
         progress = self._kernel.resolve_player_action(
             player_decision, gs,
-            warden={"directive": verdict.directive_to_story, "rule_violation": verdict.rule_violation},
+            warden={"directive": verdict.directive_to_story, "rule_violation": verdict.rule_violation,
+                    "negated_targets": _negated},
         )
 
         # 3. story = realizer（context 只給 revealed + obligations，防暴雷）
@@ -368,6 +380,9 @@ class BeatLoop:
         if ENABLE_NARRATIVE_CONTROL and self._reveal_ledger is not None:
             _changed = self._revelation_tick(self._game_state)
             self._story_evidence_tick(player_decision, narrative, _changed)
+        # P0 WorldStateFact：從 story 敘事抽世界事實（NPC fact 由 bridge_npc_evidence 處理）
+        if ENABLE_NARRATIVE_CONTROL:
+            self._world_facts_tick(narrative, source="story")
 
         self.last_story = narrative
         # Player Sovereignty：離開意圖處理（ambiguous → ExitOffer；retreat → 降危險；皆不自動收束）
@@ -406,6 +421,9 @@ class BeatLoop:
                 "evidence_events_this_beat": self._evidence_events_this_beat,
                 "unmapped_evidence_this_beat": self._unmapped_evidence_this_beat,
                 "escape_step": getattr(self, "_escape_step", "none"),
+                # P0 #4：WorldProgress（current_area/known_areas/世界事實/investigation_state）
+                "world_progress": self.world_progress(dp),
+                "new_world_facts_this_beat": list(self._new_world_facts_this_beat),
                 "ended": self.ended, "ending": self.ending}
 
     def _run_story_with_repair(self, player_decision, gs, ctx, on_event):
@@ -581,11 +599,11 @@ class BeatLoop:
         """
         try:
             from core.narrative.exit_resolver import (
-                AMBIGUOUS, TEMPORARY_RETREAT, build_exit_offer_decision_point)
+                AMBIGUOUS, TEMPORARY_RETREAT, SAFE_ZONE_REACHED, build_exit_offer_decision_point)
             if intent == AMBIGUOUS:
                 log.info("exit intent ambiguous → ExitOffer（不自動結局，交還玩家）")
                 return build_exit_offer_decision_point(dp)
-            if intent == TEMPORARY_RETREAT:
+            if intent in (TEMPORARY_RETREAT, SAFE_ZONE_REACHED):
                 d = int(getattr(gs, "danger_level", 0) or 0)
                 if d > 0:
                     gs.danger_level = max(0, d - 1)
@@ -679,6 +697,49 @@ class BeatLoop:
         except Exception as e:
             log.warning("npc truth refs update skipped: %s", e)
 
+    def _world_facts_tick(self, text: str, *, source: str = "story") -> list:
+        """P0：從文字抽 world_state_fact 寫進 game_meta（即使沒 truth reveal 也留可檢查後果）。"""
+        try:
+            from core.narrative.world_facts import extract_world_facts, add_world_facts
+            facts = extract_world_facts(text, source=source, npc_names=self.known_npcs)
+            added = add_world_facts(self.bb, facts, beat=self.beat_number)
+            if added:
+                self._new_world_facts_this_beat += added
+                log.info("world facts added (%s): %s", source, added)
+            return added
+        except Exception as e:
+            log.warning("world facts tick skipped: %s", e)
+            return []
+
+    def world_progress(self, dp=None) -> dict:
+        """P0 #4：WorldProgress 觀測——current_area / known_areas / 本 beat 變化 / investigation_state。"""
+        gs = getattr(self, "_game_state", None)
+        scene = getattr(gs, "current_scene", None) if gs is not None else None
+        # 累積已知區域
+        meta = getattr(self.bb, "game_meta", {}) or {}
+        known = list(meta.get("known_areas") or [])
+        if scene and scene not in known:
+            known.append(scene)
+            self.bb.game_meta = {**self.bb.game_meta, "known_areas": known}
+        from core.narrative.world_facts import get_world_facts
+        all_facts = get_world_facts(self.bb)
+        new_facts = getattr(self, "_new_world_facts_this_beat", []) or []
+        changed_exits = [k for k in new_facts
+                         if (all_facts.get(k) or {}).get("category") == "exit"]
+        intent = getattr(self, "_exit_intent", "none")
+        from core.narrative.exit_resolver import WITHDRAW_STATES
+        inv_state = "paused" if intent in WITHDRAW_STATES else "active"
+        avail = [getattr(o, "text", "") for o in (getattr(dp, "suggested_options", None) or [])]
+        return {
+            "current_area": scene,
+            "known_areas": known,
+            "world_facts": sorted(all_facts.keys()),
+            "new_world_facts_this_beat": list(new_facts),
+            "changed_exits_this_beat": changed_exits,
+            "investigation_state": inv_state,
+            "available_next": avail,
+        }
+
     def _story_evidence_tick(self, action: str, narrative: str, reveal_changed: bool):
         """HB1：玩家做了有意義調查但本 beat reveal 無變化 → 保底產 hinted evidence 走 bridge。"""
         if self._reveal_ledger is None:
@@ -721,6 +782,9 @@ class BeatLoop:
             led = getattr(self, "_reveal_ledger", None)
             if not ENABLE_NARRATIVE_CONTROL or led is None:
                 return []
+            # P0 WorldStateFact：NPC 的有用資訊（出口鎖死/機房/發電機/某人來過）→ world_state_fact
+            self._world_facts_tick(getattr(reply_or_resp, "visible_reply", reply_or_resp),
+                                   source="npc_chat")
             from core.narrative.revelation import RevelationBridge, write_ledger_to_revealed_bible
             allowed_block = (self.bb.game_meta or {}).get("npc_allowed_truth_refs") or {}
             allowed_refs = allowed_block.get("allowed_truth_refs", [])

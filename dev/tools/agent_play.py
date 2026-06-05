@@ -157,6 +157,73 @@ def _npc_tiers(loop) -> dict:
     return {"visible_npcs": visible, "known_npcs": known, "chat_available_npcs": visible}
 
 
+def _world_state(loop) -> dict:
+    """世界狀態快照（給 AI 偵測導航 / 危險 / 後果問題）。"""
+    gs = getattr(loop, "_game_state", None)
+    if gs is not None:
+        return {"current_scene": getattr(gs, "current_scene", None),
+                "danger_level": int(getattr(gs, "danger_level", 0) or 0),
+                "clue_count": len(getattr(gs, "clues", {}) or {}),
+                "item_count": len(getattr(gs, "inventory", {}) or {})}
+    snap = loop.bb.snapshot()
+    return {"current_scene": None, "danger_level": 0, "clue_count": 0,
+            "item_count": len((snap.get("shared_inventory") or {}).get("items", []))}
+
+
+def annotate_world(obs: dict, track: dict) -> list:
+    """算本 beat 的世界後果 / 停滯指標，加進 obs['deltas']；回傳該 beat 的內建斷言清單
+    [(case, ok, notes), ...]（由 driver 在 log 完 observation 後再 emit，確保順序與配對）。
+
+    track 跨 beat 保存 prev 與停滯計數（由 driver 持有）。
+    """
+    cur = obs.get("world_state") or {}
+    prev = track.get("prev") or {}
+    dbg = obs.get("debug") or {}
+    scene_changed = bool(prev) and cur.get("current_scene") != prev.get("current_scene")
+    new_clues = max(0, cur.get("clue_count", 0) - prev.get("clue_count", 0))
+    new_items = max(0, cur.get("item_count", 0) - prev.get("item_count", 0))
+    danger_delta = cur.get("danger_level", 0) - prev.get("danger_level", 0)
+    reveal_up = len(dbg.get("reveal_updates_this_beat") or [])
+    evidence = int(dbg.get("evidence_events_this_beat", 0) or 0)
+    # P0 #4：world facts（NPC/story 寫入的 world_state_fact）也算後果
+    wp = obs.get("world_progress") or {}
+    new_world_facts = len(wp.get("new_world_facts_this_beat") or [])
+    changed_exits = len(wp.get("changed_exits_this_beat") or [])
+    is_exit_offer = dbg.get("escape_step") == "ambiguous"
+    is_narration = bool(obs.get("ended"))
+    had_consequence = bool(scene_changed or new_clues or new_items or danger_delta
+                           or reveal_up or evidence or new_world_facts or changed_exits
+                           or is_exit_offer)
+
+    track["beats_in_scene"] = (track.get("beats_in_scene", 0) + 1) if not scene_changed else 1
+    track["since_consequence"] = 0 if had_consequence else track.get("since_consequence", 0) + 1
+    track["since_reveal"] = 0 if reveal_up else track.get("since_reveal", 0) + 1
+
+    obs["world_state"] = cur
+    obs["deltas"] = {
+        "scene_changed": scene_changed, "danger_delta": danger_delta,
+        "new_clues": new_clues, "new_items": new_items, "reveal_updates": reveal_up,
+        "new_world_facts": new_world_facts, "changed_exits": changed_exits,
+        "is_exit_offer": is_exit_offer, "had_consequence": had_consequence,
+        "beats_in_scene": track["beats_in_scene"],
+        "beats_since_consequence": track["since_consequence"],
+        "beats_since_reveal": track["since_reveal"],
+    }
+    asserts = []
+    if prev and not is_narration:
+        # Player Sovereignty 核心：每個行動都該有可檢查的世界後果
+        asserts.append(("WorldResponds", had_consequence,
+                        "" if had_consequence else "本 beat 無任何世界後果（場景/線索/道具/危險/揭露/world_fact 皆未變）"))
+        if track["beats_in_scene"] >= 5:
+            asserts.append(("NotStuckInScene", False,
+                            f"已連續 {track['beats_in_scene']} beat 停在 {cur.get('current_scene')}"))
+        if cur.get("danger_level", 0) >= 5 and track["since_consequence"] >= 3:
+            asserts.append(("DangerProducesThreat", False,
+                            f"danger={cur.get('danger_level')} 但連 {track['since_consequence']} beat 無後果"))
+    track["prev"] = cur
+    return asserts
+
+
 def _debug_block(loop, step_result) -> dict:
     """HE1：observation.debug——定位 bug 用；只含 truth_id，不含 hidden content。"""
     sr = step_result or {}
@@ -191,6 +258,9 @@ def _dp_to_obs(loop, narrative, dp, ended, ending, step_result=None) -> dict:
         "known_npcs": tiers["known_npcs"],
         "chat_available_npcs": tiers["chat_available_npcs"],
         "reveal_progress": _reveal_progress(loop),
+        "world_state": _world_state(loop),
+        "world_progress": ((step_result or {}).get("world_progress")
+                           or (loop.world_progress(dp) if hasattr(loop, "world_progress") else {})),
         "debug": _debug_block(loop, step_result),
         "ended": ended,
         "ending": _ending_dict(loop, ending) if ended else None,
@@ -232,10 +302,14 @@ def _ending_dict(loop, ending) -> dict:
 def run_stdio(loop, opts, *, max_beats=20, logger=None, stop_on_ending=True):
     logger = logger or JsonlLogger(None)
     res = loop.start(opts)
+    track = {}                                        # 跨 beat：世界狀態 + 停滯計數
     obs = _dp_to_obs(loop, res["narrative"], res["decision_point"], False, None)
     obs["opening_sequence"] = res.get("opening_sequence")
+    asserts = annotate_world(obs, track)
     print(json.dumps(obs, ensure_ascii=False), flush=True)
     logger.observation(loop.beat_number, obs)
+    for a in asserts:
+        logger.assertion(*a)
     if loop.ended:
         return
     prev_reveal = obs["reveal_progress"]
@@ -262,8 +336,11 @@ def run_stdio(loop, opts, *, max_beats=20, logger=None, stop_on_ending=True):
         out = loop.step(action)
         obs = _dp_to_obs(loop, out["narrative"], out["decision_point"],
                          out.get("ended"), out.get("ending"), step_result=out)
+        asserts = annotate_world(obs, track)
         print(json.dumps(obs, ensure_ascii=False), flush=True)
         logger.observation(loop.beat_number, obs)
+        for a in asserts:
+            logger.assertion(*a)
         _emit_step_assertions(logger, prev_reveal, obs["reveal_progress"])
         prev_reveal = obs["reveal_progress"]
         if out.get("ended"):
@@ -324,9 +401,12 @@ def run_auto(loop, opts, max_beats, *, logger=None, stop_on_ending=True):
     logger = logger or JsonlLogger(None)
     P = print
     res = loop.start(opts)
+    track = {}
     P("=" * 70); P("【開場】"); P(res["narrative"])
     obs = _dp_to_obs(loop, res["narrative"], res["decision_point"], False, None)
-    P("〔reveal〕", obs["reveal_progress"])
+    for a in annotate_world(obs, track):
+        logger.assertion(*a)
+    P("〔reveal〕", obs["reveal_progress"], "〔world〕", obs["world_state"])
     logger.observation(loop.beat_number, obs)
     dp = res["decision_point"]
     prev_reveal = obs["reveal_progress"]
@@ -337,9 +417,12 @@ def run_auto(loop, opts, max_beats, *, logger=None, stop_on_ending=True):
         out = loop.step(act); dp = out["decision_point"]
         obs = _dp_to_obs(loop, out["narrative"], dp, out.get("ended"), out.get("ending"),
                          step_result=out)
+        _aw = annotate_world(obs, track)
         P(out["narrative"])
-        P("〔reveal〕", obs["reveal_progress"])
+        P("〔reveal〕", obs["reveal_progress"], "〔Δ〕", obs["deltas"])
         logger.observation(loop.beat_number, obs)
+        for a in _aw:
+            logger.assertion(*a)
         _emit_step_assertions(logger, prev_reveal, obs["reveal_progress"])
         prev_reveal = obs["reveal_progress"]
         if out.get("ended"):

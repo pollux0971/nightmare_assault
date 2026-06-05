@@ -8,7 +8,8 @@ from __future__ import annotations
 import core.constants as C
 from core.narrative.exit_resolver import (
     resolve_exit_intent, exit_offer_options, build_exit_offer_decision_point,
-    RUN_ENDING, AREA_TRANSITION, TEMPORARY_RETREAT, RETURN_TO_MOTIVE, AMBIGUOUS, NONE,
+    RUN_ENDING, AREA_TRANSITION, TEMPORARY_RETREAT, SAFE_ZONE_REACHED,
+    RETURN_TO_MOTIVE, AMBIGUOUS, NONE, WITHDRAW_STATES,
 )
 from core.models import DecisionPoint, Option
 
@@ -19,8 +20,11 @@ def test_intent_classification():
     assert resolve_exit_intent("我下定決心，頭也不回地走出去") == RUN_ENDING
     assert resolve_exit_intent("我放棄調查，直接離開") == RUN_ENDING
     assert resolve_exit_intent("我離開這個房間") == AREA_TRANSITION
-    assert resolve_exit_intent("先暫時撤退到外面整理線索") == TEMPORARY_RETREAT
+    assert resolve_exit_intent("先暫時撤退到外面整理線索") == SAFE_ZONE_REACHED  # 到外面=安全區
+    assert resolve_exit_intent("先喘口氣休息一下") == TEMPORARY_RETREAT          # 純撤退
     assert resolve_exit_intent("回頭繼續尋找林晨") == RETURN_TO_MOTIVE
+    # NegativeIntentGuard：明確「不結束」絕不判 run_ending
+    assert resolve_exit_intent("先撤到外面整理線索，不結束本次調查") in WITHDRAW_STATES
     assert resolve_exit_intent("我試圖離開這個地方，找出口") == AMBIGUOUS   # 語意不明 → 問
     assert resolve_exit_intent("我檢查桌上的紙條") == NONE
 
@@ -34,7 +38,7 @@ def test_exit_offer_has_four_options():
     by = {o["id"]: o["label"] for o in opts}
     assert resolve_exit_intent(by["end_run"]) == RUN_ENDING            # 「結束本次調查…」→ run_ending
     assert resolve_exit_intent(by["leave_area"]) == AREA_TRANSITION
-    assert resolve_exit_intent(by["temporary_retreat"]) == TEMPORARY_RETREAT
+    assert resolve_exit_intent(by["temporary_retreat"]) in WITHDRAW_STATES   # 撤退類（非 ending）
     assert resolve_exit_intent(by["return_to_motive"]) == RETURN_TO_MOTIVE
 
 

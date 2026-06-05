@@ -31,6 +31,11 @@ class ProgressKernel:
         intent_tags = self._normalize_intent(player_input)
 
         candidates = self._candidate_events(state, intent_tags)
+        # NegativeIntentGuard（P0）：玩家明確拒絕的目標 → 移除「移動到該目標」的候選事件。
+        negated = (warden or {}).get("negated_targets") or []
+        if negated:
+            kept = [c for c in candidates if not self._event_moves_to_negated(c, negated)]
+            candidates = kept                          # 全被否決 → 落 fallback（仍有後果但不移動）
         if not candidates:
             candidates = [self._make_fallback_event(state)]   # 越界/無候選 → 仍有後果
 
@@ -67,6 +72,22 @@ class ProgressKernel:
             if len(hints) >= 3:
                 break
         return hints
+
+    def _event_moves_to_negated(self, event: dict, negated: list[str]) -> bool:
+        """事件是否會移動到玩家明確拒絕的目標（看 current_scene 目的地 + 進場敘事義務文字）。"""
+        dest = ""
+        for op in event.get("effects", []):
+            if op.get("path") == "current_scene" and op.get("op") == "set":
+                dest = str(op.get("value", ""))
+        if not dest:
+            return False                               # 非移動事件 → 不受否定影響
+        text = dest + " " + " ".join(event.get("narrative_obligations") or [])
+        text_ns = text.replace(" ", "")
+        for n in negated:
+            n = (n or "").replace(" ", "")
+            if n and n in text_ns:
+                return True
+        return False
 
     def _normalize_intent(self, text: str) -> list[str]:
         t = (text or "").lower()
