@@ -1039,13 +1039,23 @@ class BeatLoop:
         source=npc_id / confidence=npc_claim / origin=npc。malformed 丟棄、不污染。
         **關鍵**：這條通道完全獨立於 evidence/ledger——NPC 講的事只成「世界裡可被指涉的主張」，
         不會自動把任何真相推進到 confirmed（決定性證明仍須玩家親自發現）。回新增/變更的 entity id。
+
+        structured entity_delta **缺席/為空**時 → fallback 跑 npc_prose_facts 從散文抽 ≤2 個 fact；
+        有 structured 就**優先用它、不跑 prose**（避免重複登記）。
         """
         if self._world is None:
             return []
         try:
             from core.world.model import coerce_npc_entity_deltas, NPC_ENTITY_KINDS
             raw = getattr(resp, "entity_delta", None)
-            deltas = coerce_npc_entity_deltas(raw, npc_id=str(npc_id or "npc"))
+            if isinstance(raw, list) and len(raw) > 0:
+                # 優先：NPC structured entity_delta 存在 → 用它（不跑 prose fallback，避免重複登記）
+                deltas = coerce_npc_entity_deltas(raw, npc_id=str(npc_id or "npc"))
+            else:
+                # fallback：NPC 沒吐 structured entity_delta → 從 visible_reply 散文抽 fact（≤2）
+                from core.narrative.npc_prose_facts import extract_npc_prose_facts
+                reply = getattr(resp, "visible_reply", resp if isinstance(resp, str) else "") or ""
+                deltas = extract_npc_prose_facts(reply, npc_id=str(npc_id or "npc"), cap=2)
             if not deltas:
                 return []
             changed = self._world.apply_story_deltas(deltas, allowed_kinds=NPC_ENTITY_KINDS)
