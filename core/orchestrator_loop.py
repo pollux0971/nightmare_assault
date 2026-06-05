@@ -309,6 +309,7 @@ class BeatLoop:
         gs = self._game_state
         self._escape_step = "none"               # 本 beat 離開意圖（預設無）
         self._exit_intent = "none"               # Player Sovereignty：離開意圖分類
+        self._exit_affordance = None             # 本 beat exit affordance（唯 end_campaign 進結局）
         # HB1/HB2/HE1：本 beat 揭露觀測（每 beat 重置）
         self._reveal_updates_this_beat = []
         self._evidence_events_this_beat = 0
@@ -360,9 +361,10 @@ class BeatLoop:
                 log.warning("narrative control (reveal/downgrade) skipped: %s", e)
             # NR2：答債——分類玩家提問，債≥2 時加償還義務進 story context
             self._answer_debt_tick(player_decision, ctx)
-            # Player Sovereignty：解析離開意圖（不自動收束；不確定 → ExitOffer）
-            from core.narrative.exit_resolver import resolve_exit_intent
+            # Player Sovereignty：解析成 exit affordance（ExitResolver 不直接 ending；只 end_campaign 進結局）
+            from core.narrative.exit_resolver import resolve_exit_intent, resolve_exit_affordance
             self._exit_intent = resolve_exit_intent(player_decision)
+            self._exit_affordance = resolve_exit_affordance(player_decision)
             self._escape_step = self._exit_intent     # observation 沿用此欄位
             # NR5：母題冷卻——換場景重置；把超用母題注入 context（story 須演化或換意象）
             self._motif_cooldown_pre(gs, ctx)
@@ -410,8 +412,10 @@ class BeatLoop:
                            "soft": bool(verdict.ending_is_soft), "via": "warden"}
         elif not self.ended:
             if _nc_on:
-                # Player Sovereignty：吸引子拉力**不自動收束**；只有玩家明確 run_ending 才結算
-                if self._exit_intent == "run_ending":
+                # Player Sovereignty：吸引子拉力**不自動收束**；唯 end_campaign affordance 才結算
+                from core.narrative.exit_resolver import END_CAMPAIGN
+                if getattr(self, "_exit_affordance", None) and \
+                        self._exit_affordance.affordance == END_CAMPAIGN:
                     self._trigger_player_ending(player_decision, gs)
             else:
                 # flag OFF：保留原 attractor 自動收束行為（向後相容）

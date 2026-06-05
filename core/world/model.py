@@ -19,14 +19,16 @@ AREA, EXIT, OBJECT, ACTOR, FACT = "area", "exit", "object", "actor", "fact"
 KINDS = {AREA, EXIT, OBJECT, ACTOR, FACT}
 
 # ── affordances（玩家對某 Entity 能做的事）────────────────────────────────────
-INSPECT, TAKE, USE, MOVE_TO, WITHDRAW_TO, TALK, MANIPULATE = (
-    "inspect", "take", "use", "move_to", "withdraw_to", "talk", "manipulate")
+INSPECT, TAKE, USE, MOVE_TO, MOVE_THROUGH, WITHDRAW_TO, TALK, MANIPULATE = (
+    "inspect", "take", "use", "move_to", "move_through", "withdraw_to", "talk", "manipulate")
 
 # 每種 kind 的預設初始狀態 + 預設 affordances（抽象狀態機）
 _DEFAULT_STATE = {OBJECT: "noticed", EXIT: "known", AREA: "known",
                   ACTOR: "present", FACT: "asserted"}
-_DEFAULT_AFFORDS = {OBJECT: [INSPECT], EXIT: [MOVE_TO], AREA: [MOVE_TO, WITHDRAW_TO],
+_DEFAULT_AFFORDS = {OBJECT: [INSPECT], EXIT: [MOVE_THROUGH], AREA: [MOVE_TO, WITHDRAW_TO],
                     ACTOR: [TALK], FACT: []}
+# exit 可通行的狀態（locked/blocked/used 不可 move_through）
+_PASSABLE_EXIT_STATES = {"known", "available"}
 # 每種 kind 合法狀態（小狀態機）
 _STATES = {
     OBJECT: ["unseen", "noticed", "inspected", "taken", "used"],
@@ -162,6 +164,45 @@ class WorldModel:
             return (False, "negated")
         self._set_current(e.id)
         return (True, "moved")
+
+    def register_exit(self, label: str, *, leads_to: str | None = None,
+                      from_area: str | None = None, state: str = "known",
+                      id: str | None = None, origin: str = "kernel") -> Entity:
+        """登記一條 exit/route（WorldModel owns exits）。leads_to=目的地 area id；from_area=所在區域。"""
+        props = {"leads_to": leads_to, "area": from_area or self.current_area}
+        return self.register(EXIT, label, id=id, state=state, props=props, origin=origin)
+
+    def set_exit_state(self, exit_ref: str, state: str) -> bool:
+        e = self.find(exit_ref, kind=EXIT)
+        if e is None:
+            return False
+        e.state = state
+        return True
+
+    def move_through(self, exit_ref: str, *, negated: list | None = None) -> tuple[bool, str]:
+        """穿過一條 exit/route。respects 否定 + exit 狀態（locked/blocked/used 不可通行）。
+
+        回傳 (moved, reason)。reason ∈ moved_through / unknown_exit / negated / locked / blocked / used。
+        """
+        from core.narrative.negative_intent import is_negated
+        e = self.find(exit_ref, kind=EXIT)
+        if e is None:
+            return (False, "unknown_exit")
+        if negated and (is_negated(e.label, negated)
+                        or is_negated(str(e.props.get("leads_to") or ""), negated)):
+            return (False, "negated")
+        if e.state not in _PASSABLE_EXIT_STATES:
+            return (False, e.state)                    # locked / blocked / used → 不移動
+        dest = e.props.get("leads_to")
+        if dest:
+            self.set_current_area(dest)
+        e.state = "used"
+        return (True, "moved_through")
+
+    def exits_here(self) -> list[Entity]:
+        """當前區域可見的 exit/route。"""
+        return [e for e in self.by_kind(EXIT)
+                if e.props.get("area") in (None, self.current_area)]
 
     def withdraw_to_safe_zone(self) -> str:
         """撤退到結構性安全區(若無則建);回傳該 area id。"""

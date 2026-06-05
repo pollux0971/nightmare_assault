@@ -63,6 +63,42 @@ def resolve_exit_intent(text: str) -> str:
     return NONE
 
 
+# ── Exit affordance 層（ExitResolver 只解析 exit affordance，不直接 ending）──────
+from dataclasses import dataclass
+
+WITHDRAW_TO = "withdraw_to"      # 撤到安全區（不結局）
+MOVE_THROUGH = "move_through"    # 穿過出口/路線到另一區（不結局）
+END_CAMPAIGN = "end_campaign"    # **唯一**會進 EndingGate
+OFFER = "offer"                  # 語意不明 → ExitOffer 讓玩家選
+NO_EXIT = "no_exit"              # 非離開行動
+
+
+@dataclass
+class ExitDecision:
+    affordance: str                 # withdraw_to | move_through | end_campaign | offer | no_exit
+    target: str | None = None       # area / exit ref（若有）
+    reason: str = ""
+
+
+def resolve_exit_affordance(text: str) -> ExitDecision:
+    """把玩家輸入解析成 **exit affordance**（不直接決定 ending）。
+
+    只有 END_CAMPAIGN 該由 loop 拿去進 EndingGate；其餘皆續行。
+    """
+    intent = resolve_exit_intent(text)
+    if intent == RUN_ENDING:
+        return ExitDecision(END_CAMPAIGN, reason="explicit end campaign")
+    if intent in (TEMPORARY_RETREAT, SAFE_ZONE_REACHED):
+        return ExitDecision(WITHDRAW_TO, target="area.outside_dock", reason=intent)
+    if intent == AREA_TRANSITION:
+        return ExitDecision(MOVE_THROUGH, reason="area exit")   # target 由 kernel/WorldModel 決定
+    if intent == RETURN_TO_MOTIVE:
+        return ExitDecision(NO_EXIT, reason="return to motive（續行）")
+    if intent == AMBIGUOUS:
+        return ExitDecision(OFFER, reason="ambiguous exit intent")
+    return ExitDecision(NO_EXIT, reason="not an exit action")
+
+
 def exit_offer_options(motive_label: str = "你來這裡的目的") -> list[dict]:
     """ExitOffer 四選一（labels 會被 resolve_exit_intent 正確分類回對應意圖）。"""
     return [

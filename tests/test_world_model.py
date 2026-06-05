@@ -154,3 +154,82 @@ def test_no_over_registration():
     deltas = extract_entities("走廊很暗，空氣裡有鹽和鐵鏽的味道。")
     objs = [d for d in deltas if d.kind == OBJECT]
     assert objs == []
+
+
+# ══ Exit / Route Entity Ownership ════════════════════════════════════════════
+# WorldModel owns exits/routes；ExitResolver 只解析 affordance；唯 end_campaign 進結局。
+from core.world.model import EXIT as _EXIT, MOVE_THROUGH as _MT
+from core.narrative.exit_resolver import (
+    resolve_exit_affordance, END_CAMPAIGN, WITHDRAW_TO, MOVE_THROUGH as _AFF_MT, OFFER, NO_EXIT,
+)
+
+
+# ── exit 狀態：unknown/known/available/locked/blocked/used + move_through ─────
+def test_exit_states_and_move_through():
+    m = WorldModel()
+    m.set_current_area("area.room", label="房間")
+    m.register_exit("北門", leads_to="area.hall", from_area="area.room", state="known")
+    # known → 可通行
+    moved, reason = m.move_through("北門")
+    assert moved and reason == "moved_through"
+    assert m.current_area == "area.hall"
+    assert m.get("exit.北門").state == "used"          # 通行後標 used
+    assert m.exits_here() == [] or all(e.state == "used" for e in m.by_kind(_EXIT))
+
+
+# ── #2 locked exit 不移動 ───────────────────────────────────────────────────
+def test_locked_exit_does_not_move():
+    m = WorldModel()
+    m.set_current_area("area.room", label="房間")
+    m.register_exit("鐵閘", leads_to="area.vault", from_area="area.room", state="locked")
+    moved, reason = m.move_through("鐵閘")
+    assert not moved and reason == "locked"
+    assert m.current_area == "area.room"               # 沒移動
+    # blocked 同理
+    m.register_exit("塌方通道", leads_to="area.cellar", from_area="area.room", state="blocked")
+    moved2, reason2 = m.move_through("塌方通道")
+    assert not moved2 and reason2 == "blocked" and m.current_area == "area.room"
+
+
+# ── #3 negative intent 不選被否定 exit ───────────────────────────────────────
+def test_negative_intent_does_not_select_negated_exit():
+    from core.narrative.negative_intent import negated_targets
+    m = WorldModel()
+    m.set_current_area("area.room", label="房間")
+    m.register_exit("通往 B 區的門", leads_to="area.B", from_area="area.room", state="known")
+    neg = negated_targets("不進 B 區，留在原地")        # → ['B']
+    moved, reason = m.move_through("通往 B 區的門", negated=neg)
+    assert not moved and reason == "negated"
+    assert m.current_area == "area.room"               # 被否定的 exit 不通行
+
+
+# ── #1 + #4 affordance 分流：withdraw 不 ending / 唯 explicit end_campaign 才 ending ──
+def test_exit_affordance_classification():
+    # explicit 結束 → end_campaign（唯一進 EndingGate）
+    assert resolve_exit_affordance("結束本次調查，接受目前結果").affordance == END_CAMPAIGN
+    # 撤退/退到外面 → withdraw_to（續行，不結局）
+    assert resolve_exit_affordance("先退到外面整理線索").affordance == WITHDRAW_TO
+    assert resolve_exit_affordance("暫時撤退喘口氣").affordance == WITHDRAW_TO
+    # 離開房間 → move_through（換場景，不結局）
+    assert resolve_exit_affordance("離開這個房間").affordance == _AFF_MT
+    # 「不結束本次調查」→ 不得 end_campaign（NegativeIntentGuard）
+    assert resolve_exit_affordance("我不結束本次調查").affordance != END_CAMPAIGN
+    # 純調查行動 → no_exit
+    assert resolve_exit_affordance("我檢查桌上的筆記本").affordance == NO_EXIT
+
+
+def test_withdraw_outside_does_not_end_via_loop(monkeypatch):
+    loop = _started_loop(monkeypatch)
+    out = loop.step("先退到外面整理線索，不結束本次調查")
+    assert not out.get("ended")                        # withdraw → 不結局
+    assert loop._world.current_area == SAFE_ZONE_AREA_ID
+    # 本 beat 的 exit affordance 不是 end_campaign
+    assert loop._exit_affordance.affordance != END_CAMPAIGN
+
+
+def test_explicit_end_campaign_only_ending_via_loop(monkeypatch):
+    loop = _started_loop(monkeypatch)
+    out = loop.step("我結束本次調查，接受目前結果，頭也不回地離開")
+    assert loop._exit_affordance.affordance == END_CAMPAIGN
+    assert out.get("ended")                            # 唯 end_campaign 才結局
+    assert (out.get("ending") or {}).get("via") == "player_exit"
