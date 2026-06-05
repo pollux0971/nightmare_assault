@@ -101,6 +101,53 @@ def test_observation_projects_world_model(monkeypatch):
     assert any(a["verb"] == INSPECT for a in wm["affordances_here"])
 
 
+# ── current_area ownership：WorldModel 是唯一權威 ──────────────────────────
+def _started_loop(monkeypatch):
+    monkeypatch.setattr(C, "ENABLE_NARRATIVE_CONTROL", True)
+    from tests.test_narrative_v2_integration_nr import _loop
+    loop = _loop(); loop.start({"theme": "x", "npc_count": 1})
+    return loop
+
+
+def test_withdraw_to_outside_persists_next_beat(monkeypatch):
+    loop = _started_loop(monkeypatch)
+    out = loop.step("先退到外面整理線索，不結束本次調查")
+    assert not out.get("ended")
+    assert loop._world.current_area == SAFE_ZONE_AREA_ID
+    # 下一 beat（kernel 場景沒變）→ 不得被 scene sync 覆蓋回原區域
+    loop._game_state.current_scene = loop._world_kernel_scene      # 模擬 kernel 沒移動
+    loop._world_model_tick("我翻看手裡的筆記", "你在外面整理線索。")
+    assert loop._world.current_area == SAFE_ZONE_AREA_ID
+    assert loop.world_progress()["current_area"] == SAFE_ZONE_AREA_ID   # 觀測也從 WorldModel 投影
+
+
+def test_kernel_sync_does_not_override_worldmodel_current_area(monkeypatch):
+    loop = _started_loop(monkeypatch)
+    loop._world.withdraw_to_safe_zone()                            # WorldModel 說在 outside_dock
+    assert loop._world.current_area == SAFE_ZONE_AREA_ID
+    loop._game_state.current_scene = loop._world_kernel_scene      # kernel 本 beat 未移動
+    loop._world_model_tick("我環顧四周", "海風從防波堤吹來。")
+    assert loop._world.current_area == SAFE_ZONE_AREA_ID           # kernel scene sync **不覆蓋**
+
+
+def test_stay_put_negative_intent_does_not_move_area(monkeypatch):
+    loop = _started_loop(monkeypatch)
+    area0 = loop._world.current_area
+    loop._game_state.current_scene = loop._world_kernel_scene      # 玩家原地觀察 → kernel 不移動
+    loop._world_model_tick("不進 B 區，先在原地觀察", "你站在原地，盯著走廊深處。")
+    assert loop._world.current_area == area0                       # current_area 不變
+
+
+def test_move_affordance_changes_area_via_world_delta(monkeypatch):
+    loop = _started_loop(monkeypatch)
+    start_area = loop._world.current_area
+    loop._game_state.current_scene = "scene.newroom"              # 模擬 kernel 真的移動
+    loop._world_model_tick("我推開門走進新房間", "你走進另一個房間。")
+    assert loop._world.current_area == "scene.newroom"            # 透過 WorldDelta 改 current_area
+    assert loop._world.current_area != start_area
+    assert loop._world.get("scene.newroom").state == "current"
+
+
 # ── 不過度登記：純氛圍敘事(無前景化線索)不亂登記物件 ───────────────────────
 def test_no_over_registration():
     # 沒有「撿起/桌上/發現…」這類線索 → 不把氛圍裡的名詞當物件

@@ -144,7 +144,8 @@ class BeatLoop:
         self._npc_chat_debug: dict = {}              # 最近一次 NPC evidence 驗證統計（observation 用）
         # NR2：答債（旁路）
         self._answer_debt = None
-        self._world = None                           # WorldModel（抽象實體層；flag on 時建）
+        self._world = None                           # WorldModel（current_area/area/exit 的唯一權威）
+        self._world_kernel_scene = None              # WorldModel 上次同步到的 kernel 場景（偵測真正移動）
         # NR5/NR6：母題冷卻 + 動機心跳（旁路）
         self._motif_tracker = None
         self._motive_heartbeat = None
@@ -244,6 +245,7 @@ class BeatLoop:
         if self.use_kernel and self._kernel is not None:
             self._game_state = bridge.init_game_state(self._provider)
             bridge.sync_to_blackboard(self._game_state, self.bb)
+            self._seed_world_area()                  # WorldModel：起始區域當權威來源（種子）
             _p("story")
             narrative, dp = self._kernel_intro_beat(on_event)
         else:
@@ -709,19 +711,49 @@ class BeatLoop:
         except Exception as e:
             log.warning("npc truth refs update skipped: %s", e)
 
-    def _world_model_tick(self, action: str, narrative: str):
-        """WorldModel：同步當前區域、用 EntityExtractor（fallback）登記可互動物件、檢查標 inspected。
+    def _seed_world_area(self):
+        """開局把起始 kernel 場景登記為 area 並設 current（WorldModel 是 current_area 權威）。"""
+        if self._world is None:
+            return
+        scene = getattr(self._game_state, "current_scene", None)
+        if scene:
+            self._world.set_current_area(scene, label=self._area_label(scene))
+            self._world_kernel_scene = scene
+            self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
 
-        優先路徑是 story/npc 輸出結構化 entity_delta；本 tick 是退路（story 尚未吐結構化時）。
+    def _area_label(self, scene_id) -> str:
+        """從 scene_registry 取場景顯示名（無則用 id）。"""
+        try:
+            sc = (self.bb.snapshot().get("scene_registry") or {})
+            for l in sc.get("known_locations", []) if isinstance(sc, dict) else []:
+                if isinstance(l, dict) and l.get("id") == scene_id and l.get("name"):
+                    return l["name"]
+        except Exception:
+            pass
+        return str(scene_id)
+
+    def _world_model_tick(self, action: str, narrative: str):
+        """WorldModel：current_area 的**唯一權威**。kernel 只在「真正移動」時透過 WorldDelta 改區域；
+        **不得用 scene sync 覆蓋** WorldModel 已套用的 current_area（如撤退到 outside_dock）。
+
+        物件登記用 EntityExtractor（fallback；本輪不做 story/npc structured entity_delta）。
         """
         if self._world is None:
             return
         try:
             from core.world.extractor import extract_entities
+            from core.world.model import WorldDelta
             gs = self._game_state
             scene = getattr(gs, "current_scene", None)
-            if scene:
-                self._world.set_current_area(scene)
+            # 只有 kernel **真的移動了**（場景 ≠ 上次 WorldModel 同步的 kernel 場景）才改 current_area。
+            # 若玩家原地觀察 / 否定移動 / 已撤退到 outside_dock，kernel 場景不變 → WorldModel 不被覆蓋。
+            if scene and scene != self._world_kernel_scene:
+                self._world.apply(WorldDelta(op="move_current", entity_id=scene, origin="kernel"))
+                # 補 label（apply 用 id 當 label 登記時補回顯示名）
+                _e = self._world.get(scene)
+                if _e is not None and _e.label == scene:
+                    _e.label = self._area_label(scene)
+                self._world_kernel_scene = scene
             self._world.apply_deltas(extract_entities(narrative, npc_names=self.known_npcs))
             # 玩家檢查物件 → 標 inspected（世界記得他查過）
             if any(v in (action or "") for v in ("檢查", "查看", "檢視", "端詳", "研究", "翻看")):
@@ -748,15 +780,19 @@ class BeatLoop:
             return []
 
     def world_progress(self, dp=None) -> dict:
-        """P0 #4：WorldProgress 觀測——current_area / known_areas / 本 beat 變化 / investigation_state。"""
+        """P0 #4：WorldProgress 觀測。**current_area / known_areas / exits / affordances 由 WorldModel 投影**
+        （WorldModel 是這些的唯一權威；不從 kernel scene 直取）。"""
+        from core.world.model import AREA, EXIT
+        w = getattr(self, "_world", None)
         gs = getattr(self, "_game_state", None)
-        scene = getattr(gs, "current_scene", None) if gs is not None else None
-        # 累積已知區域
-        meta = getattr(self.bb, "game_meta", {}) or {}
-        known = list(meta.get("known_areas") or [])
-        if scene and scene not in known:
-            known.append(scene)
-            self.bb.game_meta = {**self.bb.game_meta, "known_areas": known}
+        # current_area / known_areas / exits ← WorldModel（無 world 時退回 kernel scene）
+        if w is not None:
+            current_area = w.current_area
+            known = [e.id for e in w.by_kind(AREA)]
+            exits = [{"id": e.id, "label": e.label, "state": e.state} for e in w.by_kind(EXIT)]
+        else:
+            current_area = getattr(gs, "current_scene", None) if gs is not None else None
+            known, exits = ([current_area] if current_area else []), []
         from core.narrative.world_facts import get_world_facts
         all_facts = get_world_facts(self.bb)
         new_facts = getattr(self, "_new_world_facts_this_beat", []) or []
@@ -766,17 +802,17 @@ class BeatLoop:
         from core.narrative.exit_resolver import WITHDRAW_STATES
         inv_state = "paused" if intent in WITHDRAW_STATES else "active"
         avail = [getattr(o, "text", "") for o in (getattr(dp, "suggested_options", None) or [])]
-        out = {
-            "current_area": scene,
+        return {
+            "current_area": current_area,
             "known_areas": known,
+            "exits": exits,
             "world_facts": sorted(all_facts.keys()),
             "new_world_facts_this_beat": list(new_facts),
             "changed_exits_this_beat": changed_exits,
             "investigation_state": inv_state,
             "available_next": avail,
+            "world_model": self._world_model_projection(),
         }
-        out["world_model"] = self._world_model_projection()    # WorldModel 投影（實體記憶）
-        return out
 
     def _world_model_projection(self) -> dict:
         """把 WorldModel 投影成觀測（AI 可看到世界記得哪些實體、可做什麼）。"""
