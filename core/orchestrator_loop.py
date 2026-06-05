@@ -144,6 +144,7 @@ class BeatLoop:
         self._npc_chat_debug: dict = {}              # 最近一次 NPC evidence 驗證統計（observation 用）
         # NR2：答債（旁路）
         self._answer_debt = None
+        self._world = None                           # WorldModel（抽象實體層；flag on 時建）
         # NR5/NR6：母題冷卻 + 動機心跳（旁路）
         self._motif_tracker = None
         self._motive_heartbeat = None
@@ -187,6 +188,12 @@ class BeatLoop:
                 self._answer_debt = AnswerDebtTracker()
             except Exception as e:
                 log.warning("answer debt init skipped: %s", e)
+            # WorldModel：抽象實體層（平行記憶，不取代 kernel）
+            try:
+                from core.world.model import WorldModel
+                self._world = WorldModel()
+            except Exception as e:
+                log.warning("world model init skipped: %s", e)
             # NR5/NR6：母題冷卻 + 動機心跳
             try:
                 from core.narrative.motif_tracker import MotifTracker, MotiveHeartbeat
@@ -383,6 +390,7 @@ class BeatLoop:
         # P0 WorldStateFact：從 story 敘事抽世界事實（NPC fact 由 bridge_npc_evidence 處理）
         if ENABLE_NARRATIVE_CONTROL:
             self._world_facts_tick(narrative, source="story")
+            self._world_model_tick(player_decision, narrative)   # WorldModel：實體記憶
 
         self.last_story = narrative
         # Player Sovereignty：離開意圖處理（ambiguous → ExitOffer；retreat → 降危險；皆不自動收束）
@@ -609,6 +617,10 @@ class BeatLoop:
                     gs.danger_level = max(0, d - 1)
                     bridge.sync_to_blackboard(gs, self.bb)
                     log.info("temporary retreat → danger %d→%d（續行，不結局）", d, gs.danger_level)
+                # WorldModel：撤到外面 → current_area 切到結構性安全區（不結局）
+                if intent == SAFE_ZONE_REACHED and self._world is not None:
+                    self._world.withdraw_to_safe_zone()
+                    self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
         except Exception as e:
             log.warning("apply exit intent skipped: %s", e)
         return dp
@@ -696,6 +708,30 @@ class BeatLoop:
             self.bb.game_meta = {**self.bb.game_meta, "npc_allowed_truth_refs": refs}
         except Exception as e:
             log.warning("npc truth refs update skipped: %s", e)
+
+    def _world_model_tick(self, action: str, narrative: str):
+        """WorldModel：同步當前區域、用 EntityExtractor（fallback）登記可互動物件、檢查標 inspected。
+
+        優先路徑是 story/npc 輸出結構化 entity_delta；本 tick 是退路（story 尚未吐結構化時）。
+        """
+        if self._world is None:
+            return
+        try:
+            from core.world.extractor import extract_entities
+            gs = self._game_state
+            scene = getattr(gs, "current_scene", None)
+            if scene:
+                self._world.set_current_area(scene)
+            self._world.apply_deltas(extract_entities(narrative, npc_names=self.known_npcs))
+            # 玩家檢查物件 → 標 inspected（世界記得他查過）
+            if any(v in (action or "") for v in ("檢查", "查看", "檢視", "端詳", "研究", "翻看")):
+                from core.world.model import OBJECT
+                for o in self._world.by_kind(OBJECT):
+                    if any(tok and tok in action for tok in (o.label or "").split()):
+                        self._world.inspect(o.id)
+            self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
+        except Exception as e:
+            log.warning("world model tick skipped: %s", e)
 
     def _world_facts_tick(self, text: str, *, source: str = "story") -> list:
         """P0：從文字抽 world_state_fact 寫進 game_meta（即使沒 truth reveal 也留可檢查後果）。"""
