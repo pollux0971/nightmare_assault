@@ -235,6 +235,12 @@ def _debug_block(loop, step_result) -> dict:
         "evidence_events_this_beat": sr.get("evidence_events_this_beat", 0),
         "unmapped_evidence_this_beat": sr.get("unmapped_evidence_this_beat", 0),
         "reveal_updates_this_beat": sr.get("reveal_updates", []),   # 僅 truth_id/from/to，無 content
+        # WorldConsequence vs TruthEvidence split：分類 + reveal 閘決定
+        "action_class": sr.get("action_class", "unknown"),
+        "no_truth_intent": sr.get("no_truth_intent", False),
+        "reveal_gate_allowed": sr.get("reveal_gate_allowed", True),
+        "reveal_gate_block_reason": sr.get("reveal_gate_block_reason", ""),
+        "blocked_reveal_candidates": sr.get("blocked_reveal_candidates", []),
         "quality_gate": {"passed": qm.get("passed", True),
                          "repaired": qm.get("repaired", False),
                          "fallback": qm.get("fallback", False)},

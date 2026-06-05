@@ -58,8 +58,11 @@ def test_investigation_advances_reveal_ledger(monkeypatch):
     assert loop._reveal_ledger.counts()["total"] == 3
     assert loop._reveal_ledger.counts()["hinted_or_better"] == 0
 
-    # 玩家調查數個 beat（kernel 會發現 clue.first_sign / clue.core 等線索）
-    for txt in ["我打開病房門", "我仔細檢查走廊", "我往更深處走", "我搜查這個房間"]:
+    # 玩家**真相調查**數個 beat（truth_investigation 才推 reveal；kernel 發現 clue.core 等線索）
+    for txt in ["我打開病房門，研究裡面的病歷紀錄",
+                "我仔細檢查走廊，分析牆上的異常痕跡",
+                "我往更深處走，研判沿途的監控紀錄",
+                "我搜查這個房間，解讀實驗紀錄與異常數據"]:
         loop.step(txt)
 
     # 頭條：揭露帳本前進（至少 1 條真相到 hinted+）
@@ -78,7 +81,7 @@ def test_recap_not_zero_after_investigation(monkeypatch):
     monkeypatch.setattr(C, "ENABLE_NARRATIVE_CONTROL", True)
     loop = _loop()
     loop.start({"theme": "x", "npc_count": 1})
-    for txt in ["開門", "檢查走廊", "往下走", "搜查"]:
+    for txt in ["我研究牆上的刻字", "我分析監控紀錄", "我解讀異常頻率數據", "我研判實驗紀錄"]:
         loop.step(txt)
     # 強制結局，組裝復盤
     loop.ended = True

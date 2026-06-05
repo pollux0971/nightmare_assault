@@ -312,6 +312,12 @@ class BeatLoop:
         self._exit_affordance = None             # 本 beat exit affordance（唯 end_campaign 進結局）
         self._exploration_mode = (self.bb.game_meta or {}).get(
             "exploration_mode", "active_exploration")   # ReviewMode Lock（持久、跨 beat 黏著）
+        # WorldConsequence vs TruthEvidence split：本 beat 的 action 分類 + reveal 閘決定
+        self._action_class = "unknown"
+        self._no_truth_intent = False
+        self._reveal_gate_allowed = True
+        self._reveal_gate_reason = ""
+        self._blocked_reveal_candidates = []
         # HB1/HB2/HE1：本 beat 揭露觀測（每 beat 重置）
         self._reveal_updates_this_beat = []
         self._evidence_events_this_beat = 0
@@ -351,6 +357,12 @@ class BeatLoop:
                 self._exploration_mode = resolve_mode(player_decision, prev_mode, self._exit_affordance)
                 review_locked = is_review_locked(self._exploration_mode)
                 self.bb.game_meta = {**self.bb.game_meta, "exploration_mode": self._exploration_mode}
+                # WorldConsequence vs TruthEvidence：分類 action + 偵測「不碰真相」意圖
+                from core.narrative.action_intent import classify_action, no_truth_intent
+                self._action_class = classify_action(
+                    player_decision, exploration_mode=self._exploration_mode,
+                    exit_affordance=self._exit_affordance)
+                self._no_truth_intent = no_truth_intent(player_decision)
             except Exception as e:
                 log.warning("exploration mode resolve skipped: %s", e)
         _p("kernel")
@@ -391,6 +403,9 @@ class BeatLoop:
         # NR7/HD2：表層消毒（後端，render 前；flag-gated）——narrative + 選項 + situation_recap
         narrative = self._sanitize_surface(narrative)
         dp = self._sanitize_decision_point(dp)
+        # ReviewMode narrative consistency：review 模式只准用已記帳資訊；冒出未記帳 fact → 退回確定性筆記
+        if review_locked:
+            narrative = self._enforce_review_narrative(narrative)
         # NR5/NR6：登記本 beat 的母題與動機提及（供下一 beat 冷卻/心跳判斷）
         if ENABLE_NARRATIVE_CONTROL and getattr(self, "_narrative_contract", None):
             self._motif_motive_post(narrative, ctx)
@@ -401,11 +416,13 @@ class BeatLoop:
         self.bb.game_meta = {**self.bb.game_meta,
                              "progress_state": bridge.to_snapshot_dict(self._game_state)}
 
-        # NR0/HB1：揭露橋接——kernel 線索 → bridge；若本 beat 無 reveal 變化且玩家在調查 → 保底 evidence
-        # 撤離鎖：review/retreat 模式**不得觸發 reveal_updates**（玩家在整理，不在調查）。
-        if ENABLE_NARRATIVE_CONTROL and self._reveal_ledger is not None and not review_locked:
+        # NR0/HB1：揭露橋接——kernel 線索 → bridge（TruthEvidenceGate 在 _revelation_tick 內把關）。
+        # 只有 truth_investigation / 合法 structured evidence 才推 reveal；找路/整理/引用 NPC fact 不推。
+        if ENABLE_NARRATIVE_CONTROL and self._reveal_ledger is not None:
             _changed = self._revelation_tick(self._game_state)
-            self._story_evidence_tick(player_decision, narrative, _changed)
+            # story 保底 evidence 同受閘門節制（被擋 → 不產 fallback reveal）
+            if self._reveal_gate_allowed:
+                self._story_evidence_tick(player_decision, narrative, _changed)
         # P0 WorldStateFact：從 story 敘事抽世界事實（NPC fact 由 bridge_npc_evidence 處理）
         if ENABLE_NARRATIVE_CONTROL:
             # 撤離鎖：review 模式不新增 world_fact（requirement 4：只生 notes，不新增 fact）
@@ -456,6 +473,12 @@ class BeatLoop:
                 "evidence_events_this_beat": self._evidence_events_this_beat,
                 "unmapped_evidence_this_beat": self._unmapped_evidence_this_beat,
                 "escape_step": getattr(self, "_escape_step", "none"),
+                # WorldConsequence vs TruthEvidence split：本 beat 的分類 + reveal 閘決定（debug）
+                "action_class": getattr(self, "_action_class", "unknown"),
+                "no_truth_intent": bool(getattr(self, "_no_truth_intent", False)),
+                "reveal_gate_allowed": bool(getattr(self, "_reveal_gate_allowed", True)),
+                "reveal_gate_block_reason": getattr(self, "_reveal_gate_reason", ""),
+                "blocked_reveal_candidates": list(getattr(self, "_blocked_reveal_candidates", [])),
                 # P0 #4：WorldProgress（current_area/known_areas/世界事實/investigation_state）
                 "world_progress": self.world_progress(dp),
                 "new_world_facts_this_beat": list(self._new_world_facts_this_beat),
@@ -683,6 +706,35 @@ class BeatLoop:
             log.warning("apply review lock skipped: %s", e)
             return dp
 
+    def _enforce_review_narrative(self, narrative: str) -> str:
+        """ReviewMode narrative consistency：review 模式只准用**已記帳**資訊產生文字。
+
+        用 npc_prose_facts 偵測敘事是否冒出**未記帳**的 fact 主張（位置/鎖死出口/需先做某事）；
+        若有 → 退回確定性 review_notes_text（不生成新的 object/fact/area）。偵測失敗也走 fallback。
+        """
+        try:
+            from core.narrative.npc_prose_facts import extract_npc_prose_facts
+            from core.world.model import FACT
+            claims = extract_npc_prose_facts(narrative or "", npc_id="review", cap=3)
+            if claims:
+                known = set()
+                if self._world is not None:
+                    known = {(e.label or "").replace(" ", "") for e in self._world.by_kind(FACT)}
+                unaccounted = [c for c in claims if (c.label or "").replace(" ", "") not in known]
+                if unaccounted:
+                    log.info("review narrative introduced unaccounted fact(s) %s → deterministic notes",
+                             [c.label for c in unaccounted])
+                    return self._deterministic_review_notes()
+            return narrative
+        except Exception as e:
+            log.warning("review narrative enforce skipped: %s", e)
+            return narrative
+
+    def _deterministic_review_notes(self) -> str:
+        from core.narrative.exploration_mode import review_notes_text
+        from core.narrative.world_facts import get_world_facts
+        return review_notes_text(getattr(self, "_reveal_ledger", None), get_world_facts(self.bb))
+
     def _trigger_player_ending(self, player_decision: str, gs):
         """玩家明確「結束本次調查」→ 結算結局（escape；品質由 reveal 帳本決定 clean/ambiguous）。"""
         if self.ended:                               # 防禦：warden 硬結局已先觸發 → 不覆寫
@@ -724,6 +776,8 @@ class BeatLoop:
     def _revelation_tick(self, gs) -> bool:
         """NR0：本 beat 新發現的 kernel 線索（自帶 truth_id）→ bridge → 寫進 revealed_bible。
 
+        **TruthEvidenceGate**：apply reveal 前先問閘門——只有 truth_investigation 才准推 truth。
+        被擋下的 clue 記為 unmapped / world note（debug），但**不更新 reveal ledger**（仍標已消耗）。
         回傳本 beat 是否有 reveal 升級（供 HB1 判斷是否需要保底 story evidence）。
         """
         try:
@@ -731,9 +785,24 @@ class BeatLoop:
                 RevelationBridge, evidence_from_clue_values, write_ledger_to_revealed_bible)
             clues = getattr(gs, "clues", {}) or {}
             new_ids = [cid for cid in clues if cid not in self._known_clue_ids]
+            # ── TruthEvidenceGate：先問是否准許推 reveal（new_clue_added 也要過閘門）──
+            from core.narrative.truth_evidence_gate import TruthEvidenceGate
+            allowed, reason = TruthEvidenceGate().evaluate(
+                getattr(self, "_action_class", "unknown"),
+                exploration_mode=getattr(self, "_exploration_mode", "active_exploration"),
+                no_truth=getattr(self, "_no_truth_intent", False))
+            self._reveal_gate_allowed = allowed
+            self._reveal_gate_reason = "" if allowed else reason
             if not new_ids:
                 return False
-            self._known_clue_ids.update(new_ids)
+            self._known_clue_ids.update(new_ids)         # 標已消耗（無論是否准）
+            if not allowed:
+                # 被閘門擋下：記為 blocked / unmapped（debug），不更新 reveal ledger
+                self._blocked_reveal_candidates += list(new_ids)
+                self._unmapped_evidence_this_beat += len(new_ids)
+                log.info("reveal blocked by gate (%s): action=%s clues=%s",
+                         reason, getattr(self, "_action_class", "?"), new_ids)
+                return False
             items = [(cid, clues.get(cid)) for cid in new_ids]
             events, unmapped = evidence_from_clue_values(
                 items, source="kernel",
