@@ -322,7 +322,7 @@ class API:
             history.append({"role": "npc", "content": reply})
             # NR0/NR1/HC1/P-plumbing：NPC 結構化 evidence 走 gate → bridge → revealed_bible
             try:
-                self._loop.bridge_npc_evidence(resp)
+                self._loop.bridge_npc_evidence(resp, npc_id=npc)
                 self._loop.note_npc_answer(text, resp.answer_status)   # 答債：partial 償還、evasion 不償還
             except Exception:
                 pass

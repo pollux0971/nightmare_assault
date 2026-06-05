@@ -377,7 +377,7 @@ def _do_chat(loop, chat: dict) -> str:
     except Exception as e:                          # 對話失敗不可拖垮整個 session
         return f"（{npc} 沒有回應：{e}）"
     try:                                           # #10/P-plumbing：結構化 evidence 走 gate → bridge
-        loop.bridge_npc_evidence(resp)
+        loop.bridge_npc_evidence(resp, npc_id=npc)
         loop.note_npc_answer(text, resp.answer_status)
     except Exception:
         pass

@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from core.narrative.revelation import EvidenceEvent
+from core.world.model import NPC_ENTITY_KINDS
 
 
 @dataclass
@@ -39,6 +40,8 @@ class NPCChatResponse:
     used_truth_ids: list[str] = field(default_factory=list)
     blocked_or_uncertain_claims: list[str] = field(default_factory=list)
     quality_flags: list[str] = field(default_factory=list)
+    # NPC 結構化世界實體變更（只 fact/actor；由 WorldModel 套用，不 grant reveal）
+    entity_delta: list[dict] = field(default_factory=list)
 
 
 # 償還答債視為「有回應」的 answer_status（含新舊命名）
@@ -67,6 +70,12 @@ class NPCChatControlGate:
         # 答債：debt≥2 必須付（不可純迴避 none/evasion）
         if ctx.answer_debt_level >= 2 and resp.answer_status not in _PAID_STATUS:
             flags.append("answer_debt_not_paid")
+        # entity_delta：NPC 只准 fact/actor，企圖新增 object/area/exit → 違規（→ repair/拒）
+        bad_kinds = [str(d.get("kind")) for d in (resp.entity_delta or [])
+                     if isinstance(d, dict) and d.get("op") == "register"
+                     and d.get("kind") not in NPC_ENTITY_KINDS]
+        if bad_kinds:
+            flags.append("illegal_entity_kind:" + ",".join(sorted(set(bad_kinds))))
         return flags
 
     def needs_repair(self, flags: list[str]) -> bool:

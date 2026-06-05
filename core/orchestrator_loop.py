@@ -886,7 +886,7 @@ class BeatLoop:
             log.warning("story evidence tick skipped: %s", e)
 
     def bridge_npc_evidence(self, reply_or_resp, *, answer_status: str | None = None,
-                            allow_keyword_fallback: bool = False):
+                            allow_keyword_fallback: bool = False, npc_id: str | None = None):
         """HC1/#10：把 NPC 對話的**結構化** evidence_events 走同一條 bridge 進 revealed_bible。
 
         正規路徑：`NPCChatResponse.evidence_events` → cap_to_ceiling → response_to_evidence
@@ -894,6 +894,9 @@ class BeatLoop:
         keyword scan（evidence_from_npc_reply）只當 **debug warning / legacy fallback**，
         預設**不 grant**（`allow_keyword_fallback=True` 才作為過渡回退）。
         flag OFF / 無帳本 / 純文字無結構化 evidence → 不 grant。
+
+        另：NPC 結構化 `entity_delta`（只 fact/actor）走**獨立**通道進 WorldModel，
+        **不**經 reveal ledger（NPC fact 不得自動 grant 真相，見 _bridge_npc_entity_delta）。
         """
         try:
             from core.constants import ENABLE_NARRATIVE_CONTROL
@@ -903,6 +906,8 @@ class BeatLoop:
             # P0 WorldStateFact：NPC 的有用資訊（出口鎖死/機房/發電機/某人來過）→ world_state_fact
             self._world_facts_tick(getattr(reply_or_resp, "visible_reply", reply_or_resp),
                                    source="npc_chat")
+            # NPC structured entity_delta → WorldModel（fact/actor only；不 grant reveal）
+            self._bridge_npc_entity_delta(reply_or_resp, npc_id)
             from core.narrative.revelation import RevelationBridge, write_ledger_to_revealed_bible
             allowed_block = (self.bb.game_meta or {}).get("npc_allowed_truth_refs") or {}
             allowed_refs = allowed_block.get("allowed_truth_refs", [])
@@ -959,6 +964,34 @@ class BeatLoop:
             return []
         except Exception as e:
             log.warning("npc evidence bridge skipped: %s", e)
+            return []
+
+    def _bridge_npc_entity_delta(self, resp, npc_id: str | None) -> list:
+        """NPC 結構化 entity_delta → WorldModel（**只 fact/actor**；**不碰 reveal ledger**）。
+
+        NPC 不得新增 object/area/exit（coerce 過濾 + apply kind-guard 雙重擋）；fact 帶
+        source=npc_id / confidence=npc_claim / origin=npc。malformed 丟棄、不污染。
+        **關鍵**：這條通道完全獨立於 evidence/ledger——NPC 講的事只成「世界裡可被指涉的主張」，
+        不會自動把任何真相推進到 confirmed（決定性證明仍須玩家親自發現）。回新增/變更的 entity id。
+        """
+        if self._world is None:
+            return []
+        try:
+            from core.world.model import coerce_npc_entity_deltas, NPC_ENTITY_KINDS
+            raw = getattr(resp, "entity_delta", None)
+            deltas = coerce_npc_entity_deltas(raw, npc_id=str(npc_id or "npc"))
+            if not deltas:
+                return []
+            changed = self._world.apply_story_deltas(deltas, allowed_kinds=NPC_ENTITY_KINDS)
+            if changed:
+                # 併進本 beat 變更集（observation.world_progress 投影 new fact/actor entities）
+                self._changed_entities_this_beat = list(dict.fromkeys(
+                    list(getattr(self, "_changed_entities_this_beat", []) or []) + changed))
+                self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
+                log.info("npc entity_delta → WorldModel (no reveal grant): %s", changed)
+            return changed
+        except Exception as e:                           # 失敗不影響對話（B8）
+            log.warning("npc entity delta bridge skipped: %s", e)
             return []
 
     def _append_conversation_notes(self, notes: list):

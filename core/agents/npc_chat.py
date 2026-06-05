@@ -132,13 +132,15 @@ def _parse_npc_response(raw: str):
     try:
         data = json.loads(text)
         if isinstance(data, dict) and (data.get("reply") or data.get("visible_reply")):
+            ed = data.get("entity_delta")              # 容錯：非 list → []（不讓對話解析失敗）
             return NPCChatResponse(
                 visible_reply=str(data.get("reply") or data.get("visible_reply") or "").strip(),
                 answer_status=str(data.get("answer_status", "partial")),
                 evidence_events=list(data.get("evidence_events") or []),
                 new_lore_terms=list(data.get("new_lore_terms") or []),
                 used_truth_ids=list(data.get("used_truth_ids") or []),
-                blocked_or_uncertain_claims=list(data.get("blocked_or_uncertain_claims") or []))
+                blocked_or_uncertain_claims=list(data.get("blocked_or_uncertain_claims") or []),
+                entity_delta=ed if isinstance(ed, list) else [])
     except Exception:
         pass
     # 純文字 fallback：無法判定 new lore（設空，靠 sanitizer 把關）。

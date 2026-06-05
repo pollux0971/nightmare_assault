@@ -91,6 +91,53 @@ def coerce_entity_deltas(raw, *, allowed_kinds=STORY_ENTITY_KINDS,
     return out
 
 
+# NPC 結構化 entity_delta 只准登記 fact / actor（NPC 不得新增 object/area/exit/真相）
+NPC_ENTITY_KINDS = {FACT, ACTOR}
+NPC_FACT_CONFIDENCE = "npc_claim"        # NPC 講的事是「主張」，非確證真相
+
+
+def coerce_npc_entity_deltas(raw, *, npc_id: str, cap: int = STORY_DELTA_CAP) -> list:
+    """把 NPC-chat 輸出的原始 entity_delta 清洗成安全的 WorldDelta 清單（只 fact/actor）。
+
+    - 只准 kind ∈ {fact, actor}；object/area/exit 一律丟棄（NPC 不得新增地圖/出口/物件）。
+    - fact entity **強制**帶 props.source=npc_id / props.confidence=npc_claim、origin=npc。
+    - malformed item 丟棄(不污染)；非 list → []；超過 cap 截斷。
+    - **不**處理 truth_id / reveal——NPC fact 寫進 WorldModel 不得自動 grant 真相。
+    """
+    out: list = []
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        if len(out) >= cap:
+            break
+        if not isinstance(item, dict):
+            continue
+        op = item.get("op")
+        if op not in _STORY_ALLOWED_OPS:
+            continue
+        if op == "register":
+            kind, label = item.get("kind"), item.get("label")
+            if kind not in NPC_ENTITY_KINDS or not (isinstance(label, str) and label.strip()):
+                continue
+            props = dict(item.get("props") if isinstance(item.get("props"), dict) else {})
+            props["source"] = npc_id                   # 來源 = 該 NPC
+            props["confidence"] = NPC_FACT_CONFIDENCE   # NPC 主張，非確證
+            if kind == FACT:
+                props.setdefault("category", "npc_claim")
+            eid = item.get("entity_id") or item.get("id")
+            out.append(WorldDelta(
+                op="register", kind=kind, label=label.strip(),
+                entity_id=eid if isinstance(eid, str) else None,
+                props=props, origin="npc"))
+        elif op == "set_state":
+            eid, state = item.get("entity_id") or item.get("id"), item.get("state")
+            if not (isinstance(eid, str) and isinstance(state, str) and state.strip()):
+                continue
+            out.append(WorldDelta(op="set_state", entity_id=eid, state=state.strip(),
+                                  origin="npc"))
+    return out
+
+
 def slug(label: str) -> str:
     s = re.sub(r"\s+", "_", (label or "").strip())
     s = re.sub(r"[^0-9A-Za-z一-鿿_]", "", s)
