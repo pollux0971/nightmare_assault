@@ -60,20 +60,22 @@ python3 -m venv .venv
    - 右上：🎒 道具、💬 與在場 NPC 對話、💾 存檔、≡ 回選單。
 5. 認真**調查**（檢查紙條/文件/儀器、追問 NPC）會累積真相線索；觸發致命規則或抵達出口 → **結局**（真相揭曉 / 模糊逃脫…）。
 
-## 6. 無頭 / 自動化遊玩（進階、不需桌面殼）
+## 6. 無頭驅動（CLI 自動化測試用，**非給玩家的玩法**）
+
+> ⚠️ 這一節是給**開發 / QA / 自動化測試**用的 CLI 工具（`dev/tools/agent_play.py`），讓**程式或另一個 AI** 在沒有桌面視窗的情況下驅動遊戲、驗證機制與回歸。**這不是給人玩的方式**——真正要玩請走第 4–5 節的桌面視窗。
 
 ```bash
-# 內建策略自我遊玩一場（產逐字稿）
+# 內建策略自我遊玩一場（煙霧測試 / 產逐字稿，非人工遊玩）
 .venv/bin/python dev/tools/agent_play.py --auto --flag --max-beats 20 --jsonl-log run.jsonl
 
-# 不需 API key 的介面冒煙（用假後端）
+# 不需 API key 的介面冒煙（用假後端，給 CI 用）
 .venv/bin/python dev/tools/agent_play.py --auto --no-llm --flag --max-beats 8
 
-# 讓「另一個程式/AI」用 JSON-over-stdio 協定驅動（每行送一個動作，讀一行 observation）
+# 讓「另一個程式 / AI」用 JSON-over-stdio 協定自動測試（每行送一個動作，讀一行 observation）
 .venv/bin/python dev/tools/agent_play.py --flag --jsonl-log run.jsonl --max-beats 20
 ```
 
-旗標：`--flag` 開敘事控制（揭露橋接 / 結局因果硬閘）｜`--no-llm` 不呼叫 LLM｜`--seed N` 固定隨機種子｜`--jsonl-log FILE` 落 observation/action/assertion｜`--debug-reveal-truth` 除錯時才露完整真相。
+旗標：`--flag` 開敘事控制（揭露橋接 / Player Sovereignty）｜`--no-llm` 不呼叫 LLM｜`--seed N` 固定隨機種子｜`--jsonl-log FILE` 落 observation/action/assertion（供自動化斷言）｜`--debug-reveal-truth` 除錯時才露完整真相。
 
 ## 7. 跑測試（可選）
 
