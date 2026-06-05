@@ -24,7 +24,15 @@ BLOCKED_EXIT_STATES = {"locked", "blocked", "unknown", "unsafe", "jammed"}
 DEFAULT_LIMITS = {
     "visible_entities": 20, "known_remote_entities": 20,
     "routes_from_here": 12, "blocked_routes": 12, "mental_map_text": 800,
+    "spatial_summary": 600,
 }
+
+# Spatial UX：玩家/QA 可讀摘要
+SUMMARY_MAX_CHARS = 600
+SPATIAL_SUMMARY_SOURCE = "deterministic_projection"
+# 受阻狀態 → 玩家面中文
+_BLOCKED_STATE_ZH = {"locked": "鎖住", "blocked": "受阻", "unknown": "情況不明",
+                     "unsafe": "不安全", "jammed": "卡死"}
 
 
 @dataclass
@@ -72,6 +80,8 @@ class SpatialProjection:
     versions: dict
     counts: dict = field(default_factory=dict)
     truncated: dict = field(default_factory=dict)
+    player_summary: str = ""               # Spatial UX：玩家/QA 可讀短摘要（確定性）
+    player_summary_truncated: bool = False
 
     def to_debug_dict(self) -> dict:
         """observation.spatial_debug 形狀（docs/06 example）。"""
@@ -85,6 +95,10 @@ class SpatialProjection:
             "visible_entities": [e.to_dict() for e in self.visible_entities],
             "known_remote_entities": [e.to_dict() for e in self.known_remote_entities],
             "mental_map_text": self.mental_map_text,
+            # Spatial UX：玩家/QA 面板摘要（不餵 story；deterministic）
+            "spatial_summary": self.player_summary,
+            "spatial_summary_truncated": self.player_summary_truncated,
+            "spatial_summary_source": SPATIAL_SUMMARY_SOURCE,
             "counts": dict(self.counts),
             "truncated": dict(self.truncated),
             "versions": dict(self.versions),
@@ -154,11 +168,49 @@ def build_spatial_projection(world, *, limits: dict | None = None,
     if len(mental) > lim["mental_map_text"]:
         mental = mental[:lim["mental_map_text"]]
 
-    return SpatialProjection(
+    proj = SpatialProjection(
         current_area=cur, current_area_label=cur_label, current_area_roles=cur_roles,
         routes_from_here=passable, blocked_routes=blocked, safe_retreat_routes=safe_retreat,
         visible_entities=visible, known_remote_entities=remote, mental_map_text=mental,
         versions=world.version_snapshot(), counts=counts, truncated=truncated)
+    proj.player_summary, proj.player_summary_truncated = player_facing_spatial_summary(
+        proj, max_chars=lim.get("spatial_summary", SUMMARY_MAX_CHARS))
+    return proj
+
+
+def player_facing_spatial_summary(projection: "SpatialProjection", *,
+                                  max_chars: int = SUMMARY_MAX_CHARS) -> tuple:
+    """由 SpatialProjection **確定性**生成玩家/QA 可讀短摘要（**不呼叫 LLM**、不餵 story）。
+
+    分段（只列非空）：目前位置 / 可走路線 / 被阻擋路線 / 安全撤退路線 / 眼前可互動物 /
+    已知但不在眼前。回 (text, truncated)；truncated = 任一清單被預算截斷 或 文字超出字數上限。
+    只用投影內容，不新增任何地圖元素。
+    """
+    P = projection
+    lines = [f"目前位置：{P.current_area_label or '未知之地'}"]
+    if P.routes_from_here:
+        lines.append("可走路線：" + "、".join(r.label for r in P.routes_from_here))
+    else:
+        lines.append("可走路線：（沒有明顯可走的出口）")
+    if P.blocked_routes:
+        lines.append("被阻擋路線：" + "、".join(
+            f"{r.label}（{_BLOCKED_STATE_ZH.get(r.state, r.state)}）" for r in P.blocked_routes))
+    if P.safe_retreat_routes:
+        lines.append("安全撤退路線：" + "、".join(r.label for r in P.safe_retreat_routes))
+    # 眼前可互動物：可見的物件/NPC（排除已被拿走/用掉的物件）
+    interactable = [e for e in P.visible_entities
+                    if not (e.kind == OBJECT and e.state in ("taken", "used"))]
+    if interactable:
+        lines.append("眼前可互動物：" + "、".join(e.label for e in interactable))
+    if P.known_remote_entities:
+        lines.append("已知但不在眼前：" + "、".join(e.label for e in P.known_remote_entities))
+
+    text = "\n".join(lines)
+    truncated = any(P.truncated.values()) if isinstance(P.truncated, dict) else False
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip() + "…"
+        truncated = True
+    return text, truncated
 
 
 def deterministic_mental_map_text(current_area_label, routes, blocked, visible, remote) -> str:

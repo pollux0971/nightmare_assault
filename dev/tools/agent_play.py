@@ -254,6 +254,8 @@ def _dp_to_obs(loop, narrative, dp, ended, ending, step_result=None) -> dict:
     options = [] if ended else [getattr(o, "text", "")
                                 for o in (getattr(dp, "suggested_options", None) or [])]
     tiers = _npc_tiers(loop)
+    _sd = ((step_result or {}).get("spatial_debug")
+           or (loop.spatial_debug() if hasattr(loop, "spatial_debug") else {})) or {}
     return {
         "beat": loop.beat_number,
         "narrative": narrative,
@@ -267,8 +269,11 @@ def _dp_to_obs(loop, narrative, dp, ended, ending, step_result=None) -> dict:
         "world_state": _world_state(loop),
         "world_progress": ((step_result or {}).get("world_progress")
                            or (loop.world_progress(dp) if hasattr(loop, "world_progress") else {})),
-        "spatial_debug": ((step_result or {}).get("spatial_debug")
-                          or (loop.spatial_debug() if hasattr(loop, "spatial_debug") else {})),
+        "spatial_debug": _sd,
+        # Spatial UX：玩家/QA 可讀摘要（top-level，方便顯示/記錄；deterministic、不餵 story）
+        "spatial_summary": _sd.get("spatial_summary", ""),
+        "spatial_summary_truncated": _sd.get("spatial_summary_truncated", False),
+        "spatial_summary_source": _sd.get("spatial_summary_source", "deterministic_projection"),
         "debug": _debug_block(loop, step_result),
         "ended": ended,
         "ending": _ending_dict(loop, ending) if ended else None,
@@ -428,6 +433,10 @@ def run_auto(loop, opts, max_beats, *, logger=None, stop_on_ending=True):
         _aw = annotate_world(obs, track)
         P(out["narrative"])
         P("〔reveal〕", obs["reveal_progress"], "〔Δ〕", obs["deltas"])
+        # Spatial UX：玩家/QA 面板摘要（debug 輔助，不取代 narrative）
+        if obs.get("spatial_summary"):
+            _t = "（已截斷）" if obs.get("spatial_summary_truncated") else ""
+            P(f"〔spatial{_t}〕\n" + obs["spatial_summary"])
         logger.observation(loop.beat_number, obs)
         for a in _aw:
             logger.assertion(*a)
