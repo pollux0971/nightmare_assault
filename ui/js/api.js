@@ -205,95 +205,192 @@
     });
   }
 
-  // ── 配置中心 UI（P5：draft → preview → activate；preview 不呼 LLM）──
+  // ── 配置中心 UI（v0.8 Agent Configuration Center；preview 零 LLM）──────────
   const ConfigUI = {
-    _key: null,
+    _key: null, _dirty: false, _blocksAgent: "story", _agents: [],
+
+    _setDirty(v) { this._dirty = v; const d = q("cfg-dirty"); if (d) d.textContent = v ? "● 未儲存" : ""; },
+    _toast(msg) {
+      const t = q("cfg-toast"); if (!t) return;
+      t.textContent = msg; t.classList.add("show");
+      clearTimeout(this._tt); this._tt = setTimeout(() => t.classList.remove("show"), 2200);
+    },
+    _msg(s) { const m = q("cfg-msg"); if (m) m.textContent = s || ""; },
+    _opt(sel, items, cur) {
+      sel.innerHTML = "";
+      items.forEach((v) => { const o = document.createElement("option");
+        o.value = v; o.textContent = v; if (v === cur) o.selected = true; sel.appendChild(o); });
+    },
+
     async open() {
       if (!api()) return;
+      this._setDirty(false); this._key = null;
       const ov = await api().config_overview();
-      const sel = q("cfg-profile"); sel.innerHTML = "";
-      ((ov && ov.profiles) || []).forEach((p) => {
-        const o = document.createElement("option");
-        o.value = p; o.textContent = p; if (p === ov.active_profile) o.selected = true;
-        sel.appendChild(o);
-      });
-      sel.onchange = async () => { await api().set_active_profile(sel.value); this.open(); };
-      q("cfg-active-hash").textContent = ov && ov.story ? "active hash: " + ov.story.prompt_hash : "";
-      await this.loadFragments();
+      this._opt(q("cfg-profile"), (ov && ov.profiles) || [], ov && ov.active_profile);
+      q("cfg-profile").onchange = async (e) => { await api().set_active_profile(e.target.value); this.open(); };
+      q("cfg-active-hash").textContent = ov && ov.story ? "story hash " + ov.story.prompt_hash : "";
+      // agent 清單（給 Prompt Blocks / Preview / Test 的 agent 選擇器）
+      const mo = await api().agent_models_overview();
+      this._agents = ((mo && mo.agents) || []).map((a) => a.agent);
+      [["cfg-blocks-agent", "story"], ["cfg-preview-agent", "story"], ["cfg-test-agent", "story"]]
+        .forEach(([id, def]) => { const s = q(id); if (s) {
+          this._opt(s, this._agents.length ? this._agents : [def], this._blocksAgent || def); } });
+      q("cfg-blocks-agent").onchange = (e) => { this._blocksAgent = e.target.value; this.loadBlocks(); };
+      q("cfg-preview-agent").onchange = () => this.preview();
+      this.renderModels(mo);
+      await this.loadBlocks();
+      await this.preview();
       await this.loadFlags();
-      q("cfg-msg").textContent = ""; q("cfg-preview").textContent = "";
-      q("cfg-preview-hash").textContent = "";
+      this._msg(""); this.tab("models");
       q("dlg-config").showModal();
     },
-    async loadFragments() {
-      const list = await api().list_prompt_fragments("story");
-      const ul = q("cfg-frag-list"); ul.innerHTML = "";
-      (list || []).forEach((f) => {
-        const li = document.createElement("li");
-        li.style.cssText = "padding:.3rem .4rem;cursor:pointer;border-bottom:1px solid var(--border)";
-        li.textContent = (f.title || f.fragment_key) + (f.has_draft ? " ✎draft" : "");
-        li.onclick = () => this.select(f);
-        ul.appendChild(li);
+
+    tab(name) {
+      document.querySelectorAll(".cfg-tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+      document.querySelectorAll(".cfg-panel").forEach((p) => p.classList.toggle("on", p.dataset.panel === name));
+    },
+
+    // ── P0 Agent Models ──────────────────────────────────────────────────
+    renderModels(mo) {
+      const body = q("cfg-models-body"); body.innerHTML = "";
+      if (!mo || !mo.ok) { body.innerHTML = "<tr><td colspan=7 class=hint>讀取失敗</td></tr>"; return; }
+      (mo.agents || []).forEach((a) => {
+        const tr = document.createElement("tr");
+        const cell = (html) => { const td = document.createElement("td"); td.innerHTML = html; return td; };
+        const tdA = cell(""); tdA.textContent = a.agent;
+        const tdP = cell("<input type=text>"); tdP.querySelector("input").value = a.primary || "";
+        const tdF = cell("<input type=text>"); tdF.querySelector("input").value = (a.fallbacks || []).join(", ");
+        const tdT = cell("<input type=number step=0.1 min=0 max=2>"); tdT.className = "num";
+        tdT.querySelector("input").value = (a.temperature ?? "");
+        const tdM = cell("<input type=number min=1>"); tdM.className = "num";
+        tdM.querySelector("input").value = (a.max_tokens ?? "");
+        const tdE = cell("<input type=checkbox>"); tdE.querySelector("input").checked = !!a.enabled;
+        const tdTest = cell("<button class=ghost style='padding:.2rem .5rem'>Test</button>");
+        tr.append(tdA, tdP, tdF, tdT, tdM, tdE, tdTest);
+        tr.dataset.agent = a.agent;
+        tr.querySelectorAll("input").forEach((i) => i.oninput = () => this._setDirty(true));
+        tdTest.querySelector("button").onclick = async () => {
+          const m = tdP.querySelector("input").value.trim();
+          this._toast("測試中…");
+          const r = await api().test_model(a.agent, m);
+          this._toast(r && r.ok ? `✓ ${a.agent} ${r.latency_ms}ms` : `✗ ${(r && r.error) || "失敗"}`);
+        };
+        body.appendChild(tr);
       });
     },
-    select(f) {
-      this._key = f.fragment_key;
-      q("cfg-frag-key").textContent = f.fragment_key;
-      q("cfg-frag-editor").value = f.content || "";
-      q("cfg-msg").textContent = "";
+    _collectModels() {
+      return [...q("cfg-models-body").querySelectorAll("tr")].filter((tr) => tr.dataset.agent).map((tr) => {
+        const inp = tr.querySelectorAll("input");
+        const fb = inp[1].value.split(",").map((s) => s.trim()).filter(Boolean);
+        return { agent: tr.dataset.agent, primary: inp[0].value.trim(), fallbacks: fb,
+          temperature: inp[2].value === "" ? null : parseFloat(inp[2].value),
+          max_tokens: inp[3].value === "" ? null : parseInt(inp[3].value, 10),
+          enabled: inp[4].checked };
+      });
+    },
+    async saveModels() {
+      const r = await api().save_agent_models(this._collectModels());
+      if (r && r.ok) { this._setDirty(false); this._toast("✓ 已儲存模型設定"); this._msg(""); }
+      else { this._msg("儲存失敗：" + ((r && r.error) || "")); }
+    },
+
+    // ── P1 Prompt Blocks ─────────────────────────────────────────────────
+    async loadBlocks() {
+      const agent = this._blocksAgent || "story";
+      const r = await api().list_prompt_blocks(agent);
+      const body = q("cfg-blocks-body"); body.innerHTML = "";
+      const blocks = (r && r.blocks) || [];
+      if (!blocks.length) { body.innerHTML = "<tr><td colspan=10 class=hint>此 agent/profile 無 prompt block</td></tr>"; return; }
+      blocks.forEach((b) => {
+        const tr = document.createElement("tr");
+        const td = (txt) => { const c = document.createElement("td"); c.textContent = txt == null ? "—" : txt; return c; };
+        const tdOn = document.createElement("td");
+        const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!b.enabled;
+        cb.onchange = async () => {
+          const res = await api().set_fragment_enabled(agent, b.fragment_key, cb.checked);
+          this._toast(res && res.ok ? (cb.checked ? "已啟用 block" : "已停用 block") : "切換失敗");
+        };
+        tdOn.appendChild(cb);
+        const tdEdit = document.createElement("td");
+        const eb = document.createElement("button"); eb.className = "ghost"; eb.style.padding = ".2rem .5rem";
+        eb.textContent = "Edit"; eb.onclick = () => this.edit(b);
+        tdEdit.appendChild(eb);
+        const upd = b.updated_at ? String(b.updated_at).slice(0, 16).replace("T", " ") : "—";
+        tr.append(td(b.sort_order), tdOn, td(b.fragment_key), td(b.title), td(b.category),
+          td((b.status || "") + (b.has_draft ? " ✎" : "")), td(b.version), td(upd), td(b.preview), tdEdit);
+        body.appendChild(tr);
+      });
+    },
+    async edit(b) {
+      this._key = b.fragment_key;
+      const r = await api().get_prompt_fragment(b.fragment_key);
+      const content = (r && r.ok && r.fragment && r.fragment.content) || "";
+      q("cfg-frag-key").textContent = b.fragment_key;
+      q("cfg-frag-editor").value = content;
+      q("cfg-editor-wrap").style.display = "";
+      this._msg("");
     },
     async saveDraft() {
-      if (!this._key) { q("cfg-msg").textContent = "先選一個 fragment"; return; }
+      if (!this._key) { this._msg("先在表格點 Edit 選一個 block"); return; }
       const r = await api().save_prompt_draft(this._key, q("cfg-frag-editor").value);
-      q("cfg-msg").textContent = r && r.ok
-        ? "已存草稿 v" + r.version + "（未影響進行中遊戲，按「啟用草稿」才生效）"
-        : "存草稿失敗：" + ((r && r.error) || "");
-      this.loadFragments();
-    },
-    async preview() {
-      if (!this._key) { q("cfg-msg").textContent = "先選一個 fragment"; return; }
-      const r = await api().preview_prompt("story", null, this._key, q("cfg-frag-editor").value);
-      if (r && r.ok) {
-        q("cfg-preview").textContent = r.compiled_prompt;
-        q("cfg-preview-hash").textContent = "preview hash: " + r.prompt_hash
-          + (r.llm_called ? "" : " · 零 LLM");
-        if (r.missing_required && r.missing_required.length)
-          q("cfg-msg").textContent = "⚠ 缺必填變數：" + r.missing_required.join(", ");
-      } else {
-        q("cfg-msg").textContent = "預覽失敗：" + ((r && r.error) || "");
-      }
+      this._msg(r && r.ok ? "已存草稿 v" + r.version + "（按「啟用草稿」才生效）" : "存草稿失敗：" + ((r && r.error) || ""));
+      this.loadBlocks();
     },
     async activate() {
-      if (!this._key) { q("cfg-msg").textContent = "先選一個 fragment"; return; }
+      if (!this._key) { this._msg("先點 Edit 選一個 block"); return; }
       const r = await api().activate_prompt_draft(this._key);
-      q("cfg-msg").textContent = r && r.ok
-        ? "✓ 已啟用 v" + r.activated_version + "（現在起 active prompt 生效）"
-        : "啟用失敗：" + ((r && r.error) || "");
-      this.loadFragments();
+      if (r && r.ok) { this._toast("✓ 已啟用 v" + r.activated_version); this._msg(""); }
+      else { this._msg("啟用失敗：" + ((r && r.error) || "")); }
+      this.loadBlocks();
       const ov = await api().config_overview();
-      if (ov && ov.story) q("cfg-active-hash").textContent = "active hash: " + ov.story.prompt_hash;
+      if (ov && ov.story) q("cfg-active-hash").textContent = "story hash " + ov.story.prompt_hash;
     },
+
+    // ── P2 Compiled Preview（零 LLM）──────────────────────────────────────
+    async preview() {
+      const agent = (q("cfg-preview-agent") && q("cfg-preview-agent").value) || "story";
+      const r = await api().preview_prompt(agent, null);
+      const pre = q("cfg-preview"), meta = q("cfg-preview-meta");
+      if (r && r.ok) {
+        const cp = r.compiled_prompt || "";
+        pre.textContent = cp;
+        const chars = cp.length, tok = Math.round(chars / 1.8);
+        q("cfg-preview-hash").textContent = "hash " + r.prompt_hash + (r.llm_called ? "" : " · 零 LLM");
+        meta.textContent = `enabled fragments: ${(r.enabled_fragments || []).length}　|　`
+          + `${chars} chars　~${tok} tokens (est)`
+          + (r.missing_required && r.missing_required.length ? "　⚠ 缺必填：" + r.missing_required.join(", ") : "");
+      } else { pre.textContent = ""; meta.textContent = "預覽失敗：" + ((r && r.error) || ""); }
+    },
+
     async loadFlags() {
       const flags = await api().list_feature_flags();
       const ul = q("cfg-flags"); ul.innerHTML = "";
       (flags || []).forEach((f) => {
-        const li = document.createElement("li");
+        const li = document.createElement("li"); li.style.padding = ".25rem 0";
         const cb = document.createElement("input");
         cb.type = "checkbox"; cb.checked = !!f.value; cb.id = "flag-" + f.name;
-        cb.onchange = async () => { await api().set_feature_flag(f.name, cb.checked); };
+        cb.onchange = async () => { await api().set_feature_flag(f.name, cb.checked); this._toast("flag 已更新"); };
         const lbl = document.createElement("label");
         lbl.htmlFor = cb.id; lbl.textContent = " " + f.name; lbl.style.cursor = "pointer";
         li.appendChild(cb); li.appendChild(lbl); ul.appendChild(li);
       });
     },
+
+    close() {
+      if (this._dirty && !confirm("Agent Models 有未儲存的修改，確定離開？")) return;
+      this._setDirty(false); q("dlg-config").close();
+    },
   };
   window.ConfigUI = ConfigUI;
 
   function bootConfig() {
-    const d = q("cfg-btn-draft"), p = q("cfg-btn-preview"), a = q("cfg-btn-activate");
-    if (d) d.onclick = () => ConfigUI.saveDraft();
-    if (p) p.onclick = () => ConfigUI.preview();
-    if (a) a.onclick = () => ConfigUI.activate();
+    document.querySelectorAll(".cfg-tab").forEach((b) => b.onclick = () => ConfigUI.tab(b.dataset.tab));
+    const wire = (id, fn) => { const el = q(id); if (el) el.onclick = fn; };
+    wire("cfg-models-save", () => ConfigUI.saveModels());
+    wire("cfg-btn-draft", () => ConfigUI.saveDraft());
+    wire("cfg-btn-activate", () => ConfigUI.activate());
+    wire("cfg-btn-preview", () => ConfigUI.preview());
+    wire("cfg-close", () => ConfigUI.close());
   }
 
   // 序章儀式：恐怖台詞緩慢浮現又淡去

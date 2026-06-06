@@ -328,6 +328,25 @@ class ConfigStore:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_all_bindings(self, agent: str, profile: Optional[str] = None) -> list[dict]:
+        """回傳該 agent/profile 的**所有** binding（含 disabled），供 Config Center 顯示與切換。
+
+        唯讀；含 enabled 旗標 + updated_at（供 Prompt Blocks 表）。
+        """
+        profile = profile or self.active_profile()
+        rows = self._conn.execute(
+            """
+            SELECT b.fragment_key, b.sort_order, b.enabled,
+                   f.title, f.category, f.content, f.status, f.version, f.updated_at
+            FROM agent_prompt_bindings b
+            JOIN prompt_fragments f ON f.fragment_key = b.fragment_key
+            WHERE b.agent_name = ? AND b.profile_name = ?
+            ORDER BY b.sort_order ASC, b.fragment_key ASC;
+            """,
+            (agent, profile),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def upsert_fragment(self, fragment_key: str, content: str, *, title: str = "",
                         category: str = "rules", description: str = "",
                         status: str = "draft") -> int:

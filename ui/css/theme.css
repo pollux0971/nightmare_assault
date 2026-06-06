@@ -157,3 +157,40 @@ dialog li { padding: .4rem 0; border-bottom: 1px solid var(--border); }
 .wait-dots span:nth-child(3) { animation-delay: .44s; }
 .wait-line { color: var(--text-dim); font-style: italic; letter-spacing: .05em;
   transition: opacity .8s ease; }
+
+/* ── Config Center GUI (v0.8) ───────────────────────────────────────────── */
+.cfg-dlg{width:min(1100px,94vw);max-width:1100px;max-height:90vh;background:var(--bg-raise);
+  color:var(--text);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;}
+.cfg-dlg::backdrop{background:rgba(0,0,0,.6);}
+.cfg-head{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin-bottom:.4rem;}
+.cfg-head h3{margin:0;font-size:1.05rem;}
+.cfg-spacer{flex:1;}
+.cfg-dirty{color:var(--blood-lt);font-size:.8rem;min-width:5em;}
+.cfg-tabs{display:flex;gap:.3rem;border-bottom:1px solid var(--border);margin:.3rem 0 .7rem;}
+.cfg-tab{background:none;border:none;color:var(--text-dim);padding:.45rem .8rem;cursor:pointer;
+  border-bottom:2px solid transparent;font-size:.9rem;}
+.cfg-tab.on{color:var(--text);border-bottom-color:var(--blood);}
+.cfg-panel{display:none;}
+.cfg-panel.on{display:block;}
+.cfg-scroll{max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:6px;}
+.cfg-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+.cfg-table th,.cfg-table td{padding:.4rem .5rem;border-bottom:1px solid var(--border);text-align:left;
+  vertical-align:top;}
+.cfg-table thead th{position:sticky;top:0;background:var(--bg-sub);color:var(--text-dim);z-index:1;}
+.cfg-table input[type=text],.cfg-table input[type=number]{width:100%;background:var(--bg);
+  color:var(--text);border:1px solid var(--border);border-radius:4px;padding:.25rem .35rem;
+  font-family:inherit;font-size:.82rem;box-sizing:border-box;}
+.cfg-table td.num input{width:5em;}
+.cfg-row{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:.6rem 0;}
+.cfg-editor{width:100%;height:18vh;background:var(--bg);color:var(--text);border:1px solid var(--border);
+  border-radius:6px;padding:.6rem;font-family:inherit;font-size:.88rem;line-height:1.7;resize:vertical;
+  box-sizing:border-box;}
+.cfg-pre{white-space:pre-wrap;max-height:46vh;overflow:auto;font-size:.76rem;background:var(--bg);
+  border:1px solid var(--border);border-radius:6px;padding:.6rem;}
+.cfg-foot{display:flex;align-items:center;gap:.8rem;margin-top:.8rem;padding-top:.6rem;
+  border-top:1px solid var(--border);}
+.cfg-toast{color:#8fe39a;font-size:.85rem;opacity:0;transition:opacity .25s;}
+.cfg-toast.show{opacity:1;}
+.cfg-row-edit{cursor:pointer;}
+.cfg-tag{font-size:.72rem;padding:.05rem .4rem;border-radius:999px;border:1px solid var(--border);
+  color:var(--text-dim);}

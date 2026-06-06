@@ -152,39 +152,90 @@
   </dialog>
 
   <!-- 配置中心（P5：draft → preview → activate；preview 不呼 LLM）-->
-  <dialog id="dlg-config">
-    <h3>配置中心 · Story Agent</h3>
-    <div class="row">
-      <label>Profile：</label>
-      <select id="cfg-profile"></select>
+  <dialog id="dlg-config" class="cfg-dlg">
+    <div class="cfg-head">
+      <h3>配置中心 · Agent Configuration Center</h3>
+      <span class="cfg-spacer"></span>
+      <label>Profile：<select id="cfg-profile"></select></label>
       <span id="cfg-active-hash" class="hint dim"></span>
+      <span id="cfg-dirty" class="cfg-dirty"></span>
     </div>
-    <div class="row" style="align-items:flex-start;gap:1rem">
-      <div style="flex:1;min-width:200px">
-        <h4>Prompt Fragments</h4>
-        <ul id="cfg-frag-list" style="max-height:42vh;overflow:auto;list-style:none;padding:0"></ul>
+    <div class="cfg-tabs" id="cfg-tabs">
+      <button class="cfg-tab on" data-tab="models">Agent Models</button>
+      <button class="cfg-tab" data-tab="blocks">Prompt Blocks</button>
+      <button class="cfg-tab" data-tab="preview">Preview</button>
+      <button class="cfg-tab" data-tab="test">Test Prompt</button>
+      <button class="cfg-tab" data-tab="flags">Feature Flags</button>
+    </div>
+
+    <!-- Agent Models -->
+    <div class="cfg-panel on" data-panel="models">
+      <div class="cfg-scroll">
+        <table id="cfg-models-table" class="cfg-table">
+          <thead><tr><th>Agent</th><th>Primary model</th><th>Fallback models<br/><span class="hint dim">逗號分隔</span></th>
+            <th>Temp</th><th>Max tokens</th><th>On</th><th>Test</th></tr></thead>
+          <tbody id="cfg-models-body"></tbody>
+        </table>
       </div>
-      <div style="flex:2;min-width:280px">
+      <div class="cfg-row"><button id="cfg-models-save" class="primary">儲存模型設定</button>
+        <span class="hint dim">儲存只寫 config.json，不影響進行中的遊戲；下一場新遊戲才套用。不顯示 API key。</span></div>
+    </div>
+
+    <!-- Prompt Blocks -->
+    <div class="cfg-panel" data-panel="blocks">
+      <div class="cfg-row"><label>Agent：<select id="cfg-blocks-agent"></select></label>
+        <span class="hint dim">顯示該 agent/profile 的所有 prompt block（含停用）。</span></div>
+      <div class="cfg-scroll">
+        <table id="cfg-blocks-table" class="cfg-table">
+          <thead><tr><th>#</th><th>On</th><th>fragment_key</th><th>title</th><th>category</th>
+            <th>status</th><th>ver</th><th>updated</th><th>preview</th><th></th></tr></thead>
+          <tbody id="cfg-blocks-body"></tbody>
+        </table>
+      </div>
+      <div id="cfg-editor-wrap" style="display:none">
         <h4>編輯 <span id="cfg-frag-key" class="hint dim"></span></h4>
-        <textarea id="cfg-frag-editor"
-          style="width:100%;height:18vh;background:var(--bg);color:var(--text);
-                 border:1px solid var(--border);border-radius:6px;padding:.6rem;
-                 font-family:inherit;font-size:.9rem;line-height:1.7;resize:vertical"></textarea>
-        <div class="row">
+        <textarea id="cfg-frag-editor" class="cfg-editor"></textarea>
+        <div class="cfg-row">
           <button id="cfg-btn-draft" class="ghost">存草稿</button>
-          <button id="cfg-btn-preview" class="ghost">預覽（不呼 LLM）</button>
           <button id="cfg-btn-activate" class="primary">啟用草稿</button>
+          <button id="cfg-btn-rollback" class="ghost" disabled
+            title="後端尚無 rollback API">Rollback（unavailable）</button>
         </div>
-        <p id="cfg-msg" class="hint"></p>
-        <h4>編譯後 prompt 預覽　<span id="cfg-preview-hash" class="hint dim"></span></h4>
-        <pre id="cfg-preview" style="white-space:pre-wrap;max-height:24vh;overflow:auto;
-             font-size:.78rem;background:var(--bg);border:1px solid var(--border);
-             border-radius:6px;padding:.6rem"></pre>
       </div>
     </div>
-    <h4>Feature Flags</h4>
-    <ul id="cfg-flags" style="list-style:none;padding:0"></ul>
-    <button onclick="document.getElementById('dlg-config').close()" class="ghost">關閉</button>
+
+    <!-- Compiled Preview -->
+    <div class="cfg-panel" data-panel="preview">
+      <div class="cfg-row"><label>Agent：<select id="cfg-preview-agent"></select></label>
+        <button id="cfg-btn-preview" class="ghost">重新編譯預覽（零 LLM）</button>
+        <span id="cfg-preview-hash" class="hint dim"></span></div>
+      <div id="cfg-preview-meta" class="hint dim"></div>
+      <pre id="cfg-preview" class="cfg-pre"></pre>
+    </div>
+
+    <!-- Test Prompt -->
+    <div class="cfg-panel" data-panel="test">
+      <p class="hint">輸入 sample context JSON，對選定 agent 跑一次（需後端 <code>test_agent_prompt</code> API）：</p>
+      <label>Agent：<select id="cfg-test-agent"></select></label>
+      <textarea id="cfg-test-ctx" class="cfg-editor" style="height:10vh">{}</textarea>
+      <div class="cfg-row">
+        <button id="cfg-btn-test" class="ghost" disabled
+          title="後端尚無 test_agent_prompt API">Test Prompt（backend API missing）</button>
+      </div>
+      <pre id="cfg-test-out" class="cfg-pre"></pre>
+    </div>
+
+    <!-- Feature Flags -->
+    <div class="cfg-panel" data-panel="flags">
+      <div class="cfg-scroll"><ul id="cfg-flags" style="list-style:none;padding:0"></ul></div>
+    </div>
+
+    <div class="cfg-foot">
+      <span id="cfg-msg" class="hint"></span>
+      <span class="cfg-spacer"></span>
+      <span id="cfg-toast" class="cfg-toast"></span>
+      <button id="cfg-close" class="ghost">關閉</button>
+    </div>
   </dialog>
 
   <!-- 結局 -->

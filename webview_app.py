@@ -368,6 +368,78 @@ class API:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    # ── Config Center GUI（v0.8）：agent models 表 + prompt blocks 表（前端 glue；不改 runtime）──
+    def agent_models_overview(self) -> dict:
+        """每個 agent 的模型設定（**不含 api_key**），供 Agent Models 表。"""
+        try:
+            am = self._config.get("agent_models", DEFAULT_AGENT_MODELS) or {}
+            settings = self._config.get("agent_settings", {}) or {}
+            rows = []
+            for agent in sorted(am.keys()):
+                models = list(am.get(agent) or [])
+                s = settings.get(agent, {}) if isinstance(settings, dict) else {}
+                rows.append({
+                    "agent": agent,
+                    "primary": models[0] if models else "",
+                    "fallbacks": models[1:],
+                    "temperature": s.get("temperature", DEFAULT_TEMPS.get(agent)),
+                    "max_tokens": s.get("max_tokens"),
+                    "enabled": bool(s.get("enabled", True)),
+                })
+            return {"ok": True, "agents": rows}        # 絕不回傳 api_key
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def save_agent_models(self, rows: list) -> dict:
+        """把 Agent Models 表的編輯寫回 config（agent_models + agent_settings）。**只在按 Save 時呼叫。**"""
+        try:
+            am, settings = {}, {}
+            for r in rows or []:
+                agent = (r.get("agent") or "").strip()
+                if not agent:
+                    continue
+                models = [m.strip() for m in ([r.get("primary")] + list(r.get("fallbacks") or []))
+                          if (m or "").strip()]
+                am[agent] = models
+                settings[agent] = {"temperature": r.get("temperature"),
+                                   "max_tokens": r.get("max_tokens"),
+                                   "enabled": bool(r.get("enabled", True))}
+            return self.save_config({"agent_models": am, "agent_settings": settings})
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def list_prompt_blocks(self, agent: str = "story", profile: str | None = None) -> dict:
+        """Prompt Blocks 表：該 agent/profile 的**所有** binding（含 disabled）+ preview snippet。"""
+        try:
+            store = self._config_store()
+            profile = profile or store.active_profile()
+            out = []
+            for b in store.get_all_bindings(agent, profile):
+                draft = store.get_latest_draft(b["fragment_key"])
+                snippet = (b.get("content") or "").strip().replace("\n", " ")
+                out.append({
+                    "fragment_key": b["fragment_key"], "title": b.get("title"),
+                    "category": b.get("category"), "status": b.get("status"),
+                    "version": b.get("version"), "updated_at": b.get("updated_at"),
+                    "sort_order": b.get("sort_order"), "enabled": bool(b.get("enabled")),
+                    "preview": snippet[:80] + ("…" if len(snippet) > 80 else ""),
+                    "has_draft": bool(draft), "draft_version": draft["version"] if draft else None,
+                })
+            return {"ok": True, "agent": agent, "profile": profile, "blocks": out}
+        except Exception as e:
+            return {"ok": False, "error": str(e), "blocks": []}
+
+    def set_fragment_enabled(self, agent: str, fragment_key: str, enabled: bool,
+                             profile: str | None = None) -> dict:
+        """開關某 fragment 的 binding（reuse store.set_binding_enabled）。"""
+        try:
+            store = self._config_store()
+            store.set_binding_enabled(agent, profile or store.active_profile(),
+                                      fragment_key, bool(enabled))
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     def list_prompt_fragments(self, agent: str = "story", profile: str | None = None) -> list:
         try:
             store = self._config_store()
