@@ -491,6 +491,7 @@ class BeatLoop:
         _ps = self.player_state(dp)                   # Step 5：玩家狀態投影（算一次）
         from core.world.player_state import player_state_summary, PLAYER_STATE_SUMMARY_SOURCE
         _pss, _pst = player_state_summary(_ps)
+        _er = self._entity_resolution_block(player_decision, _ps)   # Step 6：自然指代解析
         return {"narrative": narrative, "decision_point": dp, "warden": verdict,
                 "committed_event": progress.committed_event,
                 "progress_delta": progress.patch.progress_delta,
@@ -512,6 +513,8 @@ class BeatLoop:
                 "player_state_summary": _pss,
                 "player_state_summary_truncated": _pst,
                 "player_state_summary_source": PLAYER_STATE_SUMMARY_SOURCE,
+                # Step 6：自然指代解析（那枚/剛才那個/他說的地方 → entity id；唯讀、不建 entity、不推 reveal）
+                "entity_resolution": _er,
                 # P0 #4：WorldProgress（current_area/known_areas/世界事實/investigation_state）
                 "world_progress": self.world_progress(dp),
                 # Spatial WorldModel Projection（確定性、唯讀、快取；無 LLM）
@@ -1045,6 +1048,27 @@ class BeatLoop:
             log.warning("player state projection skipped: %s", e)
             return {"inventory_entities": [], "known_facts": [],
                     "current_focus": None, "recent_entities": []}
+
+    def _entity_resolution_block(self, action: str, ps: dict) -> dict:
+        """Step 6：把玩家輸入的自然指代解析成既有 entity（唯讀；不建 entity、不推 reveal）。"""
+        none = {"query": None, "resolved_entity_id": None, "resolution_source": "no_reference",
+                "ambiguous": False, "candidates": []}
+        try:
+            from core.world.alias_resolver import extract_reference, resolve_entity_reference
+            ref = extract_reference(action)
+            if not ref:
+                return none
+            visible = (self.spatial_debug().get("visible_entities") or [])
+            return resolve_entity_reference(
+                ref, world=getattr(self, "_world", None),
+                current_focus=getattr(self, "_current_focus", None),
+                recent_entities=getattr(self, "_recent_entities", []),
+                visible_entities=visible,
+                inventory_entities=(ps or {}).get("inventory_entities"),
+                known_facts=(ps or {}).get("known_facts"))
+        except Exception as e:                           # 解析失敗不影響推進
+            log.warning("entity resolution skipped: %s", e)
+            return none
 
     def _measure_beat_rendering(self, narrative: str):
         """v0.7 P3：分類 beat_type、量測字數、累計「一般 beat 連續過短」。**只量測、不修復（P4 未開）。**"""
