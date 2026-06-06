@@ -29,9 +29,13 @@ def test_resolve_mode_phrases():
     assert resolve_mode("我退到外面喘口氣", ACTIVE_EXPLORATION, ed("我退到外面喘口氣")) == TEMPORARY_RETREAT
     # 整理線索 → review_mode
     assert resolve_mode("我在這裡整理線索", ACTIVE_EXPLORATION, ed("我在這裡整理線索")) == REVIEW_MODE
-    # 「不回研究站 / 不碰真相」→ review_mode（不可因含「回研究站」子字串而誤判 active）
-    assert resolve_mode("先退到外面，不回研究站，不碰真相",
-                        ACTIVE_EXPLORATION, ed("先退到外面，不回研究站")) == REVIEW_MODE
+    # 「退到外面 + 不回研究站」→ 鎖定（temporary_retreat）；不可因含「回研究站」子字串而誤判 active。
+    # （「不碰真相」本身**不**鎖 review——它只是 per-beat no_truth 訊號，見 action_intent）
+    assert is_review_locked(resolve_mode("先退到外面，不回研究站，不碰真相",
+                                         ACTIVE_EXPLORATION, ed("先退到外面，不回研究站")))
+    # 「不碰真相」單獨出現（無撤退/整理）→ 不得鎖進 review
+    assert not is_review_locked(resolve_mode("我去找通訊設備，不碰真相",
+                                             ACTIVE_EXPLORATION, ed("我去找通訊設備，不碰真相")))
     # 明確結束 → campaign_end_requested
     assert resolve_mode("我結束本次調查，接受結果", ACTIVE_EXPLORATION,
                         ed("我結束本次調查，接受結果")) == CAMPAIGN_END_REQUESTED

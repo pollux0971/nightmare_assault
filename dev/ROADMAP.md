@@ -14,12 +14,19 @@
 | Step 1 | Config Center GUI Completion（Agent Models 表 / Prompt Blocks 表 / 多 agent / compiled preview / Test 入口；key 不外洩）| `7a94d17` | 9 |
 | Step 2 | Patch B P0–P3（actor profile / first-contact gate / beat_rendering debug；P4 未開）| `07062ef` | 17 |
 | — | design-fixed/skills 同步（隨 Patch B P0）| `dd5c0d7` `07062ef` | — |
+| Step 4 | Patch B 完整 UX selfplay 驗證（真 LLM）：6 重點全 PASS；過程修 3 bug（研究站誤判 / 不碰真相誤鎖 review / beat 預算過高）| — | — |
 
 全測基線：**878 passed, 3 skipped**（flag OFF/ON）。
 
+**Step 4 驗證結論（真 LLM，dev/reports/step4-patchb.jsonl）**：①NPC 首現皆 unintroduced→introduced
+②首問答非 API（114/91 字，含位置/動作/身分/態度/部分答案）③personality 明顯影響語氣（mysterious 留白反問 vs
+nervous 短促重複）④一般 beat **short_streak 全 0**（修預算後無假性過短）⑤review 仍短且不新增 fact
+⑥**TruthEvidenceGate 完好**（非 truth 行動 reveal_Δ=0；truth_investigation reveal_Δ=4）。
+→ **Step 3（P4）判定：不需要**（max_short_streak=0）。
+
 ---
 
-## ▶ Step 4（下一個）— Patch B 完整 UX selfplay 驗證
+## ✅ Step 4（已完成）— Patch B 完整 UX selfplay 驗證
 
 **目標**：用真 LLM 跑一場較完整的探索＋多次 NPC 對話，驗證 Patch B 體驗、並蒐集 beat_rendering 數據決定要不要開 P4。
 

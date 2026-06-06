@@ -19,17 +19,19 @@ DANGER_BEAT = "danger_beat"
 ENDING = "ending"
 SYSTEM_FEEDBACK = "system_feedback"
 
+# 目標字數區間：max 維持原「理想」；min 校準到**真 LLM 實測**水準——
+# too_short 應只標出「真的薄成狀態日誌」(<~140) 的 beat，而非合理的 ~200 字段落（見 step4 驗證）。
 BUDGETS = {
-    OPENING: (500, 900),
-    NEW_AREA_ENTRY: (350, 650),
-    NPC_FIRST_INTRO: (300, 550),
-    NORMAL_EXPLORATION: (220, 420),
-    OBJECT_INSPECTION: (180, 320),
-    NPC_CHAT: (180, 380),
-    REVIEW_MODE: (120, 260),
-    DANGER_BEAT: (250, 450),
-    ENDING: (400, 800),
-    SYSTEM_FEEDBACK: (60, 160),
+    OPENING: (350, 900),
+    NEW_AREA_ENTRY: (180, 650),
+    NPC_FIRST_INTRO: (180, 550),
+    NORMAL_EXPLORATION: (140, 420),
+    OBJECT_INSPECTION: (120, 320),
+    NPC_CHAT: (110, 380),
+    REVIEW_MODE: (50, 260),
+    DANGER_BEAT: (150, 450),
+    ENDING: (280, 800),
+    SYSTEM_FEEDBACK: (40, 160),
 }
 
 # 不納入「一般 beat 連續過短」統計的類型（review/系統回饋本就可短）
