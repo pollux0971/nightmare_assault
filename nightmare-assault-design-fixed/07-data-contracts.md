@@ -2,6 +2,13 @@
 
 > 把「系統怎麼運作」補到「程式之間怎麼傳資料」。所有 agent 輸出、前後端 API、JSON 解析策略的具體規格。
 > 本檔給 schema 骨架與策略；**細部欄位會在實作撞到真實 LLM 輸出後微調**，不在此過度規格化。
+>
+> **★ observation 已擴充（補丁九/十）**：step 回傳除既有欄位外，新增 `world_progress`
+> （current_area / area_roles / investigation_state / world_model 投影…）、`spatial_debug` 與
+> `spatial_summary`（空間投影）、以及 World-vs-Truth 分流 debug（`action_class` / `no_truth_intent` /
+> `reveal_gate_allowed` / `reveal_gate_block_reason` / `blocked_reveal_candidates`）。
+> story `DecisionPoint` / NPC `NPCChatResponse` 新增容錯 `entity_delta`。**完整契約見 `16-worldmodel.md` §七、
+> `17-spatial-projection.md`。**
 
 ---
 

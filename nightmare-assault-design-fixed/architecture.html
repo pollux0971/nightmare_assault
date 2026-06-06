@@ -418,7 +418,56 @@
         <span><span class="dot" style="background:var(--blood2)"></span>結局只由玩家明確確認或不可逆後果觸發</span>
         <span><span class="dot" style="background:var(--ghost)"></span>0/X = 低資訊結局，不是失敗畫面</span>
       </div>
-      <div class="note" style="margin-top:.9rem">▍ <span><b>下一層（規劃中）WorldModel</b>：抽象的物件/實體機制（Entity + 狀態機 + affordance），把移動 / 物件 / 出口 / 事實 / NPC / 否定 / 撤退收成<b>同一機制的投影</b>——取代扁平 world_facts 與字串比對否定。「玩家可以不追真相，但世界必須記得他做過什麼。」</span></div>
+      <div class="note" style="margin-top:.9rem">▍ <span><b>下一層（已落地，見下兩頁）WorldModel</b>：抽象的物件/實體機制（Entity + 狀態機 + affordance），把移動 / 物件 / 出口 / 事實 / NPC / 否定 / 撤退收成<b>同一機制的投影</b>——取代扁平 world_facts 與字串比對否定。「玩家可以不追真相，但世界必須記得他做過什麼。」</span></div>
+    </div>
+  </section>
+
+  <!-- 補丁九 · WorldModel + WorldConsequence/TruthEvidence Split -->
+  <section class="slide">
+    <div class="kicker">補丁九 · 開放式探索落地</div>
+    <h2><span class="moss">WorldModel</span> — 世界裡可被指涉的東西，都是一個 Entity</h2>
+    <div class="hr"></div>
+    <div class="grow">
+      <p class="lead" style="font-size:clamp(1.02rem,1.9vw,1.35rem)">
+        <b>玩家行動 ＝ 對某個 Entity 套一個 affordance</b>（inspect / take / move_through / withdraw_to / talk）。
+        套了<b class="moss">必然改某實體 state</b> ⇒「有後果」從用猜的變成<b>結構保證</b>。不再比關鍵字、不再硬寫地名。
+      </p>
+      <div class="grid g4" style="margin-top:1.1rem">
+        <div class="card"><h3>🧩 Entity 狀態機</h3><p><code>kind=area/exit/object/actor/fact</code>，各有抽象狀態機。story/NPC 吐 <b class="moss">structured entity_delta</b>（story:obj/actor/fact；NPC:只 fact/actor），散文抽取為 fallback。</p></div>
+        <div class="card"><h3>🚪 Exit ＋ 角色</h3><p>WorldModel 擁有出口（locked/blocked/used 不可通行）；安全區/現場用 <b>role</b> 不硬寫地名。<b class="blood">撤離鎖</b>：退到安全區 → current_area 真的不被推回、停止自動推進。</p></div>
+        <div class="card"><h3>⚖️ World vs Truth Split</h3><p><b>只有</b> <code>truth_investigation</code> 或合法 structured evidence 才推 reveal；<b class="moss">找路 / 整理 / 引用 NPC fact / 一般檢查</b>都是世界後果，<b>不推真相</b>（被擋的線索記 debug，不更新 ledger）。</p></div>
+        <div class="card"><h3>🗣 NPC 主張 ≠ 真相</h3><p>NPC 講的事走<b>獨立通道</b>進 WorldModel（source/confidence=npc_claim），<b class="blood">永不</b>把真相推到 confirmed——決定性證明仍須玩家親自發現。</p></div>
+      </div>
+      <div class="legend" style="margin-top:1.1rem">
+        <span><span class="dot" style="background:var(--moss)"></span>主題無關：機制不含 lore，內容 runtime 由 LLM 給</span>
+        <span><span class="dot" style="background:var(--blood2)"></span>真 LLM contract regression C1–C7 ALL PASS</span>
+        <span><span class="dot" style="background:var(--ghost)"></span>flag-gated · 不擴場景圖 · 不收斂 world_facts</span>
+      </div>
+      <div class="note" style="margin-top:.9rem">▍ <span>詳見 <code class="moss">16-worldmodel</code>。WorldModel 平行於 kernel，是 current_area / 區域 / 出口 / 實體記憶的<b>唯一權威</b>與觀測來源。</span></div>
+    </div>
+  </section>
+
+  <!-- 補丁十 · Spatial WorldModel Projection + UX 摘要 -->
+  <section class="slide">
+    <div class="kicker">補丁十 · 空間投影</div>
+    <h2><span class="moss">Spatial Projection</span> — WorldModel 的確定性衍生視圖，<b>不叫 LLM 畫地圖</b></h2>
+    <div class="hr"></div>
+    <div class="grow">
+      <p class="lead" style="font-size:clamp(1.02rem,1.9vw,1.35rem)">
+        WorldModel 是事實來源；空間投影是它的<b class="moss">確定性快取</b>——遊戲迴圈<b>永不等它</b>。
+        每 beat 叫 LLM 重畫世界地圖＝又慢又幻覺；正解是<b>狀態 → 確定性投影 → dirty-version 快取</b>。
+      </p>
+      <div class="grid g4" style="margin-top:1.1rem">
+        <div class="card"><h3>🧭 投影（唯讀）</h3><p>current_area / <b>routes</b> / blocked / safe_retreat / <b class="moss">visible</b> vs <b class="ghost">known_remote</b>。撤到安全區 → 站內物件自動轉「已知但不在眼前」。</p></div>
+        <div class="card"><h3>⚡ Dirty-version cache</h3><p>WorldModel <code>version_snapshot()</code>；不變則<b>不重算</b>（O(1)）。同步投影 < 10 ms、<b>零 LLM</b>；async 潤飾為選用，遲到就用確定性文字。</p></div>
+        <div class="card"><h3>🪧 玩家面摘要</h3><p><code>spatial_summary</code>（目前位置 / 可走 / 被阻 / 退路 / 眼前可互動物 / 已知但不在眼前），<b class="moss">deterministic</b>、<b>不餵 story</b>、有字數上限＋截斷旗標。</p></div>
+        <div class="card"><h3>📊 UX selfplay</h3><p>定位 6/6、<b class="moss">零 phantom</b>、visible↔remote 分流完美、簡短不重複。缺口：routes 暫空（kernel 尚未登記 exit 實體）。</p></div>
+      </div>
+      <div class="legend" style="margin-top:1.1rem">
+        <span><span class="dot" style="background:var(--moss)"></span>不呼叫 LLM · 不 mutate WorldModel · 不做幾何/pathfinding</span>
+        <span><span class="dot" style="background:var(--blood2)"></span>不改 reveal gate · 不接 P5（不餵 story context）</span>
+        <span><span class="dot" style="background:var(--ghost)"></span>詳見 17-spatial-projection</span>
+      </div>
     </div>
   </section>
 
@@ -444,7 +493,7 @@
         <span><span class="dot" style="background:var(--ghost)"></span>結構防暴雷：雙層 bible + 權限</span>
       </div>
     </div>
-    <p style="color:var(--faint);font-size:.8rem;text-align:center">Nightmare Assault · 詳見 <code>00-overview</code> · <code>10-progress-kernel</code> · <code>14-runtime-hardgate</code> · <code class="moss">15-player-sovereignty</code>（最新方向）</p>
+    <p style="color:var(--faint);font-size:.8rem;text-align:center">Nightmare Assault · 詳見 <code>00-overview</code> · <code>10-progress-kernel</code> · <code>15-player-sovereignty</code>（方向）· <code class="moss">16-worldmodel</code> · <code class="moss">17-spatial-projection</code>（最新落地）</p>
   </section>
 
 </div>

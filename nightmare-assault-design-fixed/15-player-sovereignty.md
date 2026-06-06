@@ -1,8 +1,10 @@
 # 15 · Player Sovereignty — 從「故事收束型」轉向「開放式恐怖探索型」
 
-> **實作對應**：`docs/player-sovereignty-principles.md`（原則）+ `core/narrative/exit_resolver.py` /
-> `negative_intent.py` / `world_facts.py` + loop WorldProgress + `dev/tools/agent_play.py` 觀測。
-> **狀態**：P0 已落地、已測（740 passed，flag OFF/ON 各一次）；WorldModel（下節）為**規劃中**的下一層。
+> **實作對應**：`core/narrative/exit_resolver.py` / `negative_intent.py` / `world_facts.py` +
+> loop WorldProgress + `dev/tools/agent_play.py` 觀測。**WorldModel 落地層見 `16-worldmodel.md`、
+> 空間投影見 `17-spatial-projection.md`。**
+> **狀態**：P0 + WorldModel + 撤離鎖 + WorldConsequence/TruthEvidence 分流 + 主題無關角色 + Spatial 投影/UX
+> **皆已落地、已測（847 passed，flag OFF/ON 各一次）**；真 LLM contract regression C1–C7 ALL PASS。
 > **一句話**：**你要強制的是「世界要回應玩家」，不是「劇情要走向主線」。**
 
 ---
@@ -62,42 +64,28 @@ changed_exits_this_beat / new_world_facts_this_beat / investigation_state / avai
 
 ---
 
-## 二、下一層（規劃中）：WorldModel — 抽象的「物件 / 實體」機制
+## 二、下一層（**已落地**）：WorldModel — 抽象的「物件 / 實體」機制
 
-實機 selfplay 暴露的問題（系統把玩家往深處推、世界記不住敘述過的袖扣/筆記本、「退到外面」沒真的移動、
-NPC 講的話蒸發）**不是各自的 bug，而是同一個缺失機制的表現：沒有一個「世界裡可被指涉的東西」的模型。**
+> 本節原為「規劃中」，現已全部落地。完整技術細節見 **`16-worldmodel.md`**（機制）、**`17-spatial-projection.md`**（空間投影）。
+> 這裡只留一句話地圖。
 
-之前的 `world_facts`（扁平 string→fact）與字串比對否定，是這個缺口的**權宜替身**。正解是建一個
-**主題無關**的實體模型，把移動、物件、出口、事實、NPC、否定、撤退、「世界記得」全部收成它的投影：
+**核心轉變：世界裡所有「可被指涉的東西」都是一個 Entity；玩家行動 = 對某 Entity 套一個 affordance**
+（不再猜關鍵詞 / 比字串）。套 affordance **必然**改某實體 state ⇒「有後果」變**結構保證**。
 
-```text
-Entity: id / kind(object|area|exit|actor|fact) / label / state / props / affords / origin
-狀態機（抽象，不含主題內容）：
-  object: unseen→noticed→inspected→taken/used
-  exit  : unknown→known→{available|locked|blocked}→used
-  area  : unknown→known→visited→current
-  actor : unknown→present/absent→talked
-  fact  : asserted
-```
+已落地的層（皆 flag-gated、主題無關、不加故事內容）：
 
-**核心轉變：玩家行動 = 對某個 Entity 套用一個 affordance**（不再猜關鍵詞 / 比字串）。
+| 層 | 解決的舊問題 | 對應檔 |
+|---|---|---|
+| **WorldModel**（Entity/狀態機/affordance/store） | 世界記不住、had_consequence 用猜的 | `core/world/model.py` |
+| **structured entity_delta**（story:object/actor/fact；NPC:fact/actor）＋ 抽取 fallback | 物件/NPC 資訊蒸發 | `model.py` / `extractor.py` / `npc_prose_facts.py` |
+| **Exit ownership ＋ ExitResolver（role 目標）** | 退到外面沒移動、出口狀態無模型 | `exit_resolver.py` |
+| **主題無關角色**（safe_zone/site/entry/…） | 硬編碼地名（outside_dock/研究站） | `model.py` roles |
+| **ReviewMode Lock（撤離鎖）** | 撤退只撐 1 beat、整理時仍被推進 | `exploration_mode.py` |
+| **WorldConsequence vs TruthEvidence Split** | 找路/整理/引用 NPC fact 卻誤推 reveal | `action_intent.py` / `truth_evidence_gate.py` |
+| **Spatial 投影 + 玩家面摘要** | AI/玩家看不到空間關係 | `spatial.py` |
 
-| 現有問題 | 在實體模型裡的自然解 |
-|---|---|
-| stay-put 違規 | 「只在原地」= 無 `move_to` 目標 → 不 fire 移動；「不進 B 區」= **拒絕 `move_to(area.B)`** |
-| 世界記不住 | story 敘述袖扣 → 登記 `object.cufflink(noticed)`；之後可 `inspect` → 世界記得 |
-| 退到外面沒移動 | 「外面」是 `area.outside` 實體 → `withdraw_to` 真的改 current_area |
-| NPC 資訊蒸發 | NPC 一句 → `fact`（+ 可選 `area(known_unvisited)`）實體 |
-| recap 標題空白 | 真相碎片就是 `fact` 實體、自帶 label |
-| had_consequence 用猜的 | 套 affordance **必然**改某實體 state → 「有後果」變**結構保證** |
-
-`world_progress` 觀測 = 這個模型的投影；`available_next` = 當前區域實體的 affordances。
-填充：kernel 圖種 area/exit；EntityExtractor 掃 story/NPC 輸出登記實體（機制抽象，主題內容 runtime 由 LLM 給）；
-理想上 story/NPC 回**結構化 entity_delta**，抽取只是 fallback。
-
-> 建置路徑：先立 `core/world/model.py`（Entity + 狀態機 + affordance + store + intent→affordance resolver），
-> 再把 kernel 移動 / ExitResolver / NegativeIntentGuard / world_facts / observation **全部改成它的投影**——
-> 不是再補特例，而是把特例收進同一個抽象機制。
+> 不是再補特例，而是把移動 / 物件 / 出口 / 事實 / NPC / 否定 / 撤退 / 「世界記得」全收進同一個抽象機制的投影。
+> 唯一已知缺口：**kernel 場景轉移尚未在 WorldModel 登記 exit 實體**，故 spatial 的「可走路線」目前為空（見 `17` §六）。
 
 ---
 

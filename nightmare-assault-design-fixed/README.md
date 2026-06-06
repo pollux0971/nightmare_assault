@@ -16,14 +16,16 @@ nightmare-assault-design/
 ├── 06-frontend.md         前端技術規劃（網頁+pywebview、串流渲染、CSS 主題、跨電腦一致性）
 ├── 07-data-contracts.md   資料契約（API contract、Pydantic schema、JSON 解析 fallback、injection 防護）
 ├── 08-engineering.md      工程實作（SQLite schema、並行 patch、錯誤恢復、API key、測試驗收）
-├── 09-revision-notes.md   修訂重點 + 後續補丁里程碑（補丁一～八索引）
+├── 09-revision-notes.md   修訂重點 + 後續補丁里程碑（補丁一～十索引）
 ├── 10-progress-kernel.md  補丁一 · Narrative Progress Kernel（穩定化）
 ├── 11-config-center.md    補丁二 · Config Center / Story Agent 模組化
 ├── 12-mvp-b.md            補丁三 · MVP-B 差異化機制
 ├── 13-narrative-control-v2.md  補丁六 · 敘事控制 v0.2（揭露橋接）
 ├── 14-runtime-hardgate.md      補丁七 · Runtime Hard-Gate（v0.3.1）
-├── 15-player-sovereignty.md    補丁八 · Player Sovereignty / 開放式探索（★最新方向）
-├── architecture.html      架構簡報（12 張投影片）
+├── 15-player-sovereignty.md    補丁八 · Player Sovereignty / 開放式探索（方向）
+├── 16-worldmodel.md            補丁九 · WorldModel 抽象實體機制（開放式探索落地）★
+├── 17-spatial-projection.md    補丁十 · Spatial 空間投影 + 玩家面摘要 ★
+├── architecture.html      架構簡報（14 張投影片）
 ├── architecture-reference.html  架構參考（圖表）
 ├── skills/                8 個 agent 的 prompt（可熱重載）
 └── build/                 AI 開發工具包（讓 AI 一塊塊蓋出系統而不失憶）
@@ -46,10 +48,11 @@ nightmare-assault-design/
 ## 建議閱讀順序
 
 00 → 01 → 02 → 03 → 04 → 06 → 07 → 08 → 05 → skills/README.md → 各 SKILL.md
-→ 補丁里程碑 09 →（10 11 12 13 14）→ **15-player-sovereignty（最新方向，先讀這份）**
+→ 補丁里程碑 09 →（10 11 12 13 14）→ **15-player-sovereignty（方向）→ 16-worldmodel → 17-spatial-projection（最新落地，先讀這三份）**
 
 > **定位提醒**：本作是**開放式恐怖探索遊戲**，不是分支劇情遊戲。核心驗收已從「玩家有沒有推進主線？」
-> 改成「玩家做的事，有沒有留下可檢查的世界後果？」——詳見 `15-player-sovereignty.md`。
+> 改成「玩家做的事，有沒有留下可檢查的世界後果？」——方向見 `15-player-sovereignty.md`，
+> 落地機制見 `16-worldmodel.md`（WorldModel/角色/撤離鎖/World-vs-Truth 分流）與 `17-spatial-projection.md`（空間投影/UX 摘要）。
 
 （07/08 是工程實作層，動代碼前必讀；它們把設計補到「照著寫」的程度）
 

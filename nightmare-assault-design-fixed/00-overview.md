@@ -4,6 +4,11 @@
 > **技術棧**：Python（後端 core）+ 網頁前端（HTML/CSS/JS）+ pywebview（包成桌面應用）+ OpenRouter API。後端維持 Python，前端用網頁技術，pywebview 橋接。
 > **語言**：繁體中文
 > **模式**：無限故事模式（Infinite Story Mode）
+>
+> **★ 最新定位（先讀）**：本作是**開放式恐怖探索遊戲**——驗收標準是「玩家做的事有沒有留下**可檢查的世界後果**」，
+> 不是「有沒有推進主線」。方向見 `15-player-sovereignty.md`；落地機制（WorldModel 抽象實體 / 主題無關角色 /
+> 撤離鎖 / WorldConsequence-vs-TruthEvidence 分流 / 空間投影）見 **`16-worldmodel.md`** 與 **`17-spatial-projection.md`**。
+> 本檔以下為**原始設計理念**（仍成立，但「世界真相驅動」已由 WorldModel 補上一層可被指涉的實體機制）。
 
 ---
 
