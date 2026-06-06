@@ -26,6 +26,13 @@ ENABLE_PROGRESS_KERNEL = _os.environ.get("ENABLE_PROGRESS_KERNEL", "true").strip
 # 預設 OFF（旁路控制層）；ENABLE_NARRATIVE_CONTROL=true 才啟用 opening director / reveal ladder / gates。
 ENABLE_NARRATIVE_CONTROL = _os.environ.get("ENABLE_NARRATIVE_CONTROL", "false").strip().lower() in ("true", "1", "yes", "on")
 
+# ── Opening Variation Contract（補丁 v0.8）──
+# 預設 OFF（獨立旁路層，與 ENABLE_NARRATIVE_CONTROL 無關）；true 才在開局產生 OpeningVariationContract
+# （抽象 archetype 變體池 + cooldown ledger）並讓 story 開場遵守它，避免 紙條/林晨/找人 反覆出現。
+# 關閉時開場流程與補丁前完全一致。
+ENABLE_OPENING_VARIATION_CONTRACT = _os.environ.get(
+    "ENABLE_OPENING_VARIATION_CONTRACT", "false").strip().lower() in ("true", "1", "yes", "on")
+
 # Attractor-based ending（SK13）：結局是吸引子，不是固定終點節點
 DANGER_DEATH_THRESHOLD = 5        # danger_level 累積到此 → 死亡吸引子
 TRUTH_FRAGMENT_THRESHOLD = 2      # 揭露的真相碎片數到此 → 真相吸引子

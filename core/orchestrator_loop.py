@@ -214,6 +214,44 @@ class BeatLoop:
         except Exception as e:                       # 敘事控制失敗不影響開局
             log.warning("narrative contract build skipped: %s", e)
 
+    def _build_opening_variation_contract(self):
+        """補丁 v0.8：產生 OpeningVariationContract（抽象變體池 + cooldown）並存進 game_meta。
+
+        受 ENABLE_OPENING_VARIATION_CONTRACT 控制（預設 OFF；獨立於 ENABLE_NARRATIVE_CONTROL）。
+        失敗一律 graceful：不設契約、不影響開局（B8）。契約決定開場核心素材（動機/錨點/訊息載體/
+        第一個可互動物），StoryAgent 只能執行、不可改回 紙條/林晨/找人。
+        """
+        self._opening_variation_contract = None      # OpeningVariationContract | None
+        self._opening_variation_debug: dict = {}     # observation：選素材 + cooldown debug
+        self._opening_variation_violation: dict = {}  # observation：開場違規/repair/fallback
+        try:
+            from core.constants import ENABLE_OPENING_VARIATION_CONTRACT
+            if not ENABLE_OPENING_VARIATION_CONTRACT:
+                return
+            from core.narrative.opening_variation_selector import generate_opening_contract
+            contract = generate_opening_contract(self.db, self.run_id)
+            self._opening_variation_contract = contract
+            cd = contract.cooldown_debug or {}
+            self._opening_variation_debug = {
+                "motive_archetype": contract.motive_archetype,
+                "personal_anchor_type": contract.personal_anchor_type,
+                "message_medium": contract.message_medium,
+                "first_interactable_type": contract.first_interactable_type,
+                "forbidden_literals": list(contract.forbidden_literals),
+                "forbidden_archetypes": list(contract.forbidden_archetypes),
+                "cooldown_applied": bool(cd.get("cooldown_applied")),
+                "cooldown_exhausted": bool(cd.get("cooldown_exhausted")),
+                "selector_seed": cd.get("selector_seed"),
+            }
+            # 存 game_meta（供 npc-chat/前端/QA 讀；不含任何 real_bible / hidden_truth）
+            self.bb.game_meta = {**self.bb.game_meta,
+                                 "opening_variation_contract": contract.to_dict()}
+            log.info("opening variation contract built (motive=%s medium=%s anchor=%s)",
+                     contract.motive_archetype, contract.message_medium,
+                     contract.personal_anchor_type)
+        except Exception as e:                       # 開場變體失敗不影響開局
+            log.warning("opening variation contract build skipped: %s", e)
+
     def _init_kernel_from_setup(self):
         """依 setup 輸出建 scene graph provider：explicit → generated（主題化）→ static → legacy。"""
         snap = self.bb.snapshot()
@@ -245,6 +283,7 @@ class BeatLoop:
         self._snapshot_run_config()                 # P6：每場 run 存 config/prompt-hash 快照
         self._derive_known()
         self._build_narrative_contract()            # NC1：旁路敘事控制（flag OFF 時不動）
+        self._build_opening_variation_contract()    # 補丁 v0.8：開場變體契約（獨立 flag，OFF 時不動）
         if on_opening:
             on_opening(opening)
 
@@ -267,7 +306,13 @@ class BeatLoop:
                                       system_override=self._story_system(None))
         self.last_story = narrative
         self._safe_point(narrative, dp)
-        return {"opening_sequence": opening, "narrative": narrative, "decision_point": dp}
+        out = {"opening_sequence": opening, "narrative": narrative, "decision_point": dp}
+        # 補丁 v0.8：開場變體 observation（flag OFF / 失敗時為空 dict，與補丁前一致）
+        if getattr(self, "_opening_variation_debug", None):
+            out["opening_variation"] = self._opening_variation_debug
+        if getattr(self, "_opening_variation_violation", None):
+            out["opening_variation_violation"] = self._opening_variation_violation
+        return out
 
     def step(self, player_decision: str, input_path: str = "free_text",
              on_event=None, on_progress=None) -> dict:
@@ -308,9 +353,96 @@ class BeatLoop:
                 ctx = apply_to_context(ctx, self._narrative_contract)
         except Exception as e:                       # 開場富化失敗也要能開局（保底用原 ctx）
             log.warning("opening hook enrich skipped: %s", e)
-        return run_story(self.caller, self.bb, "（序章）", 0,
-                         context_override=ctx, on_event=on_event,
-                         system_override=self._story_system(ctx))
+
+        # 補丁 v0.8 P5：把 OpeningVariationContract 注入序幕（story 只能執行，不可改回 紙條/找人/固定姓名）
+        contract = getattr(self, "_opening_variation_contract", None)
+        if contract is not None:
+            try:
+                from core.narrative.opening_variation_prompt import apply_contract_to_context
+                ctx = apply_contract_to_context(ctx, contract)
+            except Exception as e:
+                log.warning("opening variation ctx inject skipped: %s", e)
+
+        bw_pre_len = len(getattr(self.bb, "beat_window", []) or [])   # 序幕重寫/fallback 收斂用
+        narrative, dp = run_story(self.caller, self.bb, "（序章）", 0,
+                                  context_override=ctx, on_event=on_event,
+                                  system_override=self._story_system(ctx))
+
+        # 補丁 v0.8 P6：開場違規檢查 → repair once → deterministic fallback
+        if contract is not None:
+            narrative, dp = self._enforce_opening_variation(
+                contract, ctx, narrative, dp, on_event, bw_pre_len)
+        return narrative, dp
+
+    def _enforce_opening_variation(self, contract, ctx, narrative, dp, on_event, bw_pre_len):
+        """掃開場違規；違規則 repair 一次，仍違規用決定性 fallback。回 (narrative, dp)。"""
+        try:
+            from core.narrative.opening_variation_gate import (
+                check_opening_output, violations_to_debug)
+            from core.narrative.opening_variation_prompt import (
+                fallback_opening, repair_instruction)
+        except Exception as e:                       # gate 模組載入失敗不影響開局
+            log.warning("opening variation gate skipped: %s", e)
+            return narrative, dp
+
+        def _check(text):
+            return check_opening_output(
+                text,
+                forbidden_literals=contract.forbidden_literals,
+                forbidden_archetypes=contract.forbidden_archetypes,
+                expected_message_medium=contract.message_medium)
+
+        violations = _check(narrative)
+        repair_attempted = False
+        fallback_used = False
+        if violations:
+            repair_attempted = True
+            try:                                     # repair：補一段重寫指令再跑一次 story
+                rctx = dict(ctx)
+                rctx["instruction"] = (rctx.get("instruction", "") + "\n\n"
+                                       + repair_instruction(contract, violations)).strip()
+                r_narr, r_dp = run_story(self.caller, self.bb, "（序章·重寫）", 0,
+                                         context_override=rctx, on_event=on_event,
+                                         system_override=self._story_system(rctx))
+                if not _check(r_narr):               # 修好了才採用
+                    narrative, dp, violations = r_narr, r_dp, []
+                else:
+                    narrative, dp, violations = r_narr, r_dp, _check(r_narr)
+            except Exception as e:
+                log.warning("opening repair failed: %s", e)
+            if violations:                           # 仍違規 → 決定性 fallback（保證乾淨）
+                fb_narr, fb_dp = fallback_opening(contract)
+                narrative, dp = fb_narr, fb_dp
+                fallback_used = True
+                violations = _check(narrative)       # 應為空
+            # repair/fallback 期間每次 run_story 都 append 了臨時 beat_window 記錄；
+            # 收斂成單一最終版（移除這個 intro beat 的所有暫存，重補最終 narrative）。
+            try:
+                bw = getattr(self.bb, "beat_window", None)
+                if isinstance(bw, list):
+                    del bw[bw_pre_len:]
+                self.bb.write("story", "beat_window",
+                              {"beat_number": 0, "narrative": narrative,
+                               "is_narration_only": dp.is_narration_only})
+                self.bb.write("story", "turn_context.narrative_output", narrative)
+            except Exception:
+                pass
+
+        self._opening_variation_violation = {
+            "has_violation": bool(violations),
+            "violations": violations_to_debug(violations),
+            "repair_attempted": repair_attempted,
+            "fallback_used": fallback_used,
+        }
+        try:
+            self.bb.game_meta = {**self.bb.game_meta,
+                                 "opening_variation_violation": self._opening_variation_violation}
+        except Exception:
+            pass
+        if repair_attempted or fallback_used:
+            log.info("opening variation enforced (repair=%s fallback=%s remaining_viol=%d)",
+                     repair_attempted, fallback_used, len(violations))
+        return narrative, dp
 
     def _step_kernel(self, player_decision, input_path, on_event, on_progress) -> dict:
         _p = on_progress or (lambda *_: None)
