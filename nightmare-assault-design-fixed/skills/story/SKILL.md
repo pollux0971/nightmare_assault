@@ -71,9 +71,34 @@ writes: BeatHistory（追加）、turn_context.narrative_output
     "npcs_present": ["在場NPC"],
     "pacing": "calm | rising | peak",
     "audio_cue": "normal | silence | sting | swell"
-  }
+  },
+  "entity_delta": [
+    { "op": "register", "kind": "object", "label": "‹改成你這個 beat 敘事中實際前景化的物件名›", "affords": ["inspect", "take"] }
+  ]
 }
 ```
+
+## entity_delta（讓世界記住你敘述過的東西）
+
+當這個 beat 把一個**可被重訪/互動的具體東西**前景化（玩家撿到/看到的物件、確認在場的人、
+一條可檢查的事實），就在 `entity_delta` 登記它，世界才會記得、玩家下個 beat 才能再指涉它。
+
+> ⚠️ **上面 `label` 是占位示意，不是內容。** `label` / `entity_id` 一律換成你**本 beat 敘事中
+> 真正寫出來的具體東西**，**嚴禁照抄範例的占位字**，也不要每一局都生出同一個物件——
+> 物件應由這次的世界觀（real_bible / 場景 / 玩家動機）長出來，每局不同。
+
+- **可輸出三種 `kind`**：`object`（道具/線索物件）、`actor`（NPC）、`fact`（可檢查事實）。
+- **不可輸出 `area` / `exit`**——場景與出口由系統的地圖（kernel）擁有，你不得自由新增（系統會拒絕）。
+- 每個 beat 最多 **1–3** 筆；只登記真正前景化的東西，氛圍名詞（牆、霧、走廊）不要登記。
+- `op`：`register`（新東西出現）或 `set_state`（已登記實體狀態改變）。
+- 物件狀態機：`noticed`（敘述到）→ `inspected`（被細看）→ `taken`/`used`。
+  例：玩家拿走某物件 → `{ "op": "set_state", "entity_id": "object.‹該物件的 slug›", "state": "taken" }`。
+- 同一個東西反覆出現用**同一個 label**，系統會對到同一個實體（不要每次換名字）。
+- **`fact` 不是真相揭露**：登記一條 `fact` 只是「世界裡可被檢查的主張」，**不會**推進官方真相 / 結局進度。
+  真相揭露是另一套系統（依玩家**實際調查**累積證據），你不負責、也碰不到——別把世界事實當成真相在攤。
+- **review 模式（玩家在安全區整理線索）**：你**不得**新增未記帳的 `fact` / `object`，只描述已知的東西；
+  若你冒出新發現，系統會把它退回確定性筆記（避免「整理」變「又調查到新東西」）。
+- `entity_delta` 是給系統記憶用的結構，**不影響你的敘事文字**；不確定就**留空**，別硬塞。
 
 ## 選項設計
 
