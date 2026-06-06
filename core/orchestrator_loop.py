@@ -372,6 +372,9 @@ class BeatLoop:
         if contract is not None:
             narrative, dp = self._enforce_opening_variation(
                 contract, ctx, narrative, dp, on_event, bw_pre_len)
+        # NR7/HD2：開場也要表層消毒（與 step 路徑一致；清壞分隔符 / 內部識別碼 / placeholder 殘片）
+        narrative = self._sanitize_surface(narrative)
+        dp = self._sanitize_decision_point(dp)
         return narrative, dp
 
     def _enforce_opening_variation(self, contract, ctx, narrative, dp, on_event, bw_pre_len):

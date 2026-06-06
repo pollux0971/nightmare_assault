@@ -59,5 +59,5 @@ def extract_entities(narrative: str, *, npc_names: list | None = None) -> list[W
         if name and name in t and f"actor.{name}" not in seen:
             seen.add(f"actor.{name}")
             out.append(WorldDelta(op="register", kind=ACTOR, label=name,
-                                  id=f"actor.{name}", origin="extractor"))
+                                  entity_id=f"actor.{name}", origin="extractor"))
     return out
