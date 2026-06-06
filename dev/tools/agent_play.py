@@ -281,6 +281,8 @@ def _dp_to_obs(loop, narrative, dp, ended, ending, step_result=None) -> dict:
         "player_state_summary_truncated": (step_result or {}).get("player_state_summary_truncated", False),
         "player_state_summary_source": (step_result or {}).get(
             "player_state_summary_source", "deterministic_projection"),
+        # PlayerState Payoff：本 beat 取得物件 / 新知主張 / 跳過原因
+        "player_state_debug": (step_result or {}).get("player_state_debug", {}),
         # Step 6：自然指代解析 debug
         "entity_resolution": (step_result or {}).get("entity_resolution", {}),
         # Spatial UX：玩家/QA 可讀摘要（top-level，方便顯示/記錄；deterministic、不餵 story）

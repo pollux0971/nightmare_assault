@@ -478,6 +478,10 @@ class BeatLoop:
         self._beat_rendering = {}
         # Step 5：本 beat 變更明細（id/kind/reason/from_state/to_state；每 beat 重置）
         self._changed_entities_detail = []
+        # PlayerState Payoff：本 beat 的物件/已知主張沉澱 debug（每 beat 重置）
+        self._inventory_delta_this_beat = []
+        self._known_fact_delta_this_beat = []
+        self._skipped_materialization_reason = ""
 
         # 1. warden（致命規則/技能/結局，僅玩家）
         _p("warden")
@@ -584,6 +588,8 @@ class BeatLoop:
                 self._story_evidence_tick(player_decision, narrative, _changed)
             # Reveal Reward Loop：gate-allowed truth_investigation 保證可觀測回報或 no_progress_reason
             self._reveal_reward_tick()
+            # PlayerState Payoff：揭露進度（observed+）→ public-safe known_fact（只讀帳本投影，不推 reveal）
+            self._materialize_public_facts()
         # P0 WorldStateFact：從 story 敘事抽世界事實（NPC fact 由 bridge_npc_evidence 處理）
         if ENABLE_NARRATIVE_CONTROL:
             # 撤離鎖：review 模式不新增 world_fact（requirement 4：只生 notes，不新增 fact）
@@ -654,6 +660,12 @@ class BeatLoop:
                 "player_state_summary": _pss,
                 "player_state_summary_truncated": _pst,
                 "player_state_summary_source": PLAYER_STATE_SUMMARY_SOURCE,
+                # PlayerState Payoff：本 beat 玩家行動沉澱 debug（取得物件 / 新知主張 / 跳過原因）
+                "player_state_debug": {
+                    "inventory_delta_this_beat": list(getattr(self, "_inventory_delta_this_beat", [])),
+                    "known_fact_delta_this_beat": list(getattr(self, "_known_fact_delta_this_beat", [])),
+                    "skipped_materialization_reason": getattr(self, "_skipped_materialization_reason", ""),
+                },
                 # Step 6：自然指代解析（那枚/剛才那個/他說的地方 → entity id；唯讀、不建 entity、不推 reveal）
                 "entity_resolution": _er,
                 # P0 #4：WorldProgress（current_area/known_areas/世界事實/investigation_state）
@@ -1083,6 +1095,10 @@ class BeatLoop:
                 else:
                     # fallback：EntityExtractor 掃敘事（story 沒給結構化 delta 時才用）。
                     self._world.apply_deltas(extract_entities(narrative, npc_names=self.known_npcs))
+            # PlayerState Payoff：玩家明確「撿起/拿走/收起/放入口袋/保存/帶著」物件 → 標 taken（沉澱進 inventory）。
+            # **先於檢查**處理：taken 物件會被下面的 inspect 迴圈跳過（不回退）。review 模式不新增 object，但
+            # 既有物件仍可被拿走。檢查/觀察/比對等不含 take 動詞者一律不自動 taken。
+            self._materialize_inventory(action)
             # 玩家明確檢查物件 → 標 inspected（只動既有 entity，不新增；review 模式也允許）
             # 已拿走/用掉(taken/used)的物件不再「地面檢查」回退——避免把隨身物從 inventory 還原（Step 5）。
             if any(v in (action or "") for v in ("檢查", "查看", "檢視", "端詳", "研究", "翻看")):
@@ -1097,6 +1113,16 @@ class BeatLoop:
                 eid for eid, st in after.items() if before.get(eid) != st]
             # Step 5 P3：本 beat 變更明細（id/kind/reason/from→to；reason 只從 delta/state 推，不猜敘事）
             self._changed_entities_detail = self._build_changed_detail(before, after)
+            # PlayerState Payoff：從本 beat 變更明細統一推 inventory / known_fact 沉澱 delta
+            from core.world.model import FACT as _FACT
+            from core.world.player_state import REASON_TAKEN as _R_TAKEN, REASON_FACT_ASSERTED as _R_FACT
+            for d in self._changed_entities_detail:
+                if d["reason"] == _R_TAKEN:
+                    self._inventory_delta_this_beat.append({"id": d["id"], "label": d["label"]})
+                elif d["kind"] == _FACT and d["reason"] == _R_FACT:   # 新登記的 fact（story/extractor/npc）
+                    self._known_fact_delta_this_beat.append(
+                        {"id": d["id"], "label": d["label"], "state": d["to_state"],
+                         "source": d.get("source")})
             # Step 5 P2：依本 beat 互動更新 current_focus / recent（review 不亂改焦點）
             if not review_locked:
                 self._update_focus_from_changes(self._changed_entities_detail)
@@ -1115,6 +1141,82 @@ class BeatLoop:
             self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
         except Exception as e:
             log.warning("world model tick skipped: %s", e)
+
+    # ── PlayerState Payoff：取得 / 確認 → 沉澱進既有 PlayerState surface ───────────
+    _TAKE_VERBS = ("撿起", "拾起", "拿起", "拿走", "取走", "取下", "收起", "收好", "收進", "收入",
+                   "放入口袋", "放進口袋", "塞進口袋", "塞進", "裝進", "裝入", "帶走", "帶上", "帶著",
+                   "揣進", "揣著", "納入", "放進背包", "放入背包", "保存", "留著")
+
+    def _materialize_inventory(self, action: str):
+        """take 動詞 + resolver 對到 object → 標 taken（沉澱進 inventory）；記 inventory_delta / skip 原因。
+
+        只在動作含 take 動詞時運作（檢查/觀察/比對等不自動 taken）。目標解析：先 label-token 命中既有物件，
+        否則用 alias resolver（extract_reference → resolve_entity_reference）對到 **object** entity。
+        """
+        act = action or ""
+        if not any(v in act for v in self._TAKE_VERBS):
+            return
+        from core.world.model import OBJECT
+        # 1) label-token 命中（與 inspect 同法）——可拿走未 taken/used 的物件
+        target = None
+        for o in self._world.by_kind(OBJECT):
+            if o.state in ("taken", "used"):
+                continue
+            if any(tok and tok in act for tok in (o.label or "").split()):
+                target = o
+                break
+        # 2) 無 label 命中 → alias resolver 對既有 entity（只接受 object）
+        if target is None:
+            try:
+                from core.world.alias_resolver import extract_reference, resolve_entity_reference
+                ref = extract_reference(act)
+                if ref:
+                    res = resolve_entity_reference(
+                        ref, world=self._world,
+                        current_focus=getattr(self, "_current_focus", None),
+                        recent_entities=getattr(self, "_recent_entities", []),
+                        visible_entities=(self.spatial_debug().get("visible_entities") or []))
+                    rid = res.get("resolved_entity_id")
+                    e = self._world.get(rid) if rid else None
+                    if e is not None and e.kind == OBJECT and e.state not in ("taken", "used"):
+                        target = e
+            except Exception:
+                target = None
+        if target is None:
+            self._skipped_materialization_reason = "take_verb_no_object_resolved"
+            return
+        self._world.take(target.id)   # inventory_delta 由 tick 從 changed_detail 統一推算（避免重複）
+
+    def _materialize_public_facts(self):
+        """Reveal → public-safe known_fact：observed+ 的真相投影成 WorldModel fact entity（source=reveal）。
+
+        **只用 title 標題，永不放 hidden content**；confirmed_public 只在 ledger 真到 confirmed+ 才出現
+        （reward 上限 suspected）。此處只**讀**帳本投影，不推 reveal、不動帳本。記 known_fact_delta。
+        """
+        if self._world is None or self._reveal_ledger is None:
+            return
+        try:
+            from core.world.model import FACT
+            from core.narrative.revelation import reveal_public_facts
+            for pf in reveal_public_facts(self._reveal_ledger):
+                eid = f"fact.reveal.{pf['truth_id']}"
+                e = self._world.get(eid)
+                if e is None:
+                    self._world.register(
+                        FACT, pf["title"], id=eid, state=pf["level"],
+                        props={"source": "reveal", "confidence": pf["level"],
+                               "truth_id": pf["truth_id"], "public": True, "tags": ["reveal"]},
+                        origin="reveal")
+                    self._known_fact_delta_this_beat.append(
+                        {"id": eid, "label": pf["title"], "state": pf["level"], "source": "reveal"})
+                elif e.state != pf["level"]:
+                    self._world.set_state(eid, pf["level"])
+                    e.props["confidence"] = pf["level"]
+                    self._known_fact_delta_this_beat.append(
+                        {"id": eid, "label": e.label, "state": pf["level"], "source": "reveal"})
+            self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
+        except Exception as e:                           # 投影失敗不影響推進（B8）
+            log.warning("public fact materialization skipped: %s", e)
 
     def _build_changed_detail(self, before: dict, after: dict) -> list:
         """Step 5 P3：把本 beat 的 state 變更轉成 {id/label/kind/reason/from_state/to_state}（不猜敘事）。"""
@@ -1309,9 +1411,13 @@ class BeatLoop:
         try:
             from core.world.spatial import build_spatial_projection
             mode = getattr(self, "_exploration_mode", "active_exploration")
+            # PlayerState Payoff：focus 在某 taken 物件上時，spatial 仍把它算 visible（剛撿起/正在端詳）
+            foc = getattr(self, "_current_focus", None)
+            focus_id = (foc or {}).get("id") if isinstance(foc, dict) else None
             cache = getattr(self, "_spatial_cache", None)
-            builder = lambda _w: build_spatial_projection(_w, exploration_mode=mode)
-            proj = (cache.get_or_build(w, builder, profile=mode)
+            builder = lambda _w: build_spatial_projection(
+                _w, exploration_mode=mode, focus_id=focus_id)
+            proj = (cache.get_or_build(w, builder, profile=f"{mode}|f={focus_id}")
                     if cache is not None else builder(w))
             return proj.to_debug_dict()
         except Exception as e:                           # 投影失敗不影響推進（B8）

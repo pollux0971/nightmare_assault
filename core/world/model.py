@@ -312,6 +312,20 @@ class WorldModel:
             self._bump_kind(OBJECT)
         return e
 
+    def take(self, ref: str) -> Entity | None:
+        """玩家撿起/拿走某物件 → 標 taken + props.carried（沉澱進 inventory）。
+
+        已 used 的物件不再回收為 taken（避免把用掉的東西復原）。回被改的 Entity（無則 None）。
+        """
+        e = self.find(ref, kind=OBJECT)
+        if e is None or e.state == "used":
+            return None
+        if e.state != "taken":
+            e.state = "taken"
+            e.props["carried"] = True
+            self._bump_kind(OBJECT)
+        return e
+
     def tag_entity_area(self, eid: str, area_id: str) -> bool:
         """把物件/NPC 綁到所在區域（供 spatial visible/remote 判斷）。只在未綁定時設。"""
         e = self.entities.get(eid)

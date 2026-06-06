@@ -113,8 +113,13 @@ def _exit_from_to(e) -> tuple:
 
 
 def build_spatial_projection(world, *, limits: dict | None = None,
-                             exploration_mode: str = "active_exploration") -> SpatialProjection:
-    """從 WorldModel 建**確定性唯讀**投影（不改 WorldModel、不呼叫 LLM）。"""
+                             exploration_mode: str = "active_exploration",
+                             focus_id: str | None = None) -> SpatialProjection:
+    """從 WorldModel 建**確定性唯讀**投影（不改 WorldModel、不呼叫 LLM）。
+
+    focus_id：當前焦點實體 id。已 taken/used 的物件一律不算地面 visible（已進 inventory），
+    **除非當前 focus 正在檢視它**（剛撿起/正在端詳）——此時仍顯示在眼前。
+    """
     lim = {**DEFAULT_LIMITS, **(limits or {})}
     cur = world.current_area
     cur_e = world.get(cur) if cur else None
@@ -145,8 +150,9 @@ def build_spatial_projection(world, *, limits: dict | None = None,
                                  roles=list(getattr(ent, "roles", []) or []), area=area)
         if ent.kind == FACT:
             remote.append(view)                          # fact 是「知道」非「看見」→ 一律 remote
-        elif ent.kind == OBJECT and ent.state in ("taken", "used"):
+        elif ent.kind == OBJECT and ent.state in ("taken", "used") and ent.id != focus_id:
             continue                                     # 已拿走/用掉 → 進 inventory，不算地面 visible
+                                                         # （除非正是當前 focus：剛撿起/正在端詳 → 仍可見）
         elif area in (None, cur):
             visible.append(view)                         # 物件/NPC 綁在本區（或未綁定）→ 可見
         else:

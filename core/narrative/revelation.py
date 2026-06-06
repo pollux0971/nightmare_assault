@@ -196,6 +196,26 @@ def apply_reveal_reward(ledger: RevealLedger, *, beat: int | None = None,
     return (updates[0] if updates else None), target.truth_id, prev, target.level
 
 
+# ── Reveal → public-safe known_fact 投影（PlayerState Payoff）──────────────────
+# 揭露進度（observed+）→ 可檢視的 public known_fact：**只用 title 標題，永不放 hidden content**。
+# confirmed_public 只在 ledger 真的到 confirmed+（強證據/結構化 evidence）才出現——reward 上限 suspected。
+_PUBLIC_LEVEL = {"observed": "observed", "suspected": "suspected",
+                 "confirmed": "confirmed_public", "actionable": "confirmed_public"}
+
+
+def reveal_public_facts(ledger: RevealLedger) -> list[dict]:
+    """把 observed+ 的真相投影成 public-safe fact 描述（title + 公開等級，**無 content**）。
+
+    回 [{truth_id, title, level}]；hidden/hinted → 不投影（太弱，只是暗示）。
+    """
+    out: list[dict] = []
+    for t in ledger.truths.values():
+        pub = _PUBLIC_LEVEL.get(t.level)
+        if pub:
+            out.append({"truth_id": t.truth_id, "title": t.title or "未命名的真相", "level": pub})
+    return out
+
+
 # ── 建帳本 / 寫進 revealed_bible ─────────────────────────────────────────────
 def build_ledger_from_bible(real_bible: dict | None) -> RevealLedger:
     """從 real_bible.revelation_pool 種出各碎片（全 hidden，帶 title/content）。"""
