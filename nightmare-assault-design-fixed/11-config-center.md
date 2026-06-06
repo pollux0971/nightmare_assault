@@ -3,6 +3,13 @@
 > **補丁來源**：`nightmare-assault-story-doc-patch-batch-v1.1/`（docs-first）。
 > **實作對應**：開發工單階段 P（`P0`–`P7`）。**狀態：已落地、已測**（`ENABLE_CONFIG_CENTER` 預設 OFF）。
 > **核心一句**：把各 agent（先 story）的 prompt 拆成**可配置 fragment**，可組裝 / 可預覽 / 可快照 / 可回滾——而不破壞 MVP-A。
+>
+> **★ GUI 完成（v0.8，補丁十二）**：前端配置中心補成完整 **Agent Configuration Center**——**Agent Models 表**
+> （每 agent primary/fallbacks/temp/max_tokens/enabled，可 Save + 每行 Test；**絕不顯示 api_key**）、
+> **Prompt Blocks 表**（含 disabled binding，enabled 開關 / Edit / Save Draft / Activate；sort_order/Rollback 後端
+> 無 API → disabled 標示）、**Compiled Preview** by agent/profile（零 LLM）、Test Prompt（後端未支援 → disabled）、
+> dirty state + 未存提示 + toast。**只補前端 + API glue（`agent_models_overview`/`save_agent_models`/
+> `list_prompt_blocks`/`set_fragment_enabled` + `schema.get_all_bindings`），不改 runtime。**
 
 ---
 

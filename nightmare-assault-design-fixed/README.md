@@ -25,6 +25,7 @@ nightmare-assault-design/
 ├── 15-player-sovereignty.md    補丁八 · Player Sovereignty / 開放式探索（方向）
 ├── 16-worldmodel.md            補丁九 · WorldModel 抽象實體機制（開放式探索落地）★
 ├── 17-spatial-projection.md    補丁十 · Spatial 空間投影 + 玩家面摘要 ★
+├── 18-player-surface.md        補丁十一/十三 · 玩家體驗投影層（NPC onboarding / beat rendering / PlayerState / Alias）★
 ├── architecture.html      架構簡報（14 張投影片）
 ├── architecture-reference.html  架構參考（圖表）
 ├── skills/                8 個 agent 的 prompt（可熱重載）
@@ -48,11 +49,16 @@ nightmare-assault-design/
 ## 建議閱讀順序
 
 00 → 01 → 02 → 03 → 04 → 06 → 07 → 08 → 05 → skills/README.md → 各 SKILL.md
-→ 補丁里程碑 09 →（10 11 12 13 14）→ **15-player-sovereignty（方向）→ 16-worldmodel → 17-spatial-projection（最新落地，先讀這三份）**
+→ 補丁里程碑 09 →（10 11 12 13 14）→ **15-player-sovereignty（方向）→ 16-worldmodel → 17-spatial-projection
+→ 18-player-surface（最新落地，先讀這四份）**
 
 > **定位提醒**：本作是**開放式恐怖探索遊戲**，不是分支劇情遊戲。核心驗收已從「玩家有沒有推進主線？」
 > 改成「玩家做的事，有沒有留下可檢查的世界後果？」——方向見 `15-player-sovereignty.md`，
-> 落地機制見 `16-worldmodel.md`（WorldModel/角色/撤離鎖/World-vs-Truth 分流）與 `17-spatial-projection.md`（空間投影/UX 摘要）。
+> 落地機制見 `16-worldmodel.md`（WorldModel/角色/撤離鎖/World-vs-Truth 分流）、`17-spatial-projection.md`
+> （空間投影/UX 摘要）、`18-player-surface.md`（NPC onboarding / beat rendering / PlayerState / Alias Resolver）。
+>
+> **開放式探索核心已完整**：WorldModel 記得世界 · SpatialSummary 告訴你在哪 · PlayerState 告訴你有什麼/知道什麼 ·
+> AliasResolver 讓你自然指涉剛才的東西。
 
 （07/08 是工程實作層，動代碼前必讀；它們把設計補到「照著寫」的程度）
 
