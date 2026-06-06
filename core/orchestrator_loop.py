@@ -148,6 +148,8 @@ class BeatLoop:
         self._world_kernel_scene = None              # WorldModel 上次同步到的 kernel 場景（偵測真正移動）
         from core.world.spatial import SpatialProjectionCache
         self._spatial_cache = SpatialProjectionCache()  # P1：確定性投影 dirty-version 快取
+        self._short_beat_streak = 0                  # v0.7 P3：一般 beat 連續過短計數
+        self._prev_danger_level = 0                  # v0.7 P3：偵測 danger_delta
         # NR5/NR6：母題冷卻 + 動機心跳（旁路）
         self._motif_tracker = None
         self._motive_heartbeat = None
@@ -328,6 +330,10 @@ class BeatLoop:
         self._new_world_facts_this_beat = []
         # WorldModel：本 beat 被新增/變更狀態的實體 id（每 beat 重置）
         self._changed_entities_this_beat = []
+        # v0.7 P3：beat 渲染量測（每 beat 重置）
+        self._scene_changed_this_beat = False
+        self._new_actor_this_beat = False
+        self._beat_rendering = {}
 
         # 1. warden（致命規則/技能/結局，僅玩家）
         _p("warden")
@@ -474,6 +480,7 @@ class BeatLoop:
 
         self._finalize_ending()
         dp = self._enforce_ended_invariant(dp)       # HA1：ended ⇒ 無 options
+        self._measure_beat_rendering(narrative)      # v0.7 P3：量測 beat 渲染（不修復）
         return {"narrative": narrative, "decision_point": dp, "warden": verdict,
                 "committed_event": progress.committed_event,
                 "progress_delta": progress.patch.progress_delta,
@@ -488,6 +495,8 @@ class BeatLoop:
                 "reveal_gate_allowed": bool(getattr(self, "_reveal_gate_allowed", True)),
                 "reveal_gate_block_reason": getattr(self, "_reveal_gate_reason", ""),
                 "blocked_reveal_candidates": list(getattr(self, "_blocked_reveal_candidates", [])),
+                # v0.7 P3：beat 渲染量測（beat_type/目標字數/實際字數/too_short/short_streak；不修復）
+                "beat_rendering": dict(getattr(self, "_beat_rendering", {}) or {}),
                 # P0 #4：WorldProgress（current_area/known_areas/世界事實/investigation_state）
                 "world_progress": self.world_progress(dp),
                 # Spatial WorldModel Projection（確定性、唯讀、快取；無 LLM）
@@ -906,6 +915,7 @@ class BeatLoop:
                 if _e is not None and _e.label == scene:
                     self._world.set_label(scene, self._area_label(scene))
                 self._world_kernel_scene = scene
+                self._scene_changed_this_beat = True  # v0.7 P3：本 beat 換了區域
             # 撤離鎖時**不新增** story object entity（requirement 3）；否則優先結構化 entity_delta。
             if not review_locked:
                 story_deltas = coerce_entity_deltas(getattr(dp, "entity_delta", None))
@@ -926,12 +936,45 @@ class BeatLoop:
             # Spatial：只把本 beat **新登記**的物件/NPC 綁到當前區域（供 visible/remote）。
             # 只認新登記（不認 state 變更）——避免把狀態變動的「遠處」物件誤綁到當前區。
             cur = self._world.current_area
+            newly_registered = [e for e in after if e not in before]
             if cur and not review_locked:
-                for eid in (e for e in after if e not in before):
+                for eid in newly_registered:
                     self._world.tag_entity_area(eid, cur)
+            # v0.7 P3：本 beat 是否首次出現某 NPC（新登記的 actor 實體）
+            from core.world.model import ACTOR
+            if any((self._world.get(eid) or None) and self._world.get(eid).kind == ACTOR
+                   for eid in newly_registered):
+                self._new_actor_this_beat = True
             self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
         except Exception as e:
             log.warning("world model tick skipped: %s", e)
+
+    def _measure_beat_rendering(self, narrative: str):
+        """v0.7 P3：分類 beat_type、量測字數、累計「一般 beat 連續過短」。**只量測、不修復（P4 未開）。**"""
+        try:
+            from core.narrative.beat_rendering import classify_beat_type, evaluate_beat_rendering
+            from core.narrative.exploration_mode import is_review_locked
+            review_locked = is_review_locked(getattr(self, "_exploration_mode", "active_exploration"))
+            gs = getattr(self, "_game_state", None)
+            danger = int(getattr(gs, "danger_level", 0) or 0)
+            danger_delta = danger - int(getattr(self, "_prev_danger_level", 0) or 0)
+            bt = classify_beat_type(
+                review_locked=review_locked, ended=bool(self.ended), is_opening=False,
+                action_class=getattr(self, "_action_class", None),
+                scene_changed=bool(getattr(self, "_scene_changed_this_beat", False)),
+                npc_first_intro=bool(getattr(self, "_new_actor_this_beat", False)),
+                danger_delta=danger_delta)
+            self._beat_rendering = evaluate_beat_rendering(
+                narrative, bt, prev_short_streak=int(getattr(self, "_short_beat_streak", 0) or 0))
+            self._short_beat_streak = self._beat_rendering["short_streak"]
+            self._prev_danger_level = danger
+            if self._beat_rendering["too_short"]:
+                log.info("beat too short: type=%s actual=%s<min=%s streak=%s",
+                         bt, self._beat_rendering["actual_chars"],
+                         self._beat_rendering["target_min_chars"], self._short_beat_streak)
+        except Exception as e:                           # 量測失敗不影響推進
+            log.warning("beat rendering measure skipped: %s", e)
+            self._beat_rendering = {}
 
     def _world_facts_tick(self, text: str, *, source: str = "story") -> list:
         """P0：從文字抽 world_state_fact 寫進 game_meta（即使沒 truth reveal 也留可檢查後果）。"""

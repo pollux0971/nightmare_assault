@@ -235,6 +235,8 @@ def _debug_block(loop, step_result) -> dict:
         "evidence_events_this_beat": sr.get("evidence_events_this_beat", 0),
         "unmapped_evidence_this_beat": sr.get("unmapped_evidence_this_beat", 0),
         "reveal_updates_this_beat": sr.get("reveal_updates", []),   # 僅 truth_id/from/to，無 content
+        # v0.7 P3：beat 渲染量測（beat_type/target/actual/too_short/short_streak）
+        "beat_rendering": sr.get("beat_rendering", {}),
         # WorldConsequence vs TruthEvidence split：分類 + reveal 閘決定
         "action_class": sr.get("action_class", "unknown"),
         "no_truth_intent": sr.get("no_truth_intent", False),

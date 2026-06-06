@@ -68,6 +68,23 @@ def build_npc_chat_context(blackboard: Any, npc_name: str, player_message: str,
         # C3：玩家輸入永遠是角色的遊戲內台詞，用標籤隔離、verbatim
         "player_action": "<player_action>\n" + str(player_message) + "\n</player_action>",
     }
+    # P1/P2/P4：NPC onboarding——個性語氣（恆給）+ 首次接觸要求（unintroduced 時）
+    try:
+        from core.world.actor_profile import (
+            get_npc_profile, build_first_contact_context, UNINTRODUCED)
+        prof = get_npc_profile(blackboard, npc_name)
+        ctx["npc_profile"] = {
+            "intro_state": prof.intro_state, "display_label": prof.display_label,
+            "known_role": prof.known_role, "surface_motive": prof.surface_motive,
+            "personality_description": prof.personality_description,
+            "speech_style": prof.speech_style,
+            "rule": "用 personality_description 與 speech_style 塑造語氣；個性只改說話風格，"
+                    "**不**改變你能不能講真相（仍受 reveal/gate 約束）。",
+        }
+        if prof.intro_state == UNINTRODUCED:
+            ctx["first_contact"] = build_first_contact_context(prof, player_message)
+    except Exception:
+        pass
     # NR1：敘事控制約束（只給可用母題/上限/答債/動機；無秘密內容）
     if control_ctx is not None:
         ctx["narrative_control"] = {
@@ -185,6 +202,13 @@ def run_npc_chat_structured(caller: Any, blackboard: Any, npc_name: str, player_
         from core.narrative.sanitizer import sanitize_text
         allowed = getattr(control_ctx, "allowed_terms", None) if control_ctx else None
         resp.visible_reply = sanitize_text(resp.visible_reply, allowed_terms=allowed)
+    except Exception:
+        pass
+    # P2：首次接觸成功（有實際回覆）→ intro_state unintroduced → introduced
+    try:
+        if (resp.visible_reply or "").strip():
+            from core.world.actor_profile import mark_introduced
+            mark_introduced(blackboard, npc_name)
     except Exception:
         pass
     return resp
