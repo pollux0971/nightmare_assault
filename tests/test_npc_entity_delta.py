@@ -109,7 +109,8 @@ def test_npc_fact_registered_in_world_model(monkeypatch):
     wp = loop.world_progress()
     ids = [e["id"] for e in wp["world_model"]["entities_here"]]
     assert fact.id in ids
-    assert fact.id in wp["changed_entities_this_beat"]
+    _ch = [c["id"] if isinstance(c, dict) else c for c in wp["changed_entities_this_beat"]]
+    assert fact.id in _ch
 
 
 # ── NPC 嘗試新增 area/exit → 被拒，WorldModel 不出現該實體 ────────────────────

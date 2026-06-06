@@ -150,6 +150,11 @@ class BeatLoop:
         self._spatial_cache = SpatialProjectionCache()  # P1：確定性投影 dirty-version 快取
         self._short_beat_streak = 0                  # v0.7 P3：一般 beat 連續過短計數
         self._prev_danger_level = 0                  # v0.7 P3：偵測 danger_delta
+        self._current_focus = None                   # Step 5：當前焦點實體（跨 beat）
+        self._recent_entities = []                   # Step 5：最近互動實體（capped）
+        self._new_world_facts_this_beat = []         # 安全初值（首 step 前的 chat 也可寫 world_facts）
+        self._changed_entities_this_beat = []
+        self._changed_entities_detail = []
         # NR5/NR6：母題冷卻 + 動機心跳（旁路）
         self._motif_tracker = None
         self._motive_heartbeat = None
@@ -334,6 +339,8 @@ class BeatLoop:
         self._scene_changed_this_beat = False
         self._new_actor_this_beat = False
         self._beat_rendering = {}
+        # Step 5：本 beat 變更明細（id/kind/reason/from_state/to_state；每 beat 重置）
+        self._changed_entities_detail = []
 
         # 1. warden（致命規則/技能/結局，僅玩家）
         _p("warden")
@@ -481,6 +488,9 @@ class BeatLoop:
         self._finalize_ending()
         dp = self._enforce_ended_invariant(dp)       # HA1：ended ⇒ 無 options
         self._measure_beat_rendering(narrative)      # v0.7 P3：量測 beat 渲染（不修復）
+        _ps = self.player_state(dp)                   # Step 5：玩家狀態投影（算一次）
+        from core.world.player_state import player_state_summary, PLAYER_STATE_SUMMARY_SOURCE
+        _pss, _pst = player_state_summary(_ps)
         return {"narrative": narrative, "decision_point": dp, "warden": verdict,
                 "committed_event": progress.committed_event,
                 "progress_delta": progress.patch.progress_delta,
@@ -497,6 +507,11 @@ class BeatLoop:
                 "blocked_reveal_candidates": list(getattr(self, "_blocked_reveal_candidates", [])),
                 # v0.7 P3：beat 渲染量測（beat_type/目標字數/實際字數/too_short/short_streak；不修復）
                 "beat_rendering": dict(getattr(self, "_beat_rendering", {}) or {}),
+                # Step 5：玩家狀態投影（inventory/known_facts/current_focus/recent）+ 確定性摘要
+                "player_state": _ps,
+                "player_state_summary": _pss,
+                "player_state_summary_truncated": _pst,
+                "player_state_summary_source": PLAYER_STATE_SUMMARY_SOURCE,
                 # P0 #4：WorldProgress（current_area/known_areas/世界事實/investigation_state）
                 "world_progress": self.world_progress(dp),
                 # Spatial WorldModel Projection（確定性、唯讀、快取；無 LLM）
@@ -925,14 +940,22 @@ class BeatLoop:
                     # fallback：EntityExtractor 掃敘事（story 沒給結構化 delta 時才用）。
                     self._world.apply_deltas(extract_entities(narrative, npc_names=self.known_npcs))
             # 玩家明確檢查物件 → 標 inspected（只動既有 entity，不新增；review 模式也允許）
+            # 已拿走/用掉(taken/used)的物件不再「地面檢查」回退——避免把隨身物從 inventory 還原（Step 5）。
             if any(v in (action or "") for v in ("檢查", "查看", "檢視", "端詳", "研究", "翻看")):
                 for o in self._world.by_kind(OBJECT):
+                    if o.state in ("taken", "used"):
+                        continue
                     if any(tok and tok in action for tok in (o.label or "").split()):
                         self._world.inspect(o.id)
             # 算本 beat 被新增/變更狀態的實體（含 register 新增、set_state、inspect）
             after = {eid: e.state for eid, e in self._world.entities.items()}
             self._changed_entities_this_beat = [
                 eid for eid, st in after.items() if before.get(eid) != st]
+            # Step 5 P3：本 beat 變更明細（id/kind/reason/from→to；reason 只從 delta/state 推，不猜敘事）
+            self._changed_entities_detail = self._build_changed_detail(before, after)
+            # Step 5 P2：依本 beat 互動更新 current_focus / recent（review 不亂改焦點）
+            if not review_locked:
+                self._update_focus_from_changes(self._changed_entities_detail)
             # Spatial：只把本 beat **新登記**的物件/NPC 綁到當前區域（供 visible/remote）。
             # 只認新登記（不認 state 變更）——避免把狀態變動的「遠處」物件誤綁到當前區。
             cur = self._world.current_area
@@ -948,6 +971,80 @@ class BeatLoop:
             self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
         except Exception as e:
             log.warning("world model tick skipped: %s", e)
+
+    def _build_changed_detail(self, before: dict, after: dict) -> list:
+        """Step 5 P3：把本 beat 的 state 變更轉成 {id/label/kind/reason/from_state/to_state}（不猜敘事）。"""
+        from core.world.model import AREA, EXIT, FACT, OBJECT, ACTOR
+        from core.world.player_state import (
+            REASON_REGISTERED, REASON_STATE_CHANGED, REASON_INSPECTED, REASON_TAKEN,
+            REASON_USED, REASON_FACT_ASSERTED, REASON_AREA_CHANGED, REASON_EXIT_STATE_CHANGED)
+        out = []
+        for eid, to in after.items():
+            fr = before.get(eid)
+            if fr == to:
+                continue
+            e = self._world.get(eid)
+            if e is None:
+                continue
+            if eid not in before:                        # 新登記
+                reason = REASON_FACT_ASSERTED if e.kind == FACT else REASON_REGISTERED
+            elif to == "inspected":
+                reason = REASON_INSPECTED
+            elif to == "taken":
+                reason = REASON_TAKEN
+            elif to == "used":
+                reason = REASON_USED
+            elif e.kind == AREA and to == "current":
+                reason = REASON_AREA_CHANGED
+            elif e.kind == EXIT:
+                reason = REASON_EXIT_STATE_CHANGED
+            else:
+                reason = REASON_STATE_CHANGED
+            d = {"id": eid, "label": e.label, "kind": e.kind, "reason": reason,
+                 "from_state": fr, "to_state": to}
+            if e.kind == FACT and e.props.get("source"):
+                d["source"] = e.props.get("source")
+            out.append(d)
+        return out
+
+    # Step 5 P2：互動 → 焦點優先序（talk > inspect/take > exit > area）
+    _FOCUS_PRIO = {"talked": 5, "inspected": 4, "taken": 4, "used": 3,
+                   "exit_state_changed": 2, "area_changed": 1}
+
+    def _set_focus(self, eid: str, reason: str, *, label=None, kind=None):
+        foc = {"id": eid, "label": label or eid, "kind": kind or "", "reason": reason}
+        self._current_focus = foc
+        rec = [r for r in (self._recent_entities or []) if r.get("id") != eid]
+        rec.insert(0, {"id": eid, "label": foc["label"], "kind": foc["kind"], "last_reason": reason})
+        self._recent_entities = rec[:8]                  # Step 5 P2：recent 上限 8
+
+    def _update_focus_from_changes(self, detail: list):
+        cand = [d for d in detail if d["reason"] in self._FOCUS_PRIO]
+        if not cand:
+            return                                       # 無明確互動 → 焦點不變（不亂猜）
+        best = max(cand, key=lambda d: self._FOCUS_PRIO[d["reason"]])
+        self._set_focus(best["id"], best["reason"], label=best.get("label"), kind=best.get("kind"))
+
+    def note_focus_npc(self, npc: str):
+        """Step 5：與 NPC 對話 → 焦點設為該 NPC（chat 出 band，由 chat 路徑呼叫）。"""
+        if not npc:
+            return
+        e = self._world.find(npc, kind="actor") if self._world is not None else None
+        from core.world.model import slug
+        self._set_focus(e.id if e is not None else f"actor.{slug(npc)}", "talked",
+                        label=(e.label if e is not None else npc), kind="actor")
+
+    def player_state(self, dp=None) -> dict:
+        """Step 5：玩家狀態投影（inventory / known_facts / current_focus / recent_entities）。純投影。"""
+        try:
+            from core.world.player_state import build_player_state
+            return build_player_state(getattr(self, "_world", None),
+                                      current_focus=getattr(self, "_current_focus", None),
+                                      recent_entities=getattr(self, "_recent_entities", []))
+        except Exception as e:                           # 投影失敗不影響推進
+            log.warning("player state projection skipped: %s", e)
+            return {"inventory_entities": [], "known_facts": [],
+                    "current_focus": None, "recent_entities": []}
 
     def _measure_beat_rendering(self, narrative: str):
         """v0.7 P3：分類 beat_type、量測字數、累計「一般 beat 連續過短」。**只量測、不修復（P4 未開）。**"""
@@ -1029,8 +1126,10 @@ class BeatLoop:
             "investigation_state": inv_state,
             "available_next": avail,
             "area_roles": area_roles,                    # 主題無關角色：area_id → roles
-            "changed_entities_this_beat": list(
-                getattr(self, "_changed_entities_this_beat", []) or []),
+            # Step 5 P3：變更明細（id/label/kind/reason/from_state/to_state）；空時退回 ids（向後相容）
+            "changed_entities_this_beat": (
+                list(getattr(self, "_changed_entities_detail", []) or [])
+                or list(getattr(self, "_changed_entities_this_beat", []) or [])),
             "world_model": self._world_model_projection(),
         }
 

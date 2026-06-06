@@ -324,6 +324,7 @@ class API:
             try:
                 self._loop.bridge_npc_evidence(resp, npc_id=npc)
                 self._loop.note_npc_answer(text, resp.answer_status)   # 答債：partial 償還、evasion 不償還
+                self._loop.note_focus_npc(npc)                          # Step 5：對話 → 焦點設為該 NPC
             except Exception:
                 pass
             try:                                  # 完整紀錄入 cold（SQLite）

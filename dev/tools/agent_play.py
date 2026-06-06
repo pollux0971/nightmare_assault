@@ -272,6 +272,13 @@ def _dp_to_obs(loop, narrative, dp, ended, ending, step_result=None) -> dict:
         "world_progress": ((step_result or {}).get("world_progress")
                            or (loop.world_progress(dp) if hasattr(loop, "world_progress") else {})),
         "spatial_debug": _sd,
+        # Step 5：玩家狀態投影 + 確定性摘要（observation-only）
+        "player_state": ((step_result or {}).get("player_state")
+                         or (loop.player_state() if hasattr(loop, "player_state") else {})),
+        "player_state_summary": (step_result or {}).get("player_state_summary", ""),
+        "player_state_summary_truncated": (step_result or {}).get("player_state_summary_truncated", False),
+        "player_state_summary_source": (step_result or {}).get(
+            "player_state_summary_source", "deterministic_projection"),
         # Spatial UX：玩家/QA 可讀摘要（top-level，方便顯示/記錄；deterministic、不餵 story）
         "spatial_summary": _sd.get("spatial_summary", ""),
         "spatial_summary_truncated": _sd.get("spatial_summary_truncated", False),
@@ -394,6 +401,7 @@ def _do_chat(loop, chat: dict) -> str:
     try:                                           # #10/P-plumbing：結構化 evidence 走 gate → bridge
         loop.bridge_npc_evidence(resp, npc_id=npc)
         loop.note_npc_answer(text, resp.answer_status)
+        loop.note_focus_npc(npc)                          # Step 5：對話 → 焦點設為該 NPC
     except Exception:
         pass
     return resp.visible_reply

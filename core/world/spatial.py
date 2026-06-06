@@ -145,6 +145,8 @@ def build_spatial_projection(world, *, limits: dict | None = None,
                                  roles=list(getattr(ent, "roles", []) or []), area=area)
         if ent.kind == FACT:
             remote.append(view)                          # fact 是「知道」非「看見」→ 一律 remote
+        elif ent.kind == OBJECT and ent.state in ("taken", "used"):
+            continue                                     # 已拿走/用掉 → 進 inventory，不算地面 visible
         elif area in (None, cur):
             visible.append(view)                         # 物件/NPC 綁在本區（或未綁定）→ 可見
         else:
