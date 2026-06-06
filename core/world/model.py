@@ -11,8 +11,11 @@ Entity kind 先只支援:area / exit / object / actor / fact。
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field, asdict
+
+log = logging.getLogger("nightmare.worldmodel")
 
 # ── kinds ────────────────────────────────────────────────────────────────────
 AREA, EXIT, OBJECT, ACTOR, FACT = "area", "exit", "object", "actor", "fact"
@@ -60,6 +63,29 @@ STORY_DELTA_CAP = 3
 _STORY_ALLOWED_OPS = ("register", "set_state")
 
 
+def normalize_entity_delta_dict(d) -> dict | None:
+    """正規化外部 entity_delta dict：`id` 別名 → `entity_id`，**內部一律用 entity_id**。
+
+    - LLM 常吐 `id` 而非 `entity_id` → 自動搬成 entity_id（不改 WorldDelta 欄位名）。
+    - `id` 與 `entity_id` 同時存在：相同 → 正常（丟掉 id）；**不同 → 拒絕該 delta（回 None）+ debug warning**。
+    - 非 dict → None。回**新 dict**（移除 id；不就地改原物件），讓 malformed/衝突 delta 被丟棄不污染。
+    """
+    if not isinstance(d, dict):
+        return None
+    if "id" not in d:
+        return d
+    out = dict(d)
+    alias = out.pop("id", None)
+    eid = out.get("entity_id")
+    if eid is None:
+        if alias is not None:
+            out["entity_id"] = alias
+    elif alias is not None and eid != alias:
+        log.warning("entity_delta id 衝突，拒絕該 delta：id=%r entity_id=%r", alias, eid)
+        return None                                  # 衝突 → 拒絕，不污染 WorldModel
+    return out
+
+
 def coerce_entity_deltas(raw, *, allowed_kinds=STORY_ENTITY_KINDS,
                          cap: int = STORY_DELTA_CAP,
                          allow_ops=_STORY_ALLOWED_OPS) -> list:
@@ -74,7 +100,8 @@ def coerce_entity_deltas(raw, *, allowed_kinds=STORY_ENTITY_KINDS,
     for item in raw:
         if len(out) >= cap:
             break
-        if not isinstance(item, dict):
+        item = normalize_entity_delta_dict(item)     # id→entity_id；衝突/非 dict → 丟棄
+        if item is None:
             continue
         op = item.get("op")
         if op not in allow_ops:
@@ -120,7 +147,8 @@ def coerce_npc_entity_deltas(raw, *, npc_id: str, cap: int = STORY_DELTA_CAP) ->
     for item in raw:
         if len(out) >= cap:
             break
-        if not isinstance(item, dict):
+        item = normalize_entity_delta_dict(item)     # id→entity_id；衝突/非 dict → 丟棄
+        if item is None:
             continue
         op = item.get("op")
         if op not in _STORY_ALLOWED_OPS:
@@ -467,7 +495,11 @@ class WorldModel:
 
     # ── 套用 WorldDelta(story/npc entity_delta 的入口)─────────────────────────
     def apply(self, delta) -> Entity | None:
-        d = delta if isinstance(delta, dict) else delta.to_dict()
+        d = delta if isinstance(delta, dict) else (
+            delta.to_dict() if hasattr(delta, "to_dict") else None)
+        d = normalize_entity_delta_dict(d)           # id→entity_id；衝突/非 dict → 丟棄不套用
+        if d is None:
+            return None
         op = d.get("op")
         if op == "register":
             return self.register(d.get("kind"), d.get("label", ""), id=d.get("entity_id"),
@@ -489,7 +521,11 @@ class WorldModel:
         register：kind 須 ∈ allowed_kinds。set_state：目標實體 kind 須 ∈ allowed_kinds。
         回傳被新增/變更的 Entity（無效則 None）。
         """
-        d = delta if isinstance(delta, dict) else delta.to_dict()
+        d = delta if isinstance(delta, dict) else (
+            delta.to_dict() if hasattr(delta, "to_dict") else None)
+        d = normalize_entity_delta_dict(d)           # id→entity_id；衝突/非 dict → 丟棄
+        if d is None:
+            return None
         op = d.get("op")
         if op == "register":
             if allowed_kinds is not None and d.get("kind") not in allowed_kinds:
