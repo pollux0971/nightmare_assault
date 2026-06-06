@@ -466,6 +466,8 @@ class BeatLoop:
         self._reveal_updates_this_beat = []
         self._evidence_events_this_beat = 0
         self._unmapped_evidence_this_beat = 0
+        # Reveal Reward Loop：本 beat 的回報 debug（每 beat 重置）
+        self._reveal_reward_debug = {}
         # P0 WorldStateFact：本 beat 新增的世界事實（每 beat 重置）
         self._new_world_facts_this_beat = []
         # WorldModel：本 beat 被新增/變更狀態的實體 id（每 beat 重置）
@@ -580,6 +582,8 @@ class BeatLoop:
             # story 保底 evidence 同受閘門節制（被擋 → 不產 fallback reveal）
             if self._reveal_gate_allowed:
                 self._story_evidence_tick(player_decision, narrative, _changed)
+            # Reveal Reward Loop：gate-allowed truth_investigation 保證可觀測回報或 no_progress_reason
+            self._reveal_reward_tick()
         # P0 WorldStateFact：從 story 敘事抽世界事實（NPC fact 由 bridge_npc_evidence 處理）
         if ENABLE_NARRATIVE_CONTROL:
             # 撤離鎖：review 模式不新增 world_fact（requirement 4：只生 notes，不新增 fact）
@@ -641,6 +645,8 @@ class BeatLoop:
                 "reveal_gate_allowed": bool(getattr(self, "_reveal_gate_allowed", True)),
                 "reveal_gate_block_reason": getattr(self, "_reveal_gate_reason", ""),
                 "blocked_reveal_candidates": list(getattr(self, "_blocked_reveal_candidates", [])),
+                # Reveal Reward Loop：gate-allowed truth_investigation 的可觀測回報（不碰 gate 擋/放）
+                "reveal_reward_debug": dict(getattr(self, "_reveal_reward_debug", {}) or {}),
                 # v0.7 P3：beat 渲染量測（beat_type/目標字數/實際字數/too_short/short_streak；不修復）
                 "beat_rendering": dict(getattr(self, "_beat_rendering", {}) or {}),
                 # Step 5：玩家狀態投影（inventory/known_facts/current_focus/recent）+ 確定性摘要
@@ -1372,6 +1378,79 @@ class BeatLoop:
                 log.info("unmapped story evidence this beat: investigation w/o truth mapping")
         except Exception as e:
             log.warning("story evidence tick skipped: %s", e)
+
+    def _reveal_reward_tick(self):
+        """Reveal Reward Loop：在「gate 已放行的 truth_investigation」beat 上保證可觀測回報。
+
+        規則（不碰 TruthEvidenceGate 的擋/放）：
+        - 只對 `action_class == truth_investigation` 且 `gate_allowed` 運作；其餘 class / 被擋一律不推 reveal。
+        - 本 beat 已由 kernel clue / 結構化 evidence 升階 → 標 advanced_by_evidence（已有回報）。
+        - 否則對**已 hinted/observed** 的真相施 reward（hinted→observed→suspected；**單靠 reward 到不了
+          confirmed**）。升階 → advanced_by_reward；strength 增但未跨階 → reward_accumulated + no_progress_reason；
+          無候選 → no_candidate + no_progress_reason（區分「尚無 hinted」vs「皆達天花板」）。
+        debug 一律寫 `_reveal_reward_debug`（gate_allowed/truth_candidates_found/mapped_truth_ids/
+        ladder_action/no_progress_reason/previous_level/next_level）。
+        """
+        if self._reveal_ledger is None:
+            return
+        action_class = getattr(self, "_action_class", "unknown")
+        gate_allowed = bool(getattr(self, "_reveal_gate_allowed", False))
+        dbg = {"gate_allowed": gate_allowed, "action_class": action_class,
+               "truth_candidates_found": [], "mapped_truth_ids": [],
+               "ladder_action": "skipped", "no_progress_reason": "",
+               "previous_level": None, "next_level": None}
+        try:
+            from core.narrative.models import REVEAL_RANK
+            # (6/7) 非 truth_investigation（含 world_navigation/npc_fact_query/world_review…）→ 不推 reveal
+            if action_class != "truth_investigation":
+                dbg["ladder_action"] = "not_truth_investigation"
+                dbg["no_progress_reason"] = "action_not_truth_investigation"
+                self._reveal_reward_debug = dbg
+                return
+            # 被閘門擋下（含 review_mode / no_truth）→ 不推 reveal
+            if not gate_allowed:
+                dbg["ladder_action"] = "gate_blocked"
+                dbg["no_progress_reason"] = getattr(self, "_reveal_gate_reason", "") or "gate_blocked"
+                self._reveal_reward_debug = dbg
+                return
+            from core.narrative.revelation import (
+                reward_candidates, apply_reveal_reward, write_ledger_to_revealed_bible)
+            # 本 beat 已由 evidence（kernel clue / 結構化）升階 → 已有可觀測回報，不再額外 reward
+            prior = list(self._reveal_updates_this_beat)
+            if prior:
+                last = prior[-1]
+                dbg.update(ladder_action="advanced_by_evidence",
+                           mapped_truth_ids=[u.get("truth_id") for u in prior],
+                           previous_level=last.get("from"), next_level=last.get("to"))
+                self._reveal_reward_debug = dbg
+                return
+            cands = reward_candidates(self._reveal_ledger)
+            dbg["truth_candidates_found"] = [t.truth_id for t in cands]
+            if not cands:
+                any_hinted = any(REVEAL_RANK.get(t.level, 0) >= REVEAL_RANK["hinted"]
+                                 for t in self._reveal_ledger.truths.values())
+                dbg["ladder_action"] = "no_candidate"
+                dbg["no_progress_reason"] = (
+                    "all_candidates_capped" if any_hinted else "no_hinted_truth_yet")
+                self._reveal_reward_debug = dbg
+                return
+            update, target_id, prev, new = apply_reveal_reward(
+                self._reveal_ledger, beat=self.beat_number)
+            dbg["mapped_truth_ids"] = [target_id] if target_id else []
+            dbg["previous_level"] = prev
+            dbg["next_level"] = new
+            if update:
+                self._reveal_updates_this_beat += [update]
+                dbg["ladder_action"] = "advanced_by_reward"
+            else:
+                dbg["ladder_action"] = "reward_accumulated"   # strength 增但未跨階（仍算進度）
+                dbg["no_progress_reason"] = "strength_below_next_threshold"
+            write_ledger_to_revealed_bible(self.bb, self._reveal_ledger)
+        except Exception as e:                       # reward 失敗不影響推進（B8）
+            log.warning("reveal reward tick skipped: %s", e)
+            dbg.setdefault("ladder_action", "error")
+            dbg["no_progress_reason"] = dbg.get("no_progress_reason") or f"error:{e}"
+        self._reveal_reward_debug = dbg
 
     def bridge_npc_evidence(self, reply_or_resp, *, answer_status: str | None = None,
                             allow_keyword_fallback: bool = False, npc_id: str | None = None):

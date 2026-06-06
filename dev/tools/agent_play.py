@@ -243,6 +243,8 @@ def _debug_block(loop, step_result) -> dict:
         "reveal_gate_allowed": sr.get("reveal_gate_allowed", True),
         "reveal_gate_block_reason": sr.get("reveal_gate_block_reason", ""),
         "blocked_reveal_candidates": sr.get("blocked_reveal_candidates", []),
+        # Reveal Reward Loop：gate-allowed truth_investigation 的可觀測回報 debug
+        "reveal_reward_debug": sr.get("reveal_reward_debug", {}),
         "quality_gate": {"passed": qm.get("passed", True),
                          "repaired": qm.get("repaired", False),
                          "fallback": qm.get("fallback", False)},

@@ -152,6 +152,50 @@ class RevelationBridge:
         return updates
 
 
+# ── Reveal Reward Loop（truth_investigation 的可觀測回報；不碰 TruthEvidenceGate）──────
+# 真相型玩家持續調查卻只停 hinted 的問題：gate 放行但沒有 evidence 映射時，reveal ladder 不動。
+# 這層在「gate 已放行的 truth_investigation」beat 上，對**已 hinted/observed** 的真相給 reward 強度，
+# 讓它 hinted→observed→suspected 爬升——但**單靠 reward 永遠到不了 confirmed**（confirmed 仍須
+# kernel clue.core / 結構化 evidence 的強證據）。
+REWARD_CEILING_LEVEL = "suspected"       # reward 單獨最高只到 suspected
+REWARD_STRENGTH = 0.4                     # 每次 gate-allowed truth_investigation 的 reward 強度
+REWARD_STRENGTH_CAP = 1.15               # reward 累積使單一 truth strength 不超過此（留 confirmed 餘裕）
+
+
+def reward_candidates(ledger: RevealLedger) -> list[TruthProgress]:
+    """可被 reward 推進的 in-progress 真相：等級 ∈ [hinted, suspected) 且 strength 未達 reward 天花板。"""
+    lo, hi = REVEAL_RANK["hinted"], REVEAL_RANK[REWARD_CEILING_LEVEL]
+    return [t for t in ledger.truths.values()
+            if lo <= REVEAL_RANK.get(t.level, 0) < hi and t.strength < REWARD_STRENGTH_CAP]
+
+
+def apply_reveal_reward(ledger: RevealLedger, *, beat: int | None = None,
+                        target_id: str | None = None) -> tuple[dict | None, str | None, str | None, str | None]:
+    """對一個 in-progress 真相施加一次 reward evidence（capped at suspected + strength cap）。
+
+    回 (update|None, target_id|None, previous_level|None, next_level|None)。
+    update 為 None 表示「strength 有增加但未跨階」或「無候選」（由 target_id 是否 None 區分）。
+    **單靠 reward 到不了 confirmed**：max_level=suspected 且 strength clamp 到 REWARD_STRENGTH_CAP。
+    """
+    cands = reward_candidates(ledger)
+    if not cands:
+        return None, None, None, None
+    target = ledger.truths.get(target_id) if target_id else None
+    if target is None or target not in cands:
+        # 推進最接近下一階者（strength 最高、其次 rank 最高）→ 給玩家可見的穩定回報
+        target = max(cands, key=lambda t: (t.strength, REVEAL_RANK.get(t.level, 0)))
+    add = min(REWARD_STRENGTH, max(0.0, REWARD_STRENGTH_CAP - target.strength))
+    ev = EvidenceEvent(
+        evidence_id=f"ev.reward.{target.truth_id}.b{beat}",
+        source="investigation_reward", truth_id=target.truth_id,
+        evidence_strength=add, max_level=REWARD_CEILING_LEVEL,
+        surface_text="（持續調查累積）", beat_number=beat,
+        debug_reason="investigation_reward")
+    prev = target.level
+    updates = RevelationBridge().apply(ledger, [ev])
+    return (updates[0] if updates else None), target.truth_id, prev, target.level
+
+
 # ── 建帳本 / 寫進 revealed_bible ─────────────────────────────────────────────
 def build_ledger_from_bible(real_bible: dict | None) -> RevealLedger:
     """從 real_bible.revelation_pool 種出各碎片（全 hidden，帶 title/content）。"""
