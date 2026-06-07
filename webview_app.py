@@ -27,15 +27,17 @@ CONFIG_EXAMPLE_PATH = ROOT / "config" / "config.example.json"
 STORAGE = ROOT / "storage"
 
 # 三層模型分層 → OpenRouter 模型字串（可被 config.agent_models 覆寫）
+# 暫時切換：整個專案統一 OpenAI gpt-5.5（所有 agent / fallback / default）。
+DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_AGENT_MODELS = {
-    "setup": ["anthropic/claude-3.5-sonnet", "openai/gpt-4o-mini"],
-    "orchestrator": ["openai/gpt-4o-mini"],
-    "warden": ["openai/gpt-4o-mini"],
-    "story": ["google/gemini-flash-1.5", "openai/gpt-4o-mini"],
-    "compactor": ["google/gemini-flash-1.5", "openai/gpt-4o-mini"],
-    "npc-chat": ["openai/gpt-4o-mini"],
-    "dreaming": ["openai/gpt-4o-mini"],
-    "offstage-fate": ["openai/gpt-4o-mini"],
+    "setup": [DEFAULT_MODEL],
+    "orchestrator": [DEFAULT_MODEL],
+    "warden": [DEFAULT_MODEL],
+    "story": [DEFAULT_MODEL],
+    "compactor": [DEFAULT_MODEL],
+    "npc-chat": [DEFAULT_MODEL],
+    "dreaming": [DEFAULT_MODEL],
+    "offstage-fate": [DEFAULT_MODEL],
 }
 DEFAULT_TEMPS = {"setup": 0.7, "story": 0.8, "warden": 0.4,
                  "orchestrator": 0.4, "compactor": 0.7}
@@ -57,8 +59,9 @@ def bootstrap_config_skeleton(path: Path = CONFIG_PATH,
             skeleton = json.loads(example.read_text(encoding="utf-8"))
     except Exception:
         skeleton = {}
-    skeleton["api_key"] = ""                       # 框架不含金鑰，待使用者填
-    skeleton.setdefault("base_url", "https://openrouter.ai/api/v1")
+    skeleton["api_key"] = ""                       # 框架不含金鑰，待使用者填（或設 env）
+    skeleton.setdefault("provider", "openai")
+    skeleton["base_url"] = skeleton.get("base_url") or "https://api.openai.com/v1"
     skeleton.setdefault("timeout", 90)
     # 確保 8 個 agent 都有模型（example 可能較舊缺項 → 用內建預設補齊，避免某 agent 無模型）
     models = dict(skeleton.get("agent_models") or {})
@@ -69,15 +72,37 @@ def bootstrap_config_skeleton(path: Path = CONFIG_PATH,
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"[config] 未找到 {path.name}，已自動生成框架設定 → {path}\n"
-              f"[config] 請在設定畫面填入 OpenRouter API key，或設環境變數 OPENROUTER_API_KEY。")
+              f"[config] 請在設定畫面填入 API key，或設環境變數 OPENAI_API_KEY（亦支援 OPENROUTER_API_KEY）。")
         return True
     except Exception as e:                          # 唯讀環境等寫不了 → 不致命，照常用記憶體預設
         print(f"[config] 無法寫入框架設定（{e}）；改用記憶體預設，請在設定畫面輸入金鑰。")
         return False
 
 
+def _load_dotenv(path: Path = ROOT / ".env") -> None:
+    """把 .env 的 KEY=VALUE 注入 os.environ（**只設非空、不覆寫既有**）。無檔/壞行不致命。
+
+    config 載入用；不引入新依賴、不影響任何遊戲邏輯。空值（如待填的 OPENAI_API_KEY=）一律略過。
+    """
+    import os
+    try:
+        if not path.is_file():
+            return
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k, v = k.strip(), v.strip().strip('"').strip("'")
+            if k and v and k not in os.environ:       # 只設非空、不覆寫既有
+                os.environ[k] = v
+    except Exception:
+        pass
+
+
 def load_config(path: Path = CONFIG_PATH) -> dict:
     import os
+    _load_dotenv()                                # 先讀 .env（OPENAI_API_KEY/BASE_URL/MODEL）
     bootstrap_config_skeleton(path)               # 缺檔則先生成框架（不覆寫既有）
     cfg: dict = {}
     if path.is_file():
@@ -85,11 +110,15 @@ def load_config(path: Path = CONFIG_PATH) -> dict:
             cfg = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             cfg = {}
+    # api_key：config 為空 → 依序採 OPENAI_API_KEY → OPENROUTER_API_KEY（**key 不寫進 config 檔**）
     if not cfg.get("api_key"):
-        env = os.environ.get("OPENROUTER_API_KEY")
-        if env:
-            cfg["api_key"] = env
-    cfg.setdefault("base_url", "https://openrouter.ai/api/v1")
+        env_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+        if env_key:
+            cfg["api_key"] = env_key
+    # base_url：config 為空 → OPENAI_BASE_URL → OpenAI 預設
+    if not cfg.get("base_url"):
+        cfg["base_url"] = os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+    cfg.setdefault("provider", "openai")
     cfg.setdefault("agent_models", DEFAULT_AGENT_MODELS)
     cfg.setdefault("timeout", 90)
     return cfg

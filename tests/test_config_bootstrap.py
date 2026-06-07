@@ -37,9 +37,16 @@ def test_bootstrap_never_overwrites():
     assert json.loads(p.read_text(encoding="utf-8"))["api_key"] == "REAL-KEY"
 
 
+def _no_dotenv(monkeypatch):
+    """隔離本機 .env：env 行為測試只看 monkeypatch 設定的環境變數。"""
+    monkeypatch.setattr(W, "_load_dotenv", lambda *a, **k: None)
+
+
 # ── load_config 缺檔不崩、api_key 空 → 未設定（走設定畫面/env）─────────────
 def test_load_config_missing_is_unconfigured(monkeypatch):
+    _no_dotenv(monkeypatch)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     p = _tmp()
     cfg = W.load_config(p)
     assert cfg.get("api_key", "") == ""                    # 未設定 → configured False
@@ -47,8 +54,18 @@ def test_load_config_missing_is_unconfigured(monkeypatch):
     assert p.is_file()                                      # 同時把框架落到磁碟
 
 
-# ── 缺檔但有 env 金鑰 → 採用 env ───────────────────────────────────────────
+# ── 缺檔但有 env 金鑰 → 採用 env（OPENROUTER 與 OPENAI 皆支援）─────────────────
 def test_load_config_uses_env_when_present(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-env-xyz")
+    _no_dotenv(monkeypatch)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-or-env-xyz")
     cfg = W.load_config(_tmp())
-    assert cfg["api_key"] == "sk-or-env-xyz"
+    assert cfg["api_key"] == "test-or-env-xyz"
+
+
+def test_load_config_uses_openai_env(monkeypatch):
+    _no_dotenv(monkeypatch)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-env-abc")
+    cfg = W.load_config(_tmp())
+    assert cfg["api_key"] == "test-openai-env-abc"            # 優先採 OPENAI_API_KEY

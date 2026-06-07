@@ -15,9 +15,13 @@ venv/
 
 # 環境/密鑰
 .env
+.env.*
 config/config.json
 test_api.txt
 *api*.txt
+openai.txt
+*openai*.txt
+*secret*.txt
 *.key
 
 # OS
