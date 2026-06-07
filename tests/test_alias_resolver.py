@@ -99,6 +99,82 @@ def test_unresolved_when_no_candidate():
     assert r["resolved_entity_id"] is None and r["resolution_source"] == "unresolved"
 
 
+# ══ Focus-Scope Patch：指代依 scope 解析，不被 current_focus=NPC 卡住 ════════════
+
+def test_object_ref_not_captured_by_npc_focus():
+    """UX #5：focus 是 NPC 時，「那個東西」仍應對到 object（recent），不被 NPC focus 卡住。"""
+    m = _world_with(objs=[("object.badge", "徽章")], actors=[("actor.doc", "醫生")])
+    focus = {"id": "actor.doc", "label": "醫生", "kind": "actor"}
+    recent = [{"id": "object.badge", "label": "徽章", "kind": "object"}]
+    r = resolve_entity_reference("那個東西", world=m, current_focus=focus, recent_entities=recent)
+    assert r["resolved_entity_id"] == "object.badge"          # object，非 NPC
+    assert r["resolution_source"] == "recent_entities"
+
+
+def test_object_measure_ref_not_captured_by_npc_focus():
+    m = _world_with(objs=[("object.cuff", "袖扣")], actors=[("actor.doc", "醫生")])
+    focus = {"id": "actor.doc", "kind": "actor"}
+    recent = [{"id": "object.cuff", "label": "袖扣", "kind": "object"}]
+    for q in ("那枚", "這東西", "剛才那個東西"):
+        r = resolve_entity_reference(q, world=m, current_focus=focus, recent_entities=recent)
+        assert r["resolved_entity_id"] == "object.cuff", q     # 一律對到 object
+
+
+def test_person_ref_prefers_actor_over_object_focus():
+    """focus 是 object 時，「那個人」應對到 actor，不被 object focus 卡住。"""
+    m = _world_with(objs=[("object.badge", "徽章")], actors=[("actor.doc", "醫生")])
+    focus = {"id": "object.badge", "kind": "object"}
+    recent = [{"id": "actor.doc", "label": "醫生", "kind": "actor"}]
+    r = resolve_entity_reference("那個人", world=m, current_focus=focus, recent_entities=recent)
+    assert r["resolved_entity_id"] == "actor.doc"
+
+
+def test_npc_focus_actor_ref_uses_focus():
+    """focus 是剛對話的 NPC 時，「那個人」直接用 focus actor。"""
+    m = _world_with(actors=[("actor.doc", "醫生")])
+    focus = {"id": "actor.doc", "kind": "actor"}
+    r = resolve_entity_reference("那個人", world=m, current_focus=focus)
+    assert r["resolved_entity_id"] == "actor.doc" and r["resolution_source"] == "current_focus"
+
+
+def test_fact_direction_ref_resolves_to_fact_no_new_area():
+    """「他說的方向」→ recent fact（route-related），不新增 area/exit。"""
+    m = _world_with(facts=[("fact.route", "出口往東邊走", "npc.李")])
+    recent = [{"id": "fact.route", "label": "出口往東邊走", "kind": "fact"}]
+    n_area = len(m.by_kind(AREA))
+    r = resolve_entity_reference("他說的方向", world=m, recent_entities=recent,
+                                 known_facts=[{"id": "fact.route", "label": "出口往東邊走"}])
+    assert r["resolved_entity_id"] == "fact.route" and r["resolution_source"] == "known_facts"
+    assert len(m.by_kind(AREA)) == n_area                     # 不新增 area
+    from core.world.model import EXIT
+    assert len(m.by_kind(EXIT)) == 0                          # 不新增 exit
+
+
+def test_object_ref_unresolved_when_no_object_not_npc():
+    """object scope 但沒有任何 object → unresolved（不退回 NPC focus、不 ambiguous）。"""
+    m = _world_with(actors=[("actor.doc", "醫生")])
+    focus = {"id": "actor.doc", "kind": "actor"}
+    r = resolve_entity_reference("那個東西", world=m, current_focus=focus)
+    assert r["resolved_entity_id"] is None
+    assert r["resolution_source"] == "unresolved" and not r["ambiguous"]
+
+
+def test_object_ref_falls_to_visible_then_inventory():
+    m = _world_with(actors=[("actor.doc", "醫生")])
+    focus = {"id": "actor.doc", "kind": "actor"}
+    vis = [{"id": "actor.doc", "kind": "actor", "label": "醫生"},
+           {"id": "object.key", "kind": "object", "label": "鑰匙"}]
+    r = resolve_entity_reference("那個東西", world=m, current_focus=focus, visible_entities=vis)
+    assert r["resolved_entity_id"] == "object.key"            # 跳過 NPC，取 visible object
+
+
+def test_ambiguous_still_returned_within_scope():
+    """object scope 下兩個同名 object label 命中 → 仍 ambiguous，不亂猜。"""
+    m = _world_with(objs=[("object.n1", "工作筆記本"), ("object.n2", "私人筆記本")])
+    r = resolve_entity_reference("那本筆記本", world=m)
+    assert r["ambiguous"] and r["resolved_entity_id"] is None
+
+
 # ── extract_reference（從整句抽指代片語）────────────────────────────────────────
 def test_extract_reference():
     assert extract_reference("我檢查那枚袖扣").startswith("那枚")

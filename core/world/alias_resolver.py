@@ -23,8 +23,15 @@ _WEAK = sorted([
 # query 類型線索
 _NPC_CUE = ("npc", "人", "傢伙", "那位", "這位", "那名", "那傢伙")
 _FACT_REF_CUE = ("說的", "講的", "提到的", "提及的", "說過的", "提的")
-_FACT_NOUN = ("地方", "線索", "主張", "消息", "情報", "事", "出口", "機房", "位置", "方向")
+_FACT_NOUN = ("地方", "線索", "主張", "消息", "情報", "事", "出口", "機房", "位置", "方向", "路")
 _PAST_CUE = ("剛才", "剛剛", "之前", "方才", "先前")
+# object 指代線索（指向「物」而非「人/事」）——含泛稱物名 + 量詞式指示
+_OBJECT_CUE = ("東西", "玩意", "物件", "那枚", "這枚", "那件", "這件", "那條", "這條",
+               "那張", "這張", "那把", "這把", "那台", "這台", "那本", "這本", "那盞", "這盞")
+# 泛稱物名（非具體 label）：noun 落在這裡 → 視為「無具體名詞」，走 object scope fallback
+_GENERIC_OBJECT_NOUN = {"東西", "玩意", "物件"}
+# scope → entity kind
+_SCOPE_KIND = {"object": "object", "actor": "actor", "fact": "fact"}
 # 帶歸屬的 fact 指代（「他說的…」整段抓出，含主語）
 _FACT_REF_TRIGGERS = ("他說的", "她說的", "他講的", "她講的", "他提到的", "她提到的",
                       "他說過的", "她說過的")
@@ -136,36 +143,69 @@ def resolve_entity_reference(query: str, *, world=None, current_focus=None,
 
     nq = normalize_label(query)
     is_past = any(c in query for c in _PAST_CUE)
-    is_npc = any(c in nq for c in _NPC_CUE) or any(c in query for c in ("NPC", "那個人", "那名"))
+    is_npc = any(c in nq for c in _NPC_CUE) or any(c in query for c in ("NPC", "那個人", "那名", "那位"))
+    is_object = any(c in query for c in _OBJECT_CUE)
     is_fact = any(c in query for c in _FACT_REF_CUE) or any(n in query for n in _FACT_NOUN)
     noun = _strip_weak(nq)
+    if noun in _GENERIC_OBJECT_NOUN:                     # 「東西/玩意」非具體 label → 走 object scope fallback
+        noun = ""
 
-    # 2. exact / substring label or alias（有具體名詞時）
+    # scope：決定指代的目標 kind（人 > 物 > 事；其餘無 scope）
+    scope = "actor" if is_npc else ("object" if is_object else ("fact" if is_fact else None))
+    want_kind = _SCOPE_KIND.get(scope)
+
+    def _focus_of_kind(k):
+        if current_focus and current_focus.get("kind") == k and current_focus.get("id"):
+            return current_focus["id"]
+        return None
+
+    def _recent_of_kind(k):
+        return _first_of_kind(recent, k)[0]
+
+    def _visible_of_kind(k):
+        return _first_of_kind(vis, k)[0]
+
+    # 2. exact / substring label or alias（有具體名詞時）；scope 設定時，命中候選優先過濾該 kind
     if noun:
-        cands = _match_by_label(world, noun)
-        cands = list(dict.fromkeys(cands))
+        cands = list(dict.fromkeys(_match_by_label(world, noun)))
+        if want_kind and world is not None:
+            kind_cands = [c for c in cands
+                          if world.get(c) is not None and world.get(c).kind == want_kind]
+            if kind_cands:
+                cands = kind_cands
         if len(cands) == 1:
             return res(cands[0], "label_alias")
         if len(cands) > 1:
             return ambiguous(cands)
 
-    # 3. fact reference（他說的地方 / 剛才那條線索 / NPC 說的機房）→ 最近的 fact entity
-    if is_fact:
+    # 3. scope-based 解析（無具體名詞匹配時）；**object scope 絕不被 current_focus=NPC 卡住**
+    if scope == "fact":
         fid, _ = _first_of_kind(recent, "fact")
         if fid is None and kf:
             fid = kf[0].get("id")
         if fid:
             return res(fid, "known_facts")
+        return unresolved                                # 不亂猜（不退回 NPC/物件）
+    if scope == "actor":
+        if not is_past and _focus_of_kind("actor"):
+            return res(_focus_of_kind("actor"), "current_focus")
+        if _recent_of_kind("actor"):
+            return res(_recent_of_kind("actor"), "recent_entities")
+        if _visible_of_kind("actor"):
+            return res(_visible_of_kind("actor"), "visible_entities")
+        return unresolved
+    if scope == "object":
+        if not is_past and _focus_of_kind("object"):
+            return res(_focus_of_kind("object"), "current_focus")
+        if _recent_of_kind("object"):
+            return res(_recent_of_kind("object"), "recent_entities")
+        if _visible_of_kind("object"):
+            return res(_visible_of_kind("object"), "visible_entities")
+        if inv:                                          # inventory 全是 object
+            return res(inv[0]["id"], "inventory_entities")
+        return unresolved
 
-    # 4. NPC reference（那個 NPC / 剛才那個人 / 那名 NPC）→ 最近的 actor
-    if is_npc:
-        if current_focus and current_focus.get("kind") == "actor" and current_focus.get("id"):
-            return res(current_focus["id"], "current_focus")
-        aid, _ = _first_of_kind(recent, "actor")
-        if aid:
-            return res(aid, "recent_entities")
-
-    # 5. 純指代（noun 空或無匹配）→ current_focus（無「剛才」時）/ recent
+    # 4. 無 scope 的純指代（「剛才那個」「這個」）→ current_focus（無「剛才」時）/ recent / visible / inv
     if not noun:
         if not is_past and current_focus and current_focus.get("id"):
             return res(current_focus["id"], "current_focus")
