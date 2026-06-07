@@ -47,6 +47,17 @@ def test_no_truth_intent():
     assert not no_truth_intent("我研究實驗紀錄")
 
 
+def test_no_truth_intent_avoider_phrases():
+    """UX #4：逃避型「不想管 / 只想離開」應被擋（之前漏判）。"""
+    assert no_truth_intent("我不想管這裡發生什麼，我只想趕快找到離開的出口")
+    assert no_truth_intent("不想管，只想離開這裡")
+    assert no_truth_intent("我只想出去")
+    assert no_truth_intent("懶得管真相，只要找到出口")
+    # 真調查不得誤判為 no_truth
+    assert not no_truth_intent("我研究紀錄並分析異常數據")
+    assert not no_truth_intent("我比對牆上的痕跡和紀錄")
+
+
 # ── TruthEvidenceGate.evaluate ───────────────────────────────────────────────
 def test_gate_allows_only_truth_or_structured():
     g = TruthEvidenceGate()
