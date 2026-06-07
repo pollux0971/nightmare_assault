@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 from core.world.model import (
     AREA, EXIT, FACT, OBJECT, ACTOR,
-    ROLE_CAMPAIGN_EXIT, ROLE_ENTRY, ROLE_SAFE_ZONE, ROLE_SITE)
+    ROLE_ACTIVE_AREA, ROLE_CAMPAIGN_EXIT, ROLE_ENTRY, ROLE_SAFE_ZONE, ROLE_SITE)
 
 # exit 狀態分類（spec 04）：可通行 vs 受阻
 PASSABLE_EXIT_STATES = {"known", "available", "used"}
@@ -144,9 +144,18 @@ def derive_structural_routes(world, *, explicit_targets: set | None = None) -> l
     prev = getattr(world, "previous_area", None)
     pe = world.get(prev) if prev else None
     if prev and prev != cur and pe is not None and pe.kind == AREA and prev not in seen:
+        # label polish：在 safe_zone 且上一區同時是 site/active_area → 顯示「返回現場」更貼切
+        # （只改 label，不改 route target / mode / WorldModel）。
+        prev_roles = pe.roles or []
+        if world.is_safe_zone(cur) and (ROLE_ACTIVE_AREA in prev_roles or ROLE_SITE in prev_roles):
+            label = f"返回現場（{_area_label(world, prev, '現場')}）"
+            roles = ["return_previous", "return_site"]
+        else:
+            label = f"返回上一個區域（{_area_label(world, prev, '上一處')}）"
+            roles = ["return_previous"]
         out.append(SpatialRoute(
-            exit_id=ROUTE_RETURN_PREVIOUS, label=f"返回上一個區域（{_area_label(world, prev, '上一處')}）",
-            from_area=cur, to_area=prev, state="available", roles=["return_previous"]))
+            exit_id=ROUTE_RETURN_PREVIOUS, label=label,
+            from_area=cur, to_area=prev, state="available", roles=roles))
         seen.add(prev)
 
     # b) 返回現場 / 入口（site_area_id：active_area→site→entry；存在且 ≠ cur）

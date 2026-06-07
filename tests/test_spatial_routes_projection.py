@@ -79,6 +79,33 @@ def test_safe_zone_shows_return_to_site():
     assert any("返回現場" in l or "研究站" in l for l in _labels(p.routes_from_here))
 
 
+def test_safe_zone_return_to_site_prefers_site_label():
+    """polish：在 safe_zone 且上一區同時是 site/active_area → return_previous label 顯示「返回現場」。"""
+    from core.world.model import ROLE_ACTIVE_AREA
+    w = WorldModel()
+    w.set_current_area("area.site", label="研究站")
+    w.set_area_role("area.site", ROLE_ACTIVE_AREA)         # 撤退前的調查現場
+    w.register(AREA, "安全區", id="area.safe", roles=[ROLE_SAFE_ZONE])
+    w.set_current_area("area.safe")                        # previous_area = area.site；cur = safe_zone
+    p = build_spatial_projection(w)
+    r = [x for x in p.routes_from_here if x.exit_id == ROUTE_RETURN_PREVIOUS][0]
+    assert r.label.startswith("返回現場") and "研究站" in r.label   # 標籤優先「返回現場」
+    assert r.to_area == "area.site"                        # route target 不變
+    assert "return_site" in (r.roles or [])
+
+
+def test_non_safe_zone_return_previous_keeps_previous_label():
+    """非 safe_zone：即使上一區是 site，label 仍為「返回上一個區域」（polish 只在 safe_zone 生效）。"""
+    from core.world.model import ROLE_ACTIVE_AREA
+    w = WorldModel()
+    w.set_current_area("area.site", label="研究站")
+    w.set_area_role("area.site", ROLE_ACTIVE_AREA)
+    w.set_current_area("area.deep", label="深處")          # cur 非 safe_zone
+    p = build_spatial_projection(w)
+    r = [x for x in p.routes_from_here if x.exit_id == ROUTE_RETURN_PREVIOUS][0]
+    assert r.label.startswith("返回上一個區域")
+
+
 def test_return_site_uses_entry_label_when_only_entry():
     w = WorldModel()
     w.set_current_area("area.entry", label="入口大廳")
