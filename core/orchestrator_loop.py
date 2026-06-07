@@ -1272,10 +1272,23 @@ class BeatLoop:
         self._set_focus(best["id"], best["reason"], label=best.get("label"), kind=best.get("kind"))
 
     def note_focus_npc(self, npc: str):
-        """Step 5：與 NPC 對話 → 焦點設為該 NPC（chat 出 band，由 chat 路徑呼叫）。"""
+        """Step 5：與 NPC 對話 → 焦點設為該 NPC（chat 出 band，由 chat 路徑呼叫）。
+
+        先確保 WorldModel 有對應 actor entity（registry/focus 有但 world 無 → resolved_kind 缺失），
+        再以該 entity 設焦點（focus.id 一定對得到 world entity）。
+        """
         if not npc:
             return
-        e = self._world.find(npc, kind="actor") if self._world is not None else None
+        e = None
+        if self._world is not None:
+            try:
+                from core.world.actor_profile import ensure_actor_entity_from_npc_registry
+                e = ensure_actor_entity_from_npc_registry(
+                    self._world, self.bb, npc, origin="npc_chat")
+                self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
+            except Exception as ex:                      # 一致性失敗不影響對話（B8）
+                log.warning("ensure actor entity skipped: %s", ex)
+                e = self._world.find(npc, kind="actor")
         from core.world.model import slug
         self._set_focus(e.id if e is not None else f"actor.{slug(npc)}", "talked",
                         label=(e.label if e is not None else npc), kind="actor")

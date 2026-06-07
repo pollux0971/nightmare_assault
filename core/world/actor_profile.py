@@ -135,6 +135,60 @@ def mark_introduced(blackboard, name: str) -> ActorProfile:
     return prof
 
 
+# ── WorldModel actor entity 一致性（NPC registry/focus ↔ WorldModel actor）─────
+_INTRO_RANK = {UNINTRODUCED: 0, INTRODUCED: 1, KNOWN: 2}
+
+
+def ensure_actor_entity_from_npc_registry(world, blackboard, name: str, *,
+                                          origin: str = "npc_registry"):
+    """確保 WorldModel 有對應該 NPC 的 actor entity（解決 focus/registry 有但 world 無 entity）。
+
+    欄位：id=actor.<slug> / kind=actor / label=name / props{aliases, intro_state, known_role,
+    origin_kind}。已存在 → **只 merge aliases / 補 profile（不覆蓋已知狀態、intro_state 不降級）**。
+    **只放公開 profile 欄位**（known_role=表層職業推測）；**不新增 fact/area/exit、不推 reveal、
+    不寫 hidden truth（secret_core 永不進來）**。回傳該 actor Entity（world/name 缺 → None）。
+    """
+    if world is None or not name:
+        return None
+    from core.world.model import ACTOR, slug
+    # 從公開 profile 取 aliases / intro_state / known_role（profile_from_npc 已剝除 secret_core）
+    aliases, intro_state, known_role = [], UNINTRODUCED, ""
+    if blackboard is not None:
+        try:
+            prof = get_npc_profile(blackboard, name)
+            aliases = [a for a in (prof.aliases or []) if a and a != name]
+            intro_state = prof.intro_state or UNINTRODUCED
+            known_role = prof.known_role or ""
+        except Exception:
+            pass
+    # 找既有 actor entity（label 雙向子字串 或 既定 id）
+    e = world.find(name, kind=ACTOR) or world.get(f"actor.{slug(name)}")
+    if e is not None and e.kind != ACTOR:
+        e = None
+    if e is None:                                        # 新建（只公開欄位、不含真相）
+        props = {"origin_kind": origin}
+        if aliases:
+            props["aliases"] = list(aliases)
+        props["intro_state"] = intro_state
+        if known_role:
+            props["known_role"] = known_role
+        return world.register(ACTOR, name, id=f"actor.{slug(name)}", props=props, origin="npc")
+    # 已存在 → merge aliases（不覆蓋）、intro_state 只升不降、known_role 缺才補
+    cur = list(e.props.get("aliases") or [])
+    cur_set = {a for a in cur}
+    for a in aliases:
+        if a not in cur_set:
+            cur.append(a); cur_set.add(a)
+    if cur:
+        e.props["aliases"] = cur
+    if _INTRO_RANK.get(intro_state, 0) > _INTRO_RANK.get(e.props.get("intro_state", UNINTRODUCED), 0):
+        e.props["intro_state"] = intro_state
+    if known_role and not e.props.get("known_role"):
+        e.props["known_role"] = known_role
+    e.props.setdefault("origin_kind", origin)
+    return e
+
+
 # ── First-contact 要求（docs/02 §first-contact；注入 npc-chat context）──────────
 def build_first_contact_context(profile: ActorProfile, player_question: str = "") -> dict:
     """unintroduced NPC 首次接觸：回應須先自然帶出 context，再給部分答案——而非資訊端點。"""
