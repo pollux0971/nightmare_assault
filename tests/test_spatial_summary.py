@@ -38,8 +38,10 @@ def test_summary_no_phantom_elements():
     txt, _ = player_facing_spatial_summary(build_spatial_projection(m))
     assert "不存在的機房" not in txt
     assert "通往深處的密道" not in txt
-    # 無出口 → 明確標示，不捏造
-    assert "可走路線：（沒有明顯可走的出口）" in txt
+    # 不捏造幻影路線/地點；補丁後真實 area 會有可推導的結構性 route（暫退安全區），
+    # 故不再顯示「沒有明顯可走的出口」（該 marker 僅在真的無任何 route 時出現）。
+    assert "暫退到安全區整理" in txt
+    assert "沒有明顯可走的出口" not in txt
 
 
 # ── safe_zone：site 物件不得寫成「眼前可互動物」，而是「已知但不在眼前」───────────

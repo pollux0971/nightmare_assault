@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from core.world.model import AREA, EXIT, FACT, OBJECT, ACTOR
+from core.world.model import (
+    AREA, EXIT, FACT, OBJECT, ACTOR,
+    ROLE_CAMPAIGN_EXIT, ROLE_ENTRY, ROLE_SAFE_ZONE, ROLE_SITE)
 
 # exit 狀態分類（spec 04）：可通行 vs 受阻
 PASSABLE_EXIT_STATES = {"known", "available", "used"}
@@ -112,6 +114,73 @@ def _exit_from_to(e) -> tuple:
     return from_a, to_a
 
 
+# ── 結構性 route（由 WorldModel roles / current_area / previous_area 投影；無 pathfinding）──────
+# 這些不是地圖 exit，而是「永遠可用的結構性移動」：回上一區 / 返回現場 / 暫退安全區 / 離場。
+# 純投影：**不新增 area/exit entity、不呼叫 LLM**；只在目標已是 WorldModel area entity 或 role fallback 時提供。
+ROUTE_RETURN_PREVIOUS = "route.return_previous"
+ROUTE_RETURN_SITE = "route.return_site"
+ROUTE_WITHDRAW_SAFE = "route.withdraw_safe"
+ROUTE_CAMPAIGN_EXIT = "route.campaign_exit"
+
+
+def _area_label(world, area_id, default: str) -> str:
+    e = world.get(area_id) if area_id else None
+    return (getattr(e, "label", None) or None) or default
+
+
+def derive_structural_routes(world, *, explicit_targets: set | None = None) -> list:
+    """從 roles / current_area / previous_area 投影最小可用的結構性 route（全部 available）。
+
+    explicit_targets：已被「明確 exit」覆蓋的目標 area；結構性 route 不重複提供到同一目標。
+    回傳 SpatialRoute 清單（player-facing label）。**不新增任何 entity。**
+    """
+    cur = world.current_area
+    if not cur:
+        return []                                        # 沒有「此處」→ 無從推導結構性 route
+    seen = set(explicit_targets or set())
+    out: list = []
+
+    # a) 返回上一個區域（previous_area 須為已知 area entity 且 ≠ cur）
+    prev = getattr(world, "previous_area", None)
+    pe = world.get(prev) if prev else None
+    if prev and prev != cur and pe is not None and pe.kind == AREA and prev not in seen:
+        out.append(SpatialRoute(
+            exit_id=ROUTE_RETURN_PREVIOUS, label=f"返回上一個區域（{_area_label(world, prev, '上一處')}）",
+            from_area=cur, to_area=prev, state="available", roles=["return_previous"]))
+        seen.add(prev)
+
+    # b) 返回現場 / 入口（site_area_id：active_area→site→entry；存在且 ≠ cur）
+    site = world.site_area_id()
+    se = world.get(site) if site else None
+    if site and site != cur and se is not None and site not in seen:
+        roles = se.roles or []
+        if ROLE_ENTRY in roles and ROLE_SITE not in roles:
+            label = f"回到入口區（{_area_label(world, site, '入口')}）"
+        else:
+            label = f"返回現場（{_area_label(world, site, '現場')}）"
+        out.append(SpatialRoute(
+            exit_id=ROUTE_RETURN_SITE, label=label, from_area=cur, to_area=site,
+            state="available", roles=["return_site"]))
+        seen.add(site)
+
+    # c) 暫退安全區（cur 非 safe_zone → 提供；safe_zone 目標允許 role fallback）
+    if not world.is_safe_zone(cur):
+        sid = world.safe_zone_id()
+        if sid and sid != cur and sid not in seen:
+            out.append(SpatialRoute(
+                exit_id=ROUTE_WITHDRAW_SAFE, label="暫退到安全區整理", from_area=cur, to_area=sid,
+                state="available", roles=["withdraw_safe", "safe_zone"]))
+            seen.add(sid)
+
+    # d) campaign_exit（存在 role=campaign_exit 的 area 時提供「離場」）
+    ce = world.area_with_role(ROLE_CAMPAIGN_EXIT)
+    if ce is not None and (ce.id == cur or ce.id not in seen):
+        out.append(SpatialRoute(
+            exit_id=ROUTE_CAMPAIGN_EXIT, label="離開、結束本次調查", from_area=cur, to_area=ce.id,
+            state="available", roles=["campaign_exit"]))
+    return out
+
+
 def build_spatial_projection(world, *, limits: dict | None = None,
                              exploration_mode: str = "active_exploration",
                              focus_id: str | None = None) -> SpatialProjection:
@@ -139,6 +208,13 @@ def build_spatial_projection(world, *, limits: dict | None = None,
                 safe_retreat.append(route)
         else:                                            # 受阻（含 unknown/unsafe/jammed）
             blocked.append(route)
+
+    # 結構性 route（roles/current/previous 投影）——補上明確 exit 沒覆蓋的「可去哪」。
+    explicit_targets = {r.to_area for r in passable if r.to_area}
+    for sr in derive_structural_routes(world, explicit_targets=explicit_targets):
+        passable.append(sr)
+        if sr.to_area and world.is_safe_zone(sr.to_area):
+            safe_retreat.append(sr)
 
     # ── visible（此區） vs known_remote（已知但不在眼前）──────────────────────────
     visible, remote = [], []
@@ -186,6 +262,14 @@ def build_spatial_projection(world, *, limits: dict | None = None,
     return proj
 
 
+def _blocked_route_label(r) -> str:
+    """受阻路線 player-facing 文案：含狀態 + requires（此路被鎖住，需要 XXX）。"""
+    s = _BLOCKED_STATE_ZH.get(r.state, r.state)
+    if r.requires:
+        return f"{r.label}（{s}，需要{'、'.join(str(x) for x in r.requires)}）"
+    return f"{r.label}（{s}）"
+
+
 def player_facing_spatial_summary(projection: "SpatialProjection", *,
                                   max_chars: int = SUMMARY_MAX_CHARS) -> tuple:
     """由 SpatialProjection **確定性**生成玩家/QA 可讀短摘要（**不呼叫 LLM**、不餵 story）。
@@ -201,8 +285,7 @@ def player_facing_spatial_summary(projection: "SpatialProjection", *,
     else:
         lines.append("可走路線：（沒有明顯可走的出口）")
     if P.blocked_routes:
-        lines.append("被阻擋路線：" + "、".join(
-            f"{r.label}（{_BLOCKED_STATE_ZH.get(r.state, r.state)}）" for r in P.blocked_routes))
+        lines.append("被阻擋路線：" + "、".join(_blocked_route_label(r) for r in P.blocked_routes))
     if P.safe_retreat_routes:
         lines.append("安全撤退路線：" + "、".join(r.label for r in P.safe_retreat_routes))
     # 眼前可互動物：可見的物件/NPC（排除已被拿走/用掉的物件）

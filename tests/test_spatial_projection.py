@@ -99,7 +99,9 @@ def test_locked_exit_in_blocked_routes():
     m.register_exit("深處的門", from_area="area.site", leads_to="area.deep", state="locked")
     p = build_spatial_projection(m)
     assert any(r.state == "locked" for r in p.blocked_routes)
-    assert not p.routes_from_here                        # locked 不可通行
+    # locked exit 不可通行：不得出現在可走路線（補丁後仍可能有結構性 route，但鎖門不算）
+    assert all(r.state != "locked" for r in p.routes_from_here)
+    assert not any(r.to_area == "area.deep" for r in p.routes_from_here)
 
 
 def test_safe_retreat_routes_via_role():
@@ -118,7 +120,8 @@ def test_safe_retreat_excludes_locked_route_to_safe_zone():
     m.register(AREA, "安全區", id="area.safe", roles=[ROLE_SAFE_ZONE])
     m.register_exit("鎖住的撤退門", from_area="area.site", leads_to="area.safe", state="locked")
     p = build_spatial_projection(m)
-    assert not p.safe_retreat_routes
+    # 鎖住的「明確 exit」不算可用退路；結構性 withdraw（always-available）仍可在 safe_retreat。
+    assert all(r.state != "locked" for r in p.safe_retreat_routes)
     assert any(r.state == "locked" for r in p.blocked_routes)
 
 

@@ -224,6 +224,7 @@ class WorldModel:
     def __init__(self):
         self.entities: dict[str, Entity] = {}
         self.current_area: str | None = None
+        self.previous_area: str | None = None    # 上一個 current_area（供 spatial「返回上一區」route）
         # P1：dirty-version 計數（供 SpatialProjectionCache 失效判斷；runtime-only，不持久化）
         self._versions: dict[str, int] = {
             "world_version": 0, "area_version": 0, "exit_version": 0,
@@ -485,6 +486,8 @@ class WorldModel:
         if self.current_area == area_id and (
                 area_id in self.entities and self.entities[area_id].state == "current"):
             return                                       # 無變化 → 不 bump
+        if self.current_area and self.current_area != area_id:
+            self.previous_area = self.current_area       # 記上一區（供「返回上一區」route）
         for e in self.by_kind(AREA):
             if e.state == "current":
                 e.state = "visited"
@@ -592,6 +595,7 @@ class WorldModel:
     # ── 持久化(存進 game_meta)────────────────────────────────────────────────
     def to_dict(self) -> dict:
         return {"current_area": self.current_area,
+                "previous_area": self.previous_area,
                 "entities": {eid: asdict(e) for eid, e in self.entities.items()}}
 
     @classmethod
@@ -599,6 +603,7 @@ class WorldModel:
         m = cls()
         data = data or {}
         m.current_area = data.get("current_area")
+        m.previous_area = data.get("previous_area")
         for eid, ed in (data.get("entities") or {}).items():
             m.entities[eid] = Entity(**ed)
         return m
