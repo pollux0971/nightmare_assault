@@ -1,8 +1,49 @@
 # dev/ROADMAP — 單線程開發工作流（v0.8.1 之後）
 
-> **更新**：2026-06-06。承接已完成的 Config Center GUI（v0.8）、Patch B P0–P3（v0.7）、WorldDelta fix（v0.8.1）。
+> **更新**：2026-06-07。承接已完成的 Config Center GUI（v0.8）、Patch B P0–P3（v0.7）、WorldDelta fix（v0.8.1），
+> 以及開放式探索 runtime 的整輪補強（Opening Variation / Reveal Reward / PlayerState Payoff / Spatial Routes /
+> AliasResolver Focus-Scope / Actor 一致性 / Fragment Title）。
 > **原則**：**單線程**——一次只做一個 Step，做完即 `測試（flag OFF/ON）→ config-safe 檢查 → commit → push`，才進下一個。
 > **不靠記憶**：每個 Step 有明確 scope / 動到的檔 / non-goals / 驗收 / gate；中斷後照本續接。
+
+---
+
+## 🏁 里程碑：MVP-B Open Exploration Runtime = **RC / stabilization candidate**
+
+開放式恐怖探索核心的 runtime 契約已成形且穩定——**收尾報告：`dev/reports/mvp-b-open-exploration-rc.md`**。
+
+- **mock 回歸（無真 LLM）**：`dev/tools/mock_full_ux_regression.py` → **36/37 pass**、0 真 regression、
+  1 已知 monitor（retreat→review_mode）。Acceptance Checklist 13 項：12 ✅、1 ⚠ 已知。
+- **全測基線**：**1005 passed / 3 skipped**（flag OFF/ON）。
+- **唯一 known monitor**：`retreat → review_mode`（UX #6；真 LLM smoke 曾成功翻 mode，mock 下未翻）——
+  列 regression monitor，**RC 不改 retreat**。
+- **明確不進**：**P5 story context** 不在 RC 範圍（移 Next Phase）。
+
+| 補強（Step 6 之後，本輪） | commit | 重點 |
+|---|---|---|
+| WorldDelta id + placeholder hotfix | `628f762` | extractor id→entity_id；sanitizer 繁簡 + 開場消毒 |
+| Opening Variation Contract（補丁十四）| `c6be633` | 開場素材去錨定（紙條/林晨/找人）；真 LLM medium 6/6 不同 |
+| Reveal Reward Loop | `aad3684` | gate=True 的 truth_investigation 保證回報或 no_progress_reason |
+| PlayerState Payoff Materialization | `a337116` | take→inventory；reveal→public known_fact；taken 退 visible |
+| Spatial Routes Projection（+label polish）| `25ab123` `c3e65d6` | roles/previous→可走路線；不再「沒有明顯可走的出口」 |
+| AliasResolver Focus-Scope（+extract polish）| `d7a6614` `94bff8c` | object/fact/actor scope；強指代 anchor + bounded noun |
+| NPC actor entity 一致性 | `9156654` | ensure_actor_entity；focus 一定對得到 WorldModel actor |
+| Fragment Title / Public Reveal Label | `4fe755b` | public_title；reveal known_fact 永不「未命名的真相」 |
+| no_truth_intent 修（UX #4）| `93754d2` | 擋逃避型「不想管 / 只想離開」 |
+| Mock Full UX Regression harness | `75b3818` | deterministic ScriptedCaller 四路線回歸（無真 LLM）|
+
+---
+
+## ▶ Next Phase（RC 穩定後再開；本輪不做）
+
+> 以下移出 RC 範圍，待 MVP-B RC 穩定後另開單線程 Step。
+
+| 項目 | 摘要 | 前置 |
+|---|---|---|
+| **P5 story context integration** | 把 world / player / spatial 投影**回灌進 story 生成 context**（耦合生成面，需更大測試面與防暴雷複驗 C2/E2）| RC 穩定 |
+| **GUI gameplay polish** | 把開放式探索 observation（inventory / known_facts / spatial_summary / entity_resolution）呈現到前端遊玩面 | RC 穩定 |
+| **real LLM short smoke** | 一次極短真 LLM 確認（**重點：retreat→review_mode**；其餘契約已由 mock + 單元測試覆蓋）| 預算允許 |
+| **retreat transition monitor** | `retreat → review_mode`（UX #6）regression monitor；若持續不穩 → 排專屬 retreat-detection patch（exit-resolver / exploration_mode）| 真 LLM smoke 數據 |
 
 ---
 
