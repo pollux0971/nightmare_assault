@@ -1200,20 +1200,26 @@ class BeatLoop:
             from core.narrative.revelation import reveal_public_facts
             for pf in reveal_public_facts(self._reveal_ledger):
                 eid = f"fact.reveal.{pf['truth_id']}"
+                tsrc = pf.get("title_source", "fallback")   # explicit | fallback
+                dbg = {"id": eid, "label": pf["title"], "state": pf["level"], "source": "reveal",
+                       "truth_id": pf["truth_id"], "public_title": pf["title"],
+                       "title_source": tsrc, "hidden_content_exposed": False}
                 e = self._world.get(eid)
                 if e is None:
                     self._world.register(
                         FACT, pf["title"], id=eid, state=pf["level"],
                         props={"source": "reveal", "confidence": pf["level"],
-                               "truth_id": pf["truth_id"], "public": True, "tags": ["reveal"]},
+                               "truth_id": pf["truth_id"], "public": True, "tags": ["reveal"],
+                               "title_source": tsrc},
                         origin="reveal")
-                    self._known_fact_delta_this_beat.append(
-                        {"id": eid, "label": pf["title"], "state": pf["level"], "source": "reveal"})
-                elif e.state != pf["level"]:
+                    self._known_fact_delta_this_beat.append(dbg)
+                elif e.state != pf["level"] or e.label != pf["title"]:
                     self._world.set_state(eid, pf["level"])
                     e.props["confidence"] = pf["level"]
-                    self._known_fact_delta_this_beat.append(
-                        {"id": eid, "label": e.label, "state": pf["level"], "source": "reveal"})
+                    e.props["title_source"] = tsrc
+                    if e.label != pf["title"]:              # explicit title 後到 → 升級 label
+                        self._world.set_label(eid, pf["title"])
+                    self._known_fact_delta_this_beat.append(dbg)
             self.bb.game_meta = {**self.bb.game_meta, "world_model": self._world.to_dict()}
         except Exception as e:                           # 投影失敗不影響推進（B8）
             log.warning("public fact materialization skipped: %s", e)

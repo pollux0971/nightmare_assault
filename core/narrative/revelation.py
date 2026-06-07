@@ -15,12 +15,43 @@
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 # REVEAL_ORDER / REVEAL_RANK 單一來源在 core.narrative.models；此處 re-export 供既有 importer 沿用。
 from core.narrative.models import REVEAL_ORDER, REVEAL_RANK
 
 CONFIRMED_LEVEL = "confirmed"
+
+
+# ── Public reveal label：每個真相的 player-facing、public-safe 標題（永不「未命名的真相」）──────
+# 優先用 fragment 的 public title；缺則由 truth_id slug 產生人類可讀 fallback（**不含 hidden content**）。
+_TITLE_PREFIX_RE = re.compile(r"^(?:frag(?:ment)?|truths?|clues?|reveal|rev|f)[\s_\-:.#]*", re.I)
+
+
+def _fallback_title(truth_id: str) -> str:
+    """由 truth_id slug 產生人類可讀的 fallback 標題（**不得**是「未命名的真相」、不含 content）。"""
+    s = str(truth_id or "").strip()
+    core = _TITLE_PREFIX_RE.sub("", s)                    # 去 frag_/truth_/f… 前綴
+    num_m = re.search(r"(\d+)", core)
+    words = re.sub(r"\s+", " ", re.sub(r"[_\-]+", " ", re.sub(r"\d+", " ", core))).strip()
+    if words:
+        readable = words.title() if words.isascii() else words   # 英文 slug → Title Case；CJK 原樣
+        return f"線索：{readable}"
+    if num_m:
+        return f"未解線索 #{int(num_m.group(1))}"
+    return f"未解線索（{s or '?'}）"
+
+
+def public_title(truth_id: str, title: str = "") -> tuple[str, str]:
+    """回 (player-facing public 標題, title_source)。title_source ∈ explicit | fallback。
+
+    explicit title 來自 fragment.title（公開面）；缺則 slug fallback。**永不回 content / hidden truth。**
+    """
+    t = (title or "").strip()
+    if t:
+        return t, "explicit"
+    return _fallback_title(truth_id), "fallback"
 
 # evidence_strength 累積 → reveal_level 門檻（strength 驅動；要求 #2）
 STRENGTH_THRESHOLDS = [
@@ -204,15 +235,18 @@ _PUBLIC_LEVEL = {"observed": "observed", "suspected": "suspected",
 
 
 def reveal_public_facts(ledger: RevealLedger) -> list[dict]:
-    """把 observed+ 的真相投影成 public-safe fact 描述（title + 公開等級，**無 content**）。
+    """把 observed+ 的真相投影成 public-safe fact 描述（public_title + 公開等級，**無 content**）。
 
-    回 [{truth_id, title, level}]；hidden/hinted → 不投影（太弱，只是暗示）。
+    回 [{truth_id, title, title_source, level}]；hidden/hinted → 不投影（太弱，只是暗示）。
+    title 一律走 public_title（explicit fragment title 或 slug fallback；**永不「未命名的真相」、永不 content**）。
     """
     out: list[dict] = []
     for t in ledger.truths.values():
         pub = _PUBLIC_LEVEL.get(t.level)
         if pub:
-            out.append({"truth_id": t.truth_id, "title": t.title or "未命名的真相", "level": pub})
+            label, src = public_title(t.truth_id, t.title)
+            out.append({"truth_id": t.truth_id, "title": label,
+                        "title_source": src, "level": pub})
     return out
 
 
@@ -346,10 +380,10 @@ def public_recap(ledger: RevealLedger) -> dict:
     for t in ledger.truths.values():
         r = REVEAL_RANK[t.level]
         if r >= REVEAL_RANK["confirmed"]:
-            found.append({"id": t.truth_id, "title": t.title or "未命名的真相",
+            found.append({"id": t.truth_id, "title": public_title(t.truth_id, t.title)[0],
                           "level": t.level, "content": t.content})    # 已確認 = 玩家已得
         elif r >= REVEAL_RANK["hinted"]:
-            found.append({"id": t.truth_id, "title": t.title or "未命名的真相",
+            found.append({"id": t.truth_id, "title": public_title(t.truth_id, t.title)[0],
                           "level": t.level})                          # 接觸過/掌握：不附 content
         else:
             hidden_n += 1
@@ -368,7 +402,7 @@ def recap_from_ledger(ledger: RevealLedger) -> dict:
     c = ledger.counts()
     discovered, suspected_list, hinted_list, hidden_list = [], [], [], []
     for t in ledger.truths.values():
-        entry = {"id": t.truth_id, "title": t.title or "未命名的真相", "level": t.level,
+        entry = {"id": t.truth_id, "title": public_title(t.truth_id, t.title)[0], "level": t.level,
                  "content": t.content}
         r = REVEAL_RANK[t.level]
         if r >= REVEAL_RANK["confirmed"]:
