@@ -183,6 +183,51 @@ def test_extract_reference():
     assert extract_reference("我往北走") is None             # 無指代
 
 
+# ── extract_reference polish：強指代 anchor + bounded noun（不被弱詞/動詞污染）────
+def test_extract_strips_weak_prefix_pollution():
+    """「我的視線落在那本筆記本」不得被抓成整句，應 = 「那本筆記本」。"""
+    assert extract_reference("我的視線落在那本筆記本") == "那本筆記本"
+    assert extract_reference("我看那本筆記本") == "那本筆記本"
+    assert extract_reference("我盯著看那本筆記本") == "那本筆記本"
+
+
+def test_extract_bounded_noun_stops_at_verb():
+    """名詞片段碰到動詞即止（不含尾隨動詞）。"""
+    assert extract_reference("我把那枚徽章拿起來") == "那枚徽章"
+    assert extract_reference("我盯著那個東西看") == "那個東西"
+
+
+def test_extract_fact_and_actor_and_object_scope():
+    from core.world.alias_resolver import resolve_entity_reference
+    from core.world.model import WorldModel, OBJECT, FACT, ACTOR
+    # object scope（NPC focus 下「那本筆記本」→ 兩本 → ambiguous，不被 NPC 卡住）
+    m = WorldModel(); m.set_current_area("a", label="A")
+    m.register(OBJECT, "紅色筆記本", id="object.nb_red", props={"area": "a"})
+    m.register(OBJECT, "黑色筆記本", id="object.nb_black", props={"area": "a"})
+    focus = {"id": "actor.npc", "kind": "actor"}
+    ref = extract_reference("我的視線落在那本筆記本")
+    r = resolve_entity_reference(ref, world=m, current_focus=focus)
+    assert ref == "那本筆記本" and r["ambiguous"] and r["resolved_entity_id"] is None
+    # fact scope
+    assert extract_reference("我順著他說的方向走") == "他說的方向"
+    # actor scope
+    assert extract_reference("我轉頭看向那個人") == "那個人"
+
+
+def test_extract_bare_demonstrative_adverbial_guard():
+    """bare「那/這」後接副詞/方位（那裡/這時）不得當實體指代。"""
+    assert extract_reference("這裡很暗") is None
+    assert extract_reference("那時候我還在這" ) is None
+    # 但「那筆記本」(那 + 名詞) 仍可抽
+    assert extract_reference("我看那筆記本") == "那筆記本"
+
+
+def test_extract_no_demonstrative_returns_none():
+    assert extract_reference("我往北走") is None
+    assert extract_reference("我打開門") is None
+    assert extract_reference("") is None
+
+
 # ══ loop 整合 ═════════════════════════════════════════════════════════════════
 def _started_loop(monkeypatch):
     monkeypatch.setattr(C, "ENABLE_NARRATIVE_CONTROL", True)
