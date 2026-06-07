@@ -1,0 +1,37 @@
+{"route": "A_explorer_mock", "checkpoint": "opening_no_forbidden_literals", "pass": true, "evidence": {"forbidden": [], "violation": false}}
+{"route": "A_explorer_mock", "checkpoint": "story_object_registered", "pass": true, "evidence": {"objects": ["object.frequency_meter"]}}
+{"route": "A_explorer_mock", "checkpoint": "inspect_does_not_take", "pass": true, "evidence": {"state": "inspected"}}
+{"route": "A_explorer_mock", "checkpoint": "take_adds_inventory", "pass": true, "evidence": {"inventory": ["頻率表"], "inventory_delta": [{"id": "object.frequency_meter", "label": "頻率表"}]}}
+{"route": "A_explorer_mock", "checkpoint": "taken_visible_when_focus", "pass": true, "evidence": {"focus": "object.frequency_meter"}}
+{"route": "A_explorer_mock", "checkpoint": "npc_actor_entity_exists", "pass": true, "evidence": {"focus_id": "actor.林守一", "kind": "actor"}}
+{"route": "A_explorer_mock", "checkpoint": "known_facts_from_npc_with_source_confidence", "pass": true, "evidence": {"npc_facts": [{"id": "fact.離開需要主控室的授權卡", "label": "離開需要主控室的授權卡", "state": "asserted", "source": "林守一", "confidence": "npc_claim", "tags": []}]}}
+{"route": "A_explorer_mock", "checkpoint": "taken_not_visible_when_focus_moved", "pass": true, "evidence": {"focus": "actor.林守一"}}
+{"route": "A_explorer_mock", "checkpoint": "alias_object_not_npc", "pass": true, "evidence": {"resolved": "object.frequency_meter", "source": "recent_entities"}}
+{"route": "A_explorer_mock", "checkpoint": "alias_fact_no_new_area_exit", "pass": true, "evidence": {"resolved": "fact.離開需要主控室的授權卡", "source": "known_facts", "area_delta": 0, "exit_delta": 0}}
+{"route": "A_explorer_mock", "checkpoint": "spatial_has_withdraw_and_return_previous", "pass": true, "evidence": {"routes": ["route.return_previous", "route.withdraw_safe"], "summary_line": ["可走路線：返回上一個區域（維修入口艙）、暫退到安全區整理"]}}
+{"route": "B_avoider_mock", "checkpoint": "no_truth_intent_true", "pass": true, "evidence": {"no_truth_intent": true, "action_class": "unknown"}}
+{"route": "B_avoider_mock", "checkpoint": "action_not_truth_investigation", "pass": true, "evidence": {"action_class": "unknown"}}
+{"route": "B_avoider_mock", "checkpoint": "gate_false", "pass": true, "evidence": {"gate": false, "reason": "explicit_no_truth_intent"}}
+{"route": "B_avoider_mock", "checkpoint": "reveal_delta_zero", "pass": true, "evidence": {"before": [0, 0, 0, 0], "after": [0, 0, 0, 0]}}
+{"route": "B_avoider_mock", "checkpoint": "spatial_routes_present", "pass": true, "evidence": {"routes": ["route.return_previous", "route.withdraw_safe"]}}
+{"route": "B_avoider_mock", "checkpoint": "retreat_enters_review_or_temporary", "pass": false, "evidence": {"exploration_mode": "active_exploration", "current_area": "corridor"}, "known_item": "UX#6 retreat→review_mode monitor：本 mock action 未翻 mode（kernel 解析成一般移動）；真 LLM spatial-routes smoke 曾成功翻 review_mode。需真 LLM 確認或專屬 retreat patch（本 batch 不改 retreat）。"}
+{"route": "B_avoider_mock", "checkpoint": "retreat_not_ended", "pass": true, "evidence": {"ended": false}}
+{"route": "B_avoider_mock", "checkpoint": "review_no_new_fact", "pass": true, "evidence": {"facts_before": 0, "facts_after": 0}}
+{"route": "B_avoider_mock", "checkpoint": "review_no_reveal_push", "pass": true, "evidence": {"before": [0, 0, 0, 0], "after": [0, 0, 0, 0]}}
+{"route": "B_avoider_mock", "checkpoint": "explicit_end_triggers_ending", "pass": true, "evidence": {"ended": true, "ending": "escape"}}
+{"route": "C_truth_mock", "checkpoint": "truth_investigation_gate_true", "pass": true, "evidence": {"action_class": "truth_investigation", "gate": true}}
+{"route": "C_truth_mock", "checkpoint": "reward_hinted_to_observed", "pass": true, "evidence": {"level": "observed", "ladder": "advanced_by_reward", "prev": "hinted", "next": "observed"}}
+{"route": "C_truth_mock", "checkpoint": "reveal_reward_debug_fields", "pass": true, "evidence": {"gate_allowed": true, "ladder_action": "advanced_by_reward", "previous_level": "hinted", "next_level": "observed"}}
+{"route": "C_truth_mock", "checkpoint": "reward_observed_to_suspected", "pass": true, "evidence": {"level": "suspected"}}
+{"route": "C_truth_mock", "checkpoint": "reward_never_reaches_confirmed", "pass": true, "evidence": {"level": "suspected"}}
+{"route": "C_truth_mock", "checkpoint": "public_known_fact_uses_title", "pass": true, "evidence": {"labels": ["線索：Logbook", "異常訊號"]}}
+{"route": "C_truth_mock", "checkpoint": "no_hidden_raw_content_in_known_facts", "pass": true, "evidence": {"sample_labels": ["線索：Logbook", "異常訊號"]}}
+{"route": "C_truth_mock", "checkpoint": "strong_evidence_can_confirm", "pass": true, "evidence": {"level": "confirmed"}}
+{"route": "D_pollution_mock", "checkpoint": "sanitizer_removes_pollution", "pass": true, "evidence": {"remaining": [], "clean": "你伸手去口袋裡，門框上殘留，終端機顯示，他低聲說了句然。"}}
+{"route": "D_pollution_mock", "checkpoint": "sanitizer_removes_exact_delimiter", "pass": true, "evidence": {"clean": "敘事到此後面還有"}}
+{"route": "D_pollution_mock", "checkpoint": "worlddelta_id_normalized", "pass": true, "evidence": {"keycard": "object.keycard"}}
+{"route": "D_pollution_mock", "checkpoint": "conflicting_id_rejected", "pass": true, "evidence": {"obj_count_unchanged": true}}
+{"route": "D_pollution_mock", "checkpoint": "story_area_exit_rejected", "pass": true, "evidence": {"area_delta": 0, "exit_delta": 0}}
+{"route": "D_pollution_mock", "checkpoint": "npc_prose_fact_in_known_facts", "pass": true, "evidence": {"facts": ["通訊設備在B2機房", "那扇門已經鎖死了"]}}
+{"route": "D_pollution_mock", "checkpoint": "npc_prose_fact_no_reveal_push", "pass": true, "evidence": {"before": [0, 0, 0, 0], "after": [0, 0, 0, 0]}}
+{"route": "ACCEPTANCE", "checkpoint": "no_worlddelta_id_warning", "pass": true, "evidence": {"tick_skip_warnings": []}}
