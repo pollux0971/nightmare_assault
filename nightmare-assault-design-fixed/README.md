@@ -27,6 +27,7 @@ nightmare-assault-design/
 ├── 17-spatial-projection.md    補丁十 · Spatial 空間投影 + 玩家面摘要 ★
 ├── 18-player-surface.md        補丁十一/十三 · 玩家體驗投影層（NPC onboarding / beat rendering / PlayerState / Alias）★
 ├── 19-opening-variation.md     補丁十四 · 開場變體契約（抽象變體池 + cooldown + 契約強制；紙條/林晨/找人 去錨定）★
+├── 20-open-exploration-rc.md   補丁十五～十八 · 開放式探索 runtime 收尾（Reveal Reward / PlayerState Payoff / Spatial Routes / Alias Focus-Scope / Public Title）= **Mock-stabilized RC** ★
 ├── architecture.html      架構簡報（14 張投影片）
 ├── architecture-reference.html  架構參考（圖表）
 ├── skills/                8 個 agent 的 prompt（可熱重載）
@@ -51,7 +52,7 @@ nightmare-assault-design/
 
 00 → 01 → 02 → 03 → 04 → 06 → 07 → 08 → 05 → skills/README.md → 各 SKILL.md
 → 補丁里程碑 09 →（10 11 12 13 14）→ **15-player-sovereignty（方向）→ 16-worldmodel → 17-spatial-projection
-→ 18-player-surface → 19-opening-variation（最新落地，先讀這五份）**
+→ 18-player-surface → 19-opening-variation → 20-open-exploration-rc（RC 收尾，先讀這六份）**
 
 > **定位提醒**：本作是**開放式恐怖探索遊戲**，不是分支劇情遊戲。核心驗收已從「玩家有沒有推進主線？」
 > 改成「玩家做的事，有沒有留下可檢查的世界後果？」——方向見 `15-player-sovereignty.md`，
@@ -61,6 +62,11 @@ nightmare-assault-design/
 > **開放式探索核心已完整**：WorldModel 記得世界 · SpatialSummary 告訴你在哪 · PlayerState 告訴你有什麼/知道什麼 ·
 > AliasResolver 讓你自然指涉剛才的東西。**OpeningVariationContract**（`19`）讓每局開場素材去錨定——
 > 紙條/林晨/找人 不再是預設答案。
+>
+> **MVP-B Open Exploration Runtime = Mock-stabilized RC**（`20`）：Reveal Reward Loop（真相型投入有回報）·
+> PlayerState Payoff（取得/得知沉澱進玩家面）· Spatial Routes（永遠有可走路線）· Public Reveal Labels
+> （真相標題不再「未命名」）整合完成；**mock 回歸 36/37**、全測 1006 passed；唯一 monitor `retreat→review_mode`；
+> **目前不進 P5 story context**（待 GUI 驗證後）。
 
 （07/08 是工程實作層，動代碼前必讀；它們把設計補到「照著寫」的程度）
 

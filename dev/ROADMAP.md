@@ -10,11 +10,16 @@
 
 ## 🏁 里程碑：MVP-B Open Exploration Runtime = **RC / stabilization candidate**
 
-開放式恐怖探索核心的 runtime 契約已成形且穩定——**收尾報告：`dev/reports/mvp-b-open-exploration-rc.md`**。
+開放式恐怖探索核心的 runtime 契約已成形且穩定。**版本定位：Mock-stabilized RC。**
+**收尾報告：`dev/reports/mvp-b-open-exploration-runtime-rc.md`**（契約鏈 + 後續建議）、
+`dev/reports/mvp-b-open-exploration-rc.md`（契約逐項證據）。
 
 - **mock 回歸（無真 LLM）**：`dev/tools/mock_full_ux_regression.py` → **36/37 pass**、0 真 regression、
   1 已知 monitor（retreat→review_mode）。Acceptance Checklist 13 項：12 ✅、1 ⚠ 已知。
-- **全測基線**：**1005 passed / 3 skipped**（flag OFF/ON）。
+- **已完成核心鏈**：Opening Variation Contract · WorldModel entity persistence · Spatial Routes Projection ·
+  PlayerState Payoff Materialization · AliasResolver Focus-Scope · NPC actor entity consistency ·
+  TruthEvidenceGate · Reveal Reward Loop · Public Reveal Labels · Placeholder/delimiter sanitizer。
+- **全測基線**：**1006 passed / 3 skipped**（flag OFF/ON）。
 - **唯一 known monitor**：`retreat → review_mode`（UX #6；真 LLM smoke 曾成功翻 mode，mock 下未翻）——
   列 regression monitor，**RC 不改 retreat**。
 - **明確不進**：**P5 story context** 不在 RC 範圍（移 Next Phase）。
