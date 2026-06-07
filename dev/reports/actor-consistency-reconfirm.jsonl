@@ -1,0 +1,4 @@
+{"kind": "opening", "head": "冰冷。这是第一个感受。刺骨的金属贴着你的后颈，像一片未融化的薄刃。你眨动眼睛，头顶应急灯的红色光晕逐渐聚焦成圈，在水渍斑驳的天花板上投下蛛网般的阴影。空气里有铁锈和某种化学药剂的味道，混合着淡淡的腐烂气息——像是很久没有人来过，又像是刚刚还"}
+{"kind": "chat", "npc": "蘇明哲", "reply_head": "（站在控制面板前，手指懸停在按鍵上方卻沒有真正按下，白髮在紅色應急燈下泛著詭異的光）「我是蘇明哲...站長。至少檔案上是這麼寫的。」（突然轉頭盯著你的手腕）「你手上的編號...是他們什麼時候烙上去的？", "focus_id": "actor.蘇明哲", "focus_world_entity_kind": "actor"}
+{"kind": "beat", "beat": 2, "action": "我再問那個人，他剛才到底說了什麼", "action_class": "unknown", "entity_resolution": {"query": "那個人", "resolved_entity_id": "actor.蘇明哲", "resolution_source": "current_focus", "ambiguous": false}, "resolved_world_entity_kind": "actor", "world_get_not_none": true, "reveal_before": "0/0/0/0", "reveal_after": "0/0/0/0", "fact_before": 0, "fact_after": 0, "reveal_reward_ladder": "not_truth_investigation"}
+{"kind": "checks", "resolved_is_actor_id": true, "resolved_kind_actor": true, "world_get_not_none": true, "focus_maps_to_world_actor": true, "no_new_fact": true, "no_reveal_push": true}
